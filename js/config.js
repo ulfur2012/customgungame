@@ -29,6 +29,7 @@ const STATS = [
 ];
 
 const SLOTS = [
+  { key: 'body',     label: 'Main Body' },
   { key: 'barrel',   label: 'Barrel' },
   { key: 'mag',      label: 'Mag' },
   { key: 'handle',   label: 'Handle' },
@@ -57,6 +58,23 @@ const GUNS = {
 // Every part has its own colour until real art is added.
 // gun: which gun can use it — 'main' (default), 'secondary', or 'both'. Max 5 per slot for the main gun.
 const PARTS = {
+  // Main body swaps the whole gun body. Extra fields:
+  //   pellets  bullets per shot      spread  how wide they fan out (radians)
+  //   range    how far bullets fly   speed   bullet speed
+  //   falloff  0-1, how much damage is lost at max range (shotgun = strong up close)
+  //   assist   size of the mobile auto-shoot area (1 = normal, bigger = easier, smaller = thinner)
+  body: [
+    { id: 'shotgun', name: 'Shotgun', w: 96, h: 32, color: '#8d6e63', shape: [[0, 0, 96, 22], [22, 18, 12, 14]],
+      pellets: 6, spread: 0.5, range: 400, falloff: 0.75, assist: 1.6,
+      add: { knockback: 2.5, reloadTime: 0.6 }, mul: { damage: 0.75, magSize: 0.3 },
+      note: '6 pellets · huge damage up close · short range' },
+    { id: 'ak', name: 'AK', w: 96, h: 32, color: '#b5651d', shape: [[0, 2, 96, 16], [22, 16, 12, 16]],
+      assist: 1.8, note: 'Normal gun · bigger auto-shoot area' },
+    { id: 'sniper', name: 'Sniper', w: 96, h: 32, color: '#2f3640', shape: [[0, 3, 96, 14], [22, 15, 12, 17]],
+      range: 2000, speed: 2400, assist: 0.35,
+      add: { damage: 40, knockback: 5 }, mul: { magSize: 0.25 },
+      note: 'Very long range · thin auto-shoot area' },
+  ],
   barrel: [
     { id: 'short',    name: 'Short Barrel',    w: 20, h: 8,  color: '#e74c3c', add: { damage: -3, knockback: -0.4 } },
     { id: 'tactical', name: 'Tactical Barrel', w: 36, h: 9,  color: '#16a085', add: { damage: 3, knockback: -0.2 } },

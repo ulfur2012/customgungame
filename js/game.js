@@ -202,12 +202,13 @@ const Game = (() => {
     return [...G.remotes.values()].filter(r => r.alive && isEnemy(r)).map(r => ({ x: r.x, y: r.y, r: PLAYER.r }));
   }
 
+  // mobile auto-shoot: is an enemy inside the aim area? (wider for AK/shotgun, thin for sniper)
   function targetInSights(angle) {
-    const me = G.me;
+    const me = G.me, s = me.guns[me.cur].stats;
     for (const t of targets()) {
       const d = Math.hypot(t.x - me.x, t.y - me.y);
-      if (d > BULLET_RANGE) continue;
-      const tol = Math.max(0.12, Math.atan2(t.r, d));
+      if (d > s.range) continue;
+      const tol = Math.max(0.12, Math.atan2(t.r, d)) * s.assist;
       if (angleDiff(Math.atan2(t.y - me.y, t.x - me.x), angle) <= tol && lineOfSight(me.x, me.y, t.x, t.y)) return true;
     }
     return false;
@@ -215,7 +216,7 @@ const Game = (() => {
 
   function nearestVisibleTarget() {
     const me = G.me;
-    let best = null, bd = BULLET_RANGE;
+    let best = null, bd = me.guns[me.cur].stats.range;
     for (const t of targets()) {
       const d = Math.hypot(t.x - me.x, t.y - me.y);
       if (d < bd && lineOfSight(me.x, me.y, t.x, t.y)) { best = t; bd = d; }
@@ -226,8 +227,13 @@ const Game = (() => {
   function shoot(gun) {
     const me = G.me, s = gun.stats;
     const m = gunToWorld(me, gun.sprite.muzzle);
-    const a = me.aim + (Math.random() - 0.5) * 0.05;
-    addBullet(m.x, m.y, a, BULLET_SPEED, s.damage, s.knockback, 'me', G.myId);
+    const angles = [];
+    for (let i = 0; i < s.pellets; i++) {
+      const fan = s.pellets > 1 ? (i / (s.pellets - 1) - 0.5) * s.spread : 0;
+      angles.push(+(me.aim + fan + (Math.random() - 0.5) * (s.pellets > 1 ? 0.08 : s.spread)).toFixed(4));
+    }
+    for (const a of angles) addBullet(m.x, m.y, a, s.speed, s.damage, s.knockback, 'me', G.myId, s.range, s.falloff);
+    const a = me.aim;
     G.lastCombat = G.time;
     gun.ammo--;
     me.kick = Math.min(10, 3 + s.knockback * 2);
@@ -236,13 +242,15 @@ const Game = (() => {
     G.shake = Math.min(6, G.shake + 1 + s.knockback * 0.5);
     muzzleFlash(m.x, m.y, a);
     if (G.mode === 'mp') {
-      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), a: +a.toFixed(4), dmg: s.damage, kb: s.knockback, loud: s.hearRadius });
+      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, rng: s.range, fo: s.falloff, dmg: s.damage, kb: s.knockback, loud: s.hearRadius });
     }
   }
 
-  function addBullet(x, y, a, speed, dmg, kb, team, owner) {
-    G.bullets.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: BULLET_RANGE / speed, dmg, kb, team, owner });
+  function addBullet(x, y, a, speed, dmg, kb, team, owner, range = BULLET_RANGE, falloff = 0) {
+    G.bullets.push({ x, y, ox: x, oy: y, range, falloff, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
   }
+  // damage after falloff (shotguns hit hardest up close)
+  const bulletDamage = b => b.dmg * (1 - b.falloff * Math.min(1, Math.hypot(b.x - b.ox, b.y - b.oy) / b.range));
 
   function muzzleFlash(x, y, a) {
     for (let i = 0; i < 4; i++) {
@@ -321,7 +329,7 @@ const Game = (() => {
       } else {
         const friendly = G.mode === 'mp' && G.teams && teamOf(b.owner) === me.team;
         if (me.alive && !friendly && segHitsCircle(x1, y1, b.x, b.y, me.x, me.y, me.r)) {
-          hurtMe(b.dmg, b.kb, a, b.owner);
+          hurtMe(bulletDamage(b), b.kb, a, b.owner);
           b.life = 0;
           continue;
         }
@@ -507,12 +515,13 @@ const Game = (() => {
   }
 
   function hitEnemy(e, b, a) {
-    e.hp -= b.dmg;
+    const dmg = bulletDamage(b);
+    e.hp -= dmg;
     e.flash = 0.08;
     const weight = e.r / 16;
     e.kx += Math.cos(a) * b.kb * 50 / weight;
     e.ky += Math.sin(a) * b.kb * 50 / weight;
-    G.texts.push({ x: e.x + (Math.random() - 0.5) * 16, y: e.y - e.r, text: Math.round(b.dmg), color: '#fff', life: 0.5 });
+    G.texts.push({ x: e.x + (Math.random() - 0.5) * 16, y: e.y - e.r, text: Math.round(dmg), color: '#fff', life: 0.5 });
     burst(b.x, b.y, e.def.color, 3, 120);
     if (e.hp > 0) return;
     G.kills++;
@@ -554,8 +563,9 @@ const Game = (() => {
     if (!inMP()) return;
     const r = remote(m.from);
     r.kick = 6;
-    addBullet(m.x, m.y, m.a, BULLET_SPEED, m.dmg, m.kb, 'r', m.from);
-    muzzleFlash(m.x, m.y, m.a);
+    const angles = m.as || [m.a];
+    for (const a of angles) addBullet(m.x, m.y, a, m.sp || BULLET_SPEED, m.dmg, m.kb, 'r', m.from, m.rng || BULLET_RANGE, m.fo || 0);
+    muzzleFlash(m.x, m.y, angles[0]);
     hear(m.x, m.y, m.loud);
   });
   Net.on('hit', m => {
@@ -834,12 +844,14 @@ const Game = (() => {
 
   function drawAimLine(me) {
     const m = gunToWorld(me, me.guns[me.cur].sprite.muzzle);
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 10;
+    // shows the auto-shoot area: as long as the gun's range, as wide as its assist
+    const s = me.guns[me.cur].stats, half = 0.12 * s.assist, len = Math.min(s.range, 1200);
+    ctx.fillStyle = 'rgba(255,255,255,0.13)';
     ctx.beginPath();
     ctx.moveTo(m.x, m.y);
-    ctx.lineTo(m.x + Math.cos(me.aim) * BULLET_RANGE * 0.6, m.y + Math.sin(me.aim) * BULLET_RANGE * 0.6);
-    ctx.stroke();
+    ctx.arc(m.x, m.y, len, me.aim - half, me.aim + half);
+    ctx.closePath();
+    ctx.fill();
   }
 
   // red edges fading toward the middle, like classic shooters

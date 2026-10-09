@@ -74,7 +74,8 @@ function findPart(slot, id) {
 function layoutGun(kind, build) {
   const g = GUNS[kind];
   const ox = -g.hand.x, oy = -g.hand.y;
-  const pieces = [{ slot: 'body', part: g, x: ox, y: oy }];
+  // a Main Body upgrade replaces how the body looks; sockets stay the same
+  const pieces = [{ slot: 'body', part: findPart('body', build.body) || g, x: ox, y: oy }];
   const put = (slot, part, at) => {
     const pc = { slot, part, x: at.x - part.anchor.x, y: at.y - part.anchor.y };
     pieces.push(pc);
@@ -90,6 +91,7 @@ function layoutGun(kind, build) {
     muzzle = { x: pc.x + part.tip.x, y: pc.y + part.tip.y };
   }
   for (const slot of ['mag', 'handle', 'stock']) {
+    if (!g.sockets[slot]) continue;
     const part = findPart(slot, build[slot]);
     if (part) put(slot, part, socket(slot));
   }
@@ -145,6 +147,13 @@ function computeStats(kind, build) {
   s.loudness = Math.max(0, s.loudness);
   s.fireDelay = s.knockback * 0.1;          // every point of knockback = 0.1s between shots
   s.hearRadius = s.loudness * HEAR_UNIT;
+  const body = findPart('body', build.body) || {};
+  s.pellets = body.pellets || 1;
+  s.spread = body.spread || 0.05;
+  s.range = body.range || BULLET_RANGE;
+  s.speed = body.speed || BULLET_SPEED;
+  s.falloff = body.falloff || 0;
+  s.assist = body.assist || 1;
   return s;
 }
 
@@ -168,6 +177,7 @@ function describeMods(part) {
     const pct = Math.round((part.mul[k] - 1) * 100);
     out.push({ text: `${pct > 0 ? '+' : ''}${pct}% ${label(k)}`, good: (pct > 0) !== LOWER_IS_BETTER.has(k) });
   }
+  if (part.note) out.unshift({ text: part.note, good: true });
   return out;
 }
 

@@ -192,7 +192,7 @@
         <span class="stat-bar"><i style="width:${Math.round(clamp(s[st.key] / st.max, 0.03, 1) * 100)}%"></i></span>
         <span class="stat-val">${formatStat(st.key, s[st.key])}</span>
       </div>`).join('') +
-      `<p class="stat-note">Fires every ${s.fireDelay.toFixed(2)}s · heard ${Math.round(s.hearRadius)} units away${s.loudness < 2 ? ' (silenced)' : ''}</p>`;
+      `<p class="stat-note">Range ${Math.round(s.range)}${s.pellets > 1 ? ` · ${s.pellets} pellets` : ''} · fires every ${s.fireDelay.toFixed(2)}s · heard ${Math.round(s.hearRadius)} units away${s.loudness < 2 ? ' (silenced)' : ''}</p>`;
   }
 
   // ---------------------------------------------------------------- pause
