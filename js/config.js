@@ -74,6 +74,14 @@ const PARTS = {
       range: 2000, speed: 2400, assist: 0.35,
       add: { damage: 40, knockback: 5 }, mul: { magSize: 0.25 },
       note: 'Very long range · thin auto-shoot area' },
+    // sidearm bodies. fixed = stats that are set no matter what else is equipped
+    // totalAmmo = all the shots you get for the whole round (no ammo boxes help beyond this)
+    { id: 'flare', name: 'Flare Gun', gun: 'secondary', w: 52, h: 28, color: '#ff7b00', shape: [[0, 0, 52, 18], [7, 14, 11, 14]],
+      fixed: { damage: 50, magSize: 1 }, totalAmmo: 3, speed: 900, flare: true, add: { reloadTime: 0.4 },
+      note: '1 bullet · 50 damage · only 3 shots per round' },
+    { id: 'revolver', name: 'Revolver', gun: 'secondary', w: 52, h: 28, color: '#a4b0be', shape: [[0, 2, 52, 12], [16, 0, 16, 18], [7, 14, 11, 14]],
+      fixed: { magSize: 6 }, add: { damage: 6, knockback: 1 },
+      note: '6 shots · reloadable' },
   ],
   barrel: [
     { id: 'short',    name: 'Short Barrel',    w: 20, h: 8,  color: '#e74c3c', add: { damage: -3, knockback: -0.4 } },
@@ -302,3 +310,7 @@ const HEALTH_PACK = { heal: 20, every: 30, count: 3, r: 18, max: 12 };
 // Multiplayer ping: every 3 minutes, players who haven't fought for `calm` seconds
 // see red arrows pointing at the enemies for 3 seconds.
 const PING = { every: 180, calm: 10, show: 3 };
+
+// Limited ammo: every gun starts with this many spare mags (plus the one loaded).
+// Ammo boxes (yellow) refill spare ammo and spawn together with health packs.
+const AMMO = { spareMags: 3, box: { count: 2, refillMags: 1, r: 16 } };

@@ -154,6 +154,11 @@ function computeStats(kind, build) {
   s.speed = body.speed || BULLET_SPEED;
   s.falloff = body.falloff || 0;
   s.assist = body.assist || 1;
+  if (body.fixed) Object.assign(s, body.fixed);
+  s.flare = !!body.flare;
+  // limited ammo: spare rounds on top of the loaded mag
+  s.maxReserve = body.totalAmmo ? Math.max(0, body.totalAmmo - s.magSize) : s.magSize * AMMO.spareMags;
+  s.boxRefill = body.totalAmmo ? 0 : s.magSize * AMMO.box.refillMags;
   return s;
 }
 

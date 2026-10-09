@@ -23,7 +23,7 @@ const Game = (() => {
   // ---------------------------------------------------------------- setup
   function makeGun(kind, build) {
     const stats = computeStats(kind, build);
-    return { kind, build: { ...build }, stats, sprite: renderGunSprite(kind, build), ammo: stats.magSize, reload: 0, cd: 0 };
+    return { kind, build: { ...build }, stats, sprite: renderGunSprite(kind, build), ammo: stats.magSize, reserve: stats.maxReserve, reload: 0, cd: 0 };
   }
 
   function newState(mode, spawn, color) {
@@ -172,8 +172,13 @@ const Game = (() => {
 
     if (gun.reload > 0) {
       gun.reload -= dt;
-      if (gun.reload <= 0) { gun.reload = 0; gun.ammo = s.magSize; }
-    } else if (Input.take('reload') && gun.ammo < s.magSize) {
+      if (gun.reload <= 0) {
+        gun.reload = 0;
+        const got = Math.min(s.magSize - gun.ammo, gun.reserve);
+        gun.ammo += got;
+        gun.reserve -= got;
+      }
+    } else if (Input.take('reload') && gun.ammo < s.magSize && gun.reserve > 0) {
       gun.reload = s.reloadTime;
     }
     gun.cd = Math.max(0, gun.cd - dt);
@@ -181,7 +186,7 @@ const Game = (() => {
       shoot(gun);
       gun.cd = s.fireDelay;
     }
-    if (gun.ammo === 0 && gun.reload === 0) gun.reload = s.reloadTime;
+    if (gun.ammo === 0 && gun.reload === 0 && gun.reserve > 0) gun.reload = s.reloadTime;
   }
 
   function switchGun(i) {
@@ -232,7 +237,7 @@ const Game = (() => {
       const fan = s.pellets > 1 ? (i / (s.pellets - 1) - 0.5) * s.spread : 0;
       angles.push(+(me.aim + fan + (Math.random() - 0.5) * (s.pellets > 1 ? 0.08 : s.spread)).toFixed(4));
     }
-    for (const a of angles) addBullet(m.x, m.y, a, s.speed, s.damage, s.knockback, 'me', G.myId, s.range, s.falloff);
+    for (const a of angles) addBullet(m.x, m.y, a, s.speed, s.damage, s.knockback, 'me', G.myId, s.range, s.falloff, s.flare);
     const a = me.aim;
     G.lastCombat = G.time;
     gun.ammo--;
@@ -242,12 +247,12 @@ const Game = (() => {
     G.shake = Math.min(6, G.shake + 1 + s.knockback * 0.5);
     muzzleFlash(m.x, m.y, a);
     if (G.mode === 'mp') {
-      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, rng: s.range, fo: s.falloff, dmg: s.damage, kb: s.knockback, loud: s.hearRadius });
+      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, fl: s.flare ? 1 : 0, rng: s.range, fo: s.falloff, dmg: s.damage, kb: s.knockback, loud: s.hearRadius });
     }
   }
 
-  function addBullet(x, y, a, speed, dmg, kb, team, owner, range = BULLET_RANGE, falloff = 0) {
-    G.bullets.push({ x, y, ox: x, oy: y, range, falloff, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
+  function addBullet(x, y, a, speed, dmg, kb, team, owner, range = BULLET_RANGE, falloff = 0, flare = false) {
+    G.bullets.push({ x, y, ox: x, oy: y, range, falloff, flare, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
   }
   // damage after falloff (shotguns hit hardest up close)
   const bulletDamage = b => b.dmg * (1 - b.falloff * Math.min(1, Math.hypot(b.x - b.ox, b.y - b.oy) / b.range));
@@ -360,15 +365,25 @@ const Game = (() => {
         G.packT = HEALTH_PACK.every;
         const fresh = [];
         for (let i = 0; i < HEALTH_PACK.count && G.packs.length + fresh.length < HEALTH_PACK.max; i++) fresh.push(randomFloorSpot());
+        for (let i = 0; i < AMMO.box.count; i++) fresh.push({ ...randomFloorSpot(), kind: 'ammo' });
         addPacks(fresh);
         if (G.mode === 'mp') Net.send({ t: 'packs', packs: fresh });
       }
     }
-    if (!me.alive || me.hp >= me.maxHp) return;
+    if (!me.alive) return;
     for (const p of G.packs) {
       if (Math.hypot(p.x - me.x, p.y - me.y) > me.r + HEALTH_PACK.r) continue;
-      me.hp = Math.min(me.maxHp, me.hp + HEALTH_PACK.heal);
-      G.texts.push({ x: me.x, y: me.y - 34, text: `+${HEALTH_PACK.heal}`, color: '#4cff7a', life: 0.9 });
+      if (p.kind === 'ammo') {
+        const needs = me.guns.filter(gn => gn.reserve < gn.stats.maxReserve && gn.stats.boxRefill > 0);
+        if (!needs.length) continue;
+        for (const gn of needs) gn.reserve = Math.min(gn.stats.maxReserve, gn.reserve + gn.stats.boxRefill);
+        G.texts.push({ x: me.x, y: me.y - 34, text: '+AMMO', color: '#ffd23f', life: 0.9 });
+        updateWeaponBar(true);
+      } else {
+        if (me.hp >= me.maxHp) continue;
+        me.hp = Math.min(me.maxHp, me.hp + HEALTH_PACK.heal);
+        G.texts.push({ x: me.x, y: me.y - 34, text: `+${HEALTH_PACK.heal}`, color: '#4cff7a', life: 0.9 });
+      }
       removePack(p.id);
       if (G.mode === 'mp') Net.send({ t: 'took', id: p.id });
       break;
@@ -386,8 +401,22 @@ const Game = (() => {
   function addPacks(list) { G.packs.push(...list); }
   function removePack(id) { G.packs = G.packs.filter(p => p.id !== id); }
 
+  function drawAmmoBox(p) {
+    const s = AMMO.box.r;
+    ctx.fillStyle = 'rgba(255,210,60,0.16)';
+    ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c99a1e';
+    ctx.strokeStyle = '#4a3700';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(p.x - s, p.y - s * 0.7, s * 2, s * 1.4);
+    ctx.fillRect(p.x - s, p.y - s * 0.7, s * 2, s * 1.4);
+    ctx.fillStyle = '#ffe27a';
+    for (let i = -1; i <= 1; i++) ctx.fillRect(p.x + i * s * 0.55 - 2.5, p.y - s * 0.45, 5, s * 0.9);
+  }
+
   function drawPacks() {
     for (const p of G.packs) {
+      if (p.kind === 'ammo') { drawAmmoBox(p); continue; }
       const pulse = 1 + Math.sin(performance.now() / 250) * 0.08, s = HEALTH_PACK.r * pulse, t = s * 0.38;
       ctx.fillStyle = 'rgba(40,255,110,0.18)';
       ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.4, 0, Math.PI * 2); ctx.fill();
@@ -564,7 +593,7 @@ const Game = (() => {
     const r = remote(m.from);
     r.kick = 6;
     const angles = m.as || [m.a];
-    for (const a of angles) addBullet(m.x, m.y, a, m.sp || BULLET_SPEED, m.dmg, m.kb, 'r', m.from, m.rng || BULLET_RANGE, m.fo || 0);
+    for (const a of angles) addBullet(m.x, m.y, a, m.sp || BULLET_SPEED, m.dmg, m.kb, 'r', m.from, m.rng || BULLET_RANGE, m.fo || 0, !!m.fl);
     muzzleFlash(m.x, m.y, angles[0]);
     hear(m.x, m.y, m.loud);
   });
@@ -627,7 +656,8 @@ const Game = (() => {
     ctx.lineCap = 'round';
     ctx.lineWidth = 3;
     for (const b of G.bullets) {
-      ctx.strokeStyle = b.team === 'me' ? '#ffe9a8' : '#ff8a7a';
+      ctx.strokeStyle = b.flare ? '#ff7b00' : b.team === 'me' ? '#ffe9a8' : '#ff8a7a';
+      ctx.lineWidth = b.flare ? 9 : 3;
       ctx.beginPath();
       ctx.moveTo(b.x, b.y);
       ctx.lineTo(b.x - b.vx * 0.016, b.y - b.vy * 0.016);
@@ -981,13 +1011,14 @@ const Game = (() => {
   function updateWeaponBar(force) {
     if (!G) return;
     const me = G.me;
-    const key = me.cur + me.guns.map(g => `${g.ammo}/${g.reload > 0 ? Math.ceil(g.reload * 10) : 0}`).join('|');
+    const key = me.cur + me.guns.map(g => `${g.ammo}/${g.reserve}/${g.reload > 0 ? Math.ceil(g.reload * 10) : 0}`).join('|');
     if (!force && key === barCache) return;
     barCache = key;
     me.guns.forEach((g, i) => {
       const btn = el('gun' + i);
       btn.classList.toggle('active', i === me.cur);
-      btn.querySelector('.ammo').textContent = g.reload > 0 ? `Reloading ${g.reload.toFixed(1)}s` : `${g.ammo} / ${g.stats.magSize}`;
+      btn.querySelector('.ammo').textContent = g.reload > 0 ? `Reloading ${g.reload.toFixed(1)}s`
+        : g.ammo === 0 && g.reserve === 0 ? 'OUT OF AMMO' : `${g.ammo} | ${g.reserve}`;
     });
   }
   el('gun0').addEventListener('click', () => G && switchGun(0));
