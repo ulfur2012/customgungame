@@ -244,16 +244,29 @@ const Account = {
       return { error: 'Wrong password for that name.' };
     }
     this.user = all[key];
-    for (const kind of ['main', 'secondary']) {
-      const b = { ...emptyBuild(), ...this.user.loadout[kind] };
+    // saved loadouts: the old single loadout becomes preset 1
+    const u = this.user;
+    if (!Array.isArray(u.presets)) u.presets = [u.loadout];
+    while (u.presets.length < LOADOUT_PRESETS) u.presets.push(JSON.parse(JSON.stringify(u.presets[0])));
+    u.active = clamp(u.active | 0, 0, LOADOUT_PRESETS - 1);
+    u.loadout = u.presets[u.active];
+    for (const p of u.presets) if (!ABILITIES[p.ability]) p.ability = 'grenade';
+    for (const L of this.user.presets) for (const kind of ['main', 'secondary']) {
+      const b = { ...emptyBuild(), ...L[kind] };
       for (const s of SLOTS) if (b[s.key] && !partsFor(kind, s.key).some(p => p.id === b[s.key])) b[s.key] = null;
-      this.user.loadout[kind] = b;
+      L[kind] = b;
     }
     Store.set('cgg.lastName', name);
     return { ok: true, created };
   },
+  usePreset(i) {
+    this.user.active = i;
+    this.user.loadout = this.user.presets[i];
+    this.save();
+  },
   save() {
     if (!this.user) return;
+    this.user.presets[this.user.active] = this.user.loadout;
     const all = Store.get('cgg.accounts', {});
     all[this.user.name.toLowerCase()] = this.user;
     Store.set('cgg.accounts', all);

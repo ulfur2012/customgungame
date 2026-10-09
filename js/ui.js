@@ -97,16 +97,24 @@
   el('loadoutBack').onclick = () => onBack && onBack();
 
   function renderLoadout() {
-    const build = Account.user.loadout[gunKind];
-
+    el('presetTabs').innerHTML = '<span>Loadout</span>';
+    for (let i = 0; i < LOADOUT_PRESETS; i++) {
+      const b = document.createElement('button');
+      b.textContent = i + 1;
+      b.className = i === Account.user.active ? 'active' : '';
+      b.onclick = () => { Account.usePreset(i); renderLoadout(); };
+      el('presetTabs').appendChild(b);
+    }
     el('gunTabs').innerHTML = '';
-    for (const kind of ['main', 'secondary']) {
+    for (const kind of ['main', 'secondary', 'ability']) {
       const b = document.createElement('button');
       b.className = 'gun-tab' + (kind === gunKind ? ' active' : '');
-      b.textContent = GUNS[kind].name;
+      b.textContent = kind === 'ability' ? 'Ability' : GUNS[kind].name;
       b.onclick = () => { gunKind = kind; renderLoadout(); };
       el('gunTabs').appendChild(b);
     }
+    if (gunKind === 'ability') { renderAbilities(); return; }
+    const build = Account.user.loadout[gunKind];
 
     const slots = SLOTS.filter(s => partsFor(gunKind, s.key).length);
     if (!slots.some(s => s.key === slot)) slot = slots[0].key;
@@ -147,6 +155,39 @@
     renderStats();
   }
 
+  function renderAbilities() {
+    const current = Account.user.loadout.ability;
+    el('slotTabs').innerHTML = '';
+    const wrap = el('parts');
+    wrap.innerHTML = '';
+    for (const id in ABILITIES) {
+      const A = ABILITIES[id];
+      const card = document.createElement('button');
+      card.className = 'card' + (id === current ? ' equipped' : '');
+      card.innerHTML = `<div class="ab-icon" style="background:${A.color}">${A.name[0]}</div>
+        <div class="card-name">${A.name} <small class="hint">${A.type}</small></div>
+        <div class="card-desc">${A.desc}</div>`;
+      card.onclick = () => { Account.user.loadout.ability = id; Account.save(); renderLoadout(); };
+      wrap.appendChild(card);
+    }
+    const A = ABILITIES[current];
+    const { ctx, w, h } = fitCanvas(el('preview'));
+    if (w && h) {
+      ctx.fillStyle = A.color;
+      ctx.beginPath(); ctx.arc(w / 2, h / 2 - 10, Math.min(w, h) * 0.22, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.font = `900 ${Math.round(Math.min(w, h) * 0.2)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(A.name[0], w / 2, h / 2 - 10);
+      ctx.font = '800 16px system-ui, sans-serif';
+      ctx.fillText(A.name, w / 2, h - 22);
+    }
+    const extra = A.type === 'passive' ? 'Always on.'
+      : id_cd(A);
+    el('stats').innerHTML = `<p class="stat-note" style="font-size:14px">${A.desc}</p><p class="stat-note">${extra}</p>`;
+  }
+  const id_cd = A => `${A.uses} use${A.uses === 1 ? '' : 's'} per round · cooldown ${A.cooldown || 0}s. E on PC, the green button on mobile${['grenade', 'rpg'].includes(Object.keys(ABILITIES).find(k => ABILITIES[k] === A)) ? ' (hold to aim, let go to fire)' : ''}.`;
+
   function fitCanvas(canvas) {
     const dpr = Math.min(devicePixelRatio || 1, 2);
     const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -171,7 +212,7 @@
   }
 
   function renderPreview() {
-    if (el('loadout').classList.contains('hidden')) return;
+    if (el('loadout').classList.contains('hidden') || gunKind === 'ability') return;
     const { ctx, w, h } = fitCanvas(el('preview'));
     if (!w || !h) return;
     const L = layoutGun(gunKind, Account.user.loadout[gunKind]);

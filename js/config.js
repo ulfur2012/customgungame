@@ -315,3 +315,22 @@ const PING = { every: 180, calm: 10, show: 3 };
 // Ammo boxes (yellow) spawn with health packs. Each gives 1 mag to the main gun and/or sidearm,
 // whichever needs it (both if both do). The flare gun only gets 1 shot, and only when the main gun is full.
 const AMMO = { spareMags: 3, box: { count: 2, refillMags: 1, r: 16 } };
+
+// Abilities: pick one before each round. Active ones use E on PC / the green button on mobile.
+// uses = how many times per round (2 for everything except the RPG, which gets one shot).
+const ABILITIES = {
+  grenade: { name: 'Grenade', type: 'active', color: '#6ab04c', cooldown: 15, uses: 2,
+             damage: 100, radius: 130, range: 650, flight: 0.8,
+             desc: 'Hold to aim (white line shows the path), let go to throw. Flies over walls. 100 damage.' },
+  shield:  { name: 'Shield', type: 'active', color: '#3b82f6', cooldown: 30, uses: 2, duration: 7, hp: 200,
+             desc: 'A 200 HP shield for 7 seconds. Your health bar turns blue.' },
+  regen:   { name: 'Regeneration', type: 'passive', color: '#2ecc71', every: 10, heal: 10,
+             desc: 'Passive: +10 HP for every 10 seconds you are out of combat.' },
+  rpg:     { name: 'RPG', type: 'active', color: '#e17055', uses: 1, damage: 70, direct: 100, radius: 120, speed: 750,
+             desc: 'ONE rocket per round. 100 damage on a direct hit, 70 in the blast. Explodes on walls.' },
+  energy:  { name: 'Energy Drink', type: 'active', color: '#f9ca24', cooldown: 5, uses: 2, heal: 10, speed: 1.7, duration: 6,
+             desc: 'Heals 10 HP and makes you 1.7x faster for 6 seconds.' },
+  burger:  { name: 'Burger', type: 'active', color: '#cd6133', cooldown: 5, uses: 2, heal: 100,
+             desc: 'Eat it to heal 100 HP.' },
+};
+const LOADOUT_PRESETS = 3; // saved loadouts you can switch between

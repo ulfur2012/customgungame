@@ -5,13 +5,14 @@ const Input = (() => {
   const mouse = { x: 0, y: 0, down: false, active: false };
   const sticks = { move: null, aim: null };
   const STICK_R = 60;
-  const flags = { reload: false, swap: false, select: -1, tap: false };
+  const flags = { reload: false, swap: false, select: -1, tap: false, abPress: false };
 
   addEventListener('keydown', e => {
     if (e.repeat) return;
     keys.add(e.code);
     if (e.code === 'KeyR') flags.reload = true;
     if (e.code === 'KeyQ') flags.swap = true;
+    if (e.code === 'KeyE') flags.abPress = true;
     if (e.code === 'Digit1') flags.select = 0;
     if (e.code === 'Digit2') flags.select = 1;
   });
@@ -63,8 +64,9 @@ const Input = (() => {
   function reset() {
     keys.clear();
     mouse.down = false;
+    abilityTouch = false;
     sticks.move = sticks.aim = null;
-    Object.assign(flags, { reload: false, swap: false, select: -1, tap: false });
+    Object.assign(flags, { reload: false, swap: false, select: -1, tap: false, abPress: false });
   }
 
   // {x, y}, length <= 1
@@ -98,7 +100,19 @@ const Input = (() => {
     return { angle: Math.atan2(mouse.y - py, mouse.x - px), aiming: true, fire: mouse.down || keys.has('Space') };
   }
 
+  // ability button: E on PC, the green button on mobile
+  let abilityTouch = false;
+  const abBtn = document.getElementById('abilityBtn');
+  abBtn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    abilityTouch = true;
+    flags.abPress = true;
+    try { abBtn.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) abBtn.addEventListener(ev, () => { abilityTouch = false; });
+  const abilityHeld = () => keys.has('KeyE') || abilityTouch;
+
   function take(name) { const v = flags[name]; flags[name] = name === 'select' ? -1 : false; return v; }
 
-  return { move, aim, reset, take, flags, sticks, mouse, STICK_R };
+  return { move, aim, reset, take, flags, sticks, mouse, STICK_R, abilityHeld };
 })();

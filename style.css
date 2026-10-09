@@ -344,3 +344,40 @@ body.mobile .gun-btn { min-width: 0; padding: 6px 10px; }
 .chip { --chip: #888; padding: 6px 10px !important; border-radius: 999px !important; font-size: 13px; font-weight: 700 !important; background: var(--panel-2) !important; border-left: 6px solid var(--chip) !important; }
 .chip.banned { opacity: 0.45; text-decoration: line-through; border-left-color: #444 !important; }
 .rules { font-size: 13px; font-weight: 700; color: var(--accent) !important; }
+
+/* ability button: bar next to the guns on PC, green round button above the shoot stick on mobile */
+#abilityBtn {
+  position: fixed; z-index: 5;
+  right: calc(16px + var(--safe-r)); bottom: calc(14px + var(--safe-b));
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 12px;
+  background: rgba(0, 0, 0, 0.5); border: 2px solid #2bd96b;
+  touch-action: none;
+}
+#abilityBtn.cooling { border-color: rgba(255, 255, 255, 0.2); opacity: 0.7; }
+#abilityBtn.passive { border-color: rgba(43, 217, 107, 0.4); }
+.ab-key { background: #2bd96b; color: #062b12; font-weight: 900; border-radius: 6px; padding: 1px 7px; font-size: 13px; }
+.ab-name { font-weight: 800; font-size: 14px; }
+.ab-state { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+body.mobile #abilityBtn {
+  right: calc(120px + var(--safe-r)); bottom: calc(200px + var(--safe-b));
+  width: 74px; height: 74px; padding: 0; border-radius: 50%;
+  flex-direction: column; justify-content: center; gap: 0;
+  background: rgba(43, 217, 107, 0.85); border: 3px solid #b8ffd0; color: #062b12;
+}
+body.mobile #abilityBtn.cooling { background: rgba(43, 217, 107, 0.3); }
+body.mobile #abilityBtn:active { background: #2bd96b; }
+body.mobile .ab-key { display: none; }
+body.mobile .ab-name { font-size: 11px; }
+body.mobile .ab-state { color: #062b12; font-weight: 800; font-size: 12px; }
+body.mobile #reloadBtn { bottom: calc(290px + var(--safe-b)); }
+
+.ab-icon { width: 100%; height: 50px; border-radius: 8px; display: grid; place-items: center; font-weight: 900; font-size: 24px; color: #fff; }
+.card-desc { font-size: 12px; color: var(--muted); }
+
+.preset-tabs { display: flex; align-items: center; gap: 4px; }
+.preset-tabs span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-right: 2px; }
+.preset-tabs button { width: 34px; height: 34px; border-radius: 9px; background: var(--panel); border: 1px solid var(--line); font-weight: 800; }
+.preset-tabs button.active { background: var(--accent-2); color: #00142a; border-color: var(--accent-2); }
+@media (max-width: 560px) { .ws-header { flex-wrap: wrap; } .gun-tabs { order: 3; width: 100%; } }
+body.mobile #reloadBtn { right: calc(24px + var(--safe-r)); bottom: calc(205px + var(--safe-b)); }

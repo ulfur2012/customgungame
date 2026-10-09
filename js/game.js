@@ -33,13 +33,15 @@ const Game = (() => {
       me: {
         x: spawn[0], y: spawn[1], r: PLAYER.r, hp: PLAYER.hp, maxHp: PLAYER.hp, aim: 0, vx: 0, vy: 0,
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
+        ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
+        abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
       bullets: [], fx: [], texts: [], hears: [], feed: [],
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
-      sendT: 0, packs: [], packT: 0, time: 0, lastCombat: 0, pingT: PING.every, ping: 0,
+      sendT: 0, packs: [], packT: 0, nades: [], rockets: [], time: 0, lastCombat: 0, pingT: PING.every, ping: 0,
     };
   }
 
@@ -73,6 +75,7 @@ const Game = (() => {
 
   function begin() {
     Input.reset();
+    abCache = '';
     updateWeaponBar(true);
     document.body.classList.add('in-game');
     last = performance.now();
@@ -112,10 +115,11 @@ const Game = (() => {
       G.sendT -= dt;
       if (G.sendT <= 0) {
         G.sendT = 0.05;
-        Net.send({ t: 'st', x: Math.round(me.x), y: Math.round(me.y), aim: +me.aim.toFixed(3), hp: me.hp, gun: me.cur, alive: me.alive });
+        Net.send({ t: 'st', x: Math.round(me.x), y: Math.round(me.y), aim: +me.aim.toFixed(3), hp: me.hp, sh: Math.round(me.shield), gun: me.cur, alive: me.alive });
       }
     }
     updateBullets(dt);
+    updateProjectiles(dt);
     updatePacks(dt);
     G.time += dt;
     if (G.mode === 'mp') {
@@ -145,8 +149,9 @@ const Game = (() => {
   function updateMe(dt) {
     const me = G.me;
     const mv = Input.move();
-    me.x += (mv.x * PLAYER.speed + me.vx) * dt;
-    me.y += (mv.y * PLAYER.speed + me.vy) * dt;
+    const speed = PLAYER.speed * (me.speedT > 0 ? ABILITIES.energy.speed : 1);
+    me.x += (mv.x * speed + me.vx) * dt;
+    me.y += (mv.y * speed + me.vy) * dt;
     me.vx *= Math.exp(-10 * dt); me.vy *= Math.exp(-10 * dt);
     collideWorld(me);
     me.kick = Math.max(0, me.kick - 50 * dt);
@@ -160,10 +165,11 @@ const Game = (() => {
     const scr = toScreen(me.x, me.y);
     const aim = Input.aim(scr.x, scr.y);
     if (aim.angle !== null) me.aim = aim.angle;
-    let fire = aim.fire;
+    updateAbility(dt);
+    let fire = aim.fire && !me.abAiming;
     if (Settings.mobile) {
       // Brawl Stars style: hold the aim stick and it fires by itself when an enemy is in your sights
-      fire = aim.aiming && targetInSights(me.aim);
+      fire = aim.aiming && !me.abAiming && targetInSights(me.aim);
       if (Input.take('tap')) {
         const t = nearestVisibleTarget();
         if (t) { me.aim = Math.atan2(t.y - me.y, t.x - me.x); fire = true; }
@@ -277,7 +283,9 @@ const Game = (() => {
   function hurtMe(dmg, kb, angle, by) {
     const me = G.me;
     if (!me.alive) return;
-    me.hp = Math.max(0, me.hp - dmg);
+    const soaked = Math.min(me.shield, dmg);
+    me.shield -= soaked;
+    me.hp = Math.max(0, me.hp - (dmg - soaked));
     me.vx += Math.cos(angle) * kb * 60;
     me.vy += Math.sin(angle) * kb * 60;
     G.hurt = 1;
@@ -353,6 +361,219 @@ const Game = (() => {
       const a = Math.random() * Math.PI * 2, v = speed * (0.3 + Math.random() * 0.7);
       G.fx.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.4, max: 0.4, size: 4, color });
     }
+  }
+
+  // ---------------------------------------------------------------- abilities
+  const myOwnerId = () => G.myId || 'me';
+  const isMine = owner => owner === myOwnerId();
+  const hostileTo = owner => !isMine(owner) && (G.mode === 'sp' ? owner === 'enemy' : (!G.teams || teamOf(owner) !== G.me.team));
+
+  function updateAbility(dt) {
+    const me = G.me, A = ABILITIES[me.ability];
+    if (!A) return;
+    me.abCd = Math.max(0, me.abCd - dt);
+    me.speedT = Math.max(0, me.speedT - dt);
+    if (me.shieldT > 0) {
+      me.shieldT -= dt;
+      if (me.shieldT <= 0) { me.shieldT = 0; me.shield = 0; }
+    }
+    if (A.type === 'passive') {
+      // regen: +10 HP for every 10 seconds out of combat
+      const calm = G.time - G.lastCombat, ticks = Math.floor(calm / A.every);
+      if (calm < A.every) me.regenTicks = 0;
+      else if (ticks > me.regenTicks) {
+        me.regenTicks = ticks;
+        if (me.hp < me.maxHp) {
+          me.hp = Math.min(me.maxHp, me.hp + A.heal);
+          G.texts.push({ x: me.x, y: me.y - 34, text: `+${A.heal}`, color: '#4cff7a', life: 0.9 });
+        }
+      }
+      return;
+    }
+    const pressed = Input.take('abPress');
+    const held = Input.abilityHeld();
+    const ready = me.abCd === 0 && me.abUses > 0 && me.shieldT === 0;
+    const instant = ['shield', 'energy', 'burger'].includes(me.ability);
+    if (instant) {
+      if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
+    } else {
+      if (held && ready) me.abAiming = true;
+      if (!held && me.abWasHeld && me.abAiming && ready) {
+        if (me.ability === 'grenade') throwGrenade(); else fireRocket();
+      }
+      if (!held || !ready) me.abAiming = false;
+    }
+    me.abWasHeld = held;
+  }
+
+  const heal = n => {
+    const me = G.me;
+    me.hp = Math.min(me.maxHp, me.hp + n);
+    G.texts.push({ x: me.x, y: me.y - 34, text: `+${n}`, color: '#4cff7a', life: 0.9 });
+  };
+
+  // abilities that happen the moment you press the button
+  function useInstant(A) {
+    const me = G.me;
+    me.abCd = A.cooldown;
+    me.abUses--;
+    if (me.ability === 'shield') { me.shield = A.hp; me.shieldT = A.duration; G.banner = { text: 'Shield up!', t: 1 }; }
+    if (me.ability === 'energy') { heal(A.heal); me.speedT = A.duration; G.banner = { text: 'Speed boost!', t: 1 }; }
+    if (me.ability === 'burger') heal(A.heal);
+  }
+
+  // where the grenade will land: the mouse on PC, a fixed distance along your aim on mobile
+  function grenadeTarget() {
+    const me = G.me, A = ABILITIES.grenade;
+    let tx, ty;
+    if (!Settings.mobile && Input.mouse.active) {
+      tx = (Input.mouse.x - W / 2) / zoom + G.cam.x;
+      ty = (Input.mouse.y - H / 2) / zoom + G.cam.y;
+    } else {
+      tx = me.x + Math.cos(me.aim) * A.range * 0.7;
+      ty = me.y + Math.sin(me.aim) * A.range * 0.7;
+    }
+    const d = Math.hypot(tx - me.x, ty - me.y);
+    if (d > A.range) { tx = me.x + (tx - me.x) / d * A.range; ty = me.y + (ty - me.y) / d * A.range; }
+    return { x: clamp(tx, 0, MAP.w), y: clamp(ty, 0, MAP.h) };
+  }
+
+  function throwGrenade() {
+    const me = G.me, t = grenadeTarget();
+    G.nades.push({ x0: me.x, y0: me.y, x1: t.x, y1: t.y, t: 0, owner: myOwnerId() });
+    me.abCd = ABILITIES.grenade.cooldown;
+    me.abUses--;
+    G.lastCombat = G.time;
+    if (G.mode === 'mp') Net.send({ t: 'nade', x0: Math.round(me.x), y0: Math.round(me.y), x1: Math.round(t.x), y1: Math.round(t.y) });
+  }
+
+  function fireRocket() {
+    const me = G.me, m = gunToWorld(me, me.guns[me.cur].sprite.muzzle);
+    addRocket(m.x, m.y, me.aim, myOwnerId());
+    me.abUses--;
+    G.lastCombat = G.time;
+    G.shake = Math.min(12, G.shake + 6);
+    if (G.mode === 'mp') Net.send({ t: 'rpg', x: Math.round(m.x), y: Math.round(m.y), a: +me.aim.toFixed(4) });
+  }
+
+  function addRocket(x, y, a, owner) {
+    const A = ABILITIES.rpg;
+    G.rockets.push({ x, y, a, vx: Math.cos(a) * A.speed, vy: Math.sin(a) * A.speed, life: 3, owner });
+  }
+
+  // blast: hurts enemies of whoever caused it. skip = the one already hit directly
+  function explode(x, y, radius, dmg, owner, skip) {
+    burst(x, y, '#ff9f43', 30, 380);
+    burst(x, y, '#ffd36b', 16, 220);
+    G.fx.push({ x, y, vx: 0, vy: 0, life: 0.25, max: 0.25, size: radius * 1.6, color: 'rgba(255,170,60,0.5)' });
+    const me = G.me, d = Math.hypot(me.x - x, me.y - y);
+    G.shake = Math.min(14, G.shake + Math.max(0, 12 - d / 60));
+    if (!isMine(owner)) hear(x, y, 12 * HEAR_UNIT);
+    if (isMine(owner) && G.mode === 'sp') {
+      for (const e of [...G.enemies]) {
+        if (e === skip || Math.hypot(e.x - x, e.y - y) > radius + e.r) continue;
+        hitEnemy(e, { dmg, falloff: 0, kb: 5, x: e.x, y: e.y, ox: e.x, oy: e.y, range: 1 }, Math.atan2(e.y - y, e.x - x));
+      }
+    } else if (skip !== 'me' && me.alive && hostileTo(owner) && d <= radius + me.r) {
+      hurtMe(dmg, 6, Math.atan2(me.y - y, me.x - x), owner);
+    }
+  }
+
+  function updateProjectiles(dt) {
+    const G_ = ABILITIES.grenade, R = ABILITIES.rpg, me = G.me;
+    for (const n of G.nades) {
+      n.t += dt;
+      if (n.t >= G_.flight) { n.done = true; explode(n.x1, n.y1, G_.radius, G_.damage, n.owner); }
+    }
+    G.nades = G.nades.filter(n => !n.done);
+
+    for (const r of G.rockets) {
+      const x1 = r.x, y1 = r.y;
+      r.x += r.vx * dt; r.y += r.vy * dt; r.life -= dt;
+      if (Math.random() < 0.8) G.fx.push({ x: x1, y: y1, vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40, life: 0.35, max: 0.35, size: 6, color: '#bbb' });
+      const blocked = r.life <= 0 || r.x < 0 || r.y < 0 || r.x > MAP.w || r.y > MAP.h || MAP.walls.some(w => segmentHitsRect(x1, y1, r.x, r.y, w));
+      if (blocked) { r.done = true; explode(x1, y1, R.radius, R.damage, r.owner); continue; }
+      // direct hits
+      if (isMine(r.owner)) {
+        if (G.mode === 'sp') {
+          const e = G.enemies.find(e => segHitsCircle(x1, y1, r.x, r.y, e.x, e.y, e.r));
+          if (e) {
+            r.done = true;
+            hitEnemy(e, { dmg: R.direct, falloff: 0, kb: 8, x: e.x, y: e.y, ox: e.x, oy: e.y, range: 1 }, r.a);
+            explode(r.x, r.y, R.radius, R.damage, r.owner, e);
+          }
+        } else {
+          const hit = [...G.remotes.values()].find(o => o.alive && isEnemy(o) && segHitsCircle(x1, y1, r.x, r.y, o.x, o.y, PLAYER.r));
+          if (hit) { r.done = true; explode(r.x, r.y, R.radius, R.damage, r.owner); }
+        }
+      } else {
+        if (me.alive && hostileTo(r.owner) && segHitsCircle(x1, y1, r.x, r.y, me.x, me.y, me.r)) {
+          r.done = true;
+          hurtMe(R.direct, 8, r.a, r.owner);
+          explode(r.x, r.y, R.radius, R.damage, r.owner, 'me');
+          continue;
+        }
+        const hit = [...G.remotes.values()].find(o => o.alive && o.id !== r.owner && segHitsCircle(x1, y1, r.x, r.y, o.x, o.y, PLAYER.r));
+        if (hit) { r.done = true; explode(r.x, r.y, R.radius, R.damage, r.owner); }
+      }
+    }
+    G.rockets = G.rockets.filter(r => !r.done);
+  }
+
+  function drawProjectiles() {
+    const A = ABILITIES.grenade;
+    for (const n of G.nades) {
+      const k = Math.min(1, n.t / A.flight), x = n.x0 + (n.x1 - n.x0) * k, y = n.y0 + (n.y1 - n.y0) * k;
+      const h = 4 * 110 * k * (1 - k); // height of the arc
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath(); ctx.ellipse(x, y, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4b7b2f'; ctx.strokeStyle = '#1d3311'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(x, y - h, 8 + h / 40, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // landing warning
+      ctx.strokeStyle = `rgba(255,80,60,${0.25 + 0.5 * k})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(n.x1, n.y1, A.radius, 0, Math.PI * 2); ctx.stroke();
+    }
+    for (const r of G.rockets) {
+      ctx.save();
+      ctx.translate(r.x, r.y); ctx.rotate(r.a);
+      ctx.fillStyle = '#5d6d4e'; ctx.fillRect(-16, -5, 26, 10);
+      ctx.fillStyle = '#e17055'; ctx.beginPath(); ctx.moveTo(10, -5); ctx.lineTo(18, 0); ctx.lineTo(10, 5); ctx.fill();
+      ctx.fillStyle = '#ffb142'; ctx.fillRect(-22, -3, 6, 6);
+      ctx.restore();
+    }
+  }
+
+  // white path preview while holding the ability button
+  function drawAbilityAim(me) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([12, 10]);
+    if (me.ability === 'grenade') {
+      const t = grenadeTarget(), mx = (me.x + t.x) / 2, my = (me.y + t.y) / 2, d = Math.hypot(t.x - me.x, t.y - me.y);
+      // bend the line sideways so it reads as an arc over walls
+      const nx = -(t.y - me.y) / (d || 1), ny = (t.x - me.x) / (d || 1), bend = d * 0.25 * (Math.cos(me.aim) < 0 ? 1 : -1);
+      ctx.beginPath();
+      ctx.moveTo(me.x, me.y);
+      ctx.quadraticCurveTo(mx + nx * bend, my + ny * bend, t.x, t.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(t.x, t.y, ABILITIES.grenade.radius, 0, Math.PI * 2); ctx.stroke();
+    } else {
+      // rocket: straight line until the first wall
+      let len = 1400;
+      for (let s = 20; s < 1400; s += 20) {
+        if (pointInWall(me.x + Math.cos(me.aim) * s, me.y + Math.sin(me.aim) * s)) { len = s; break; }
+      }
+      ctx.beginPath();
+      ctx.moveTo(me.x, me.y);
+      ctx.lineTo(me.x + Math.cos(me.aim) * len, me.y + Math.sin(me.aim) * len);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.arc(me.x + Math.cos(me.aim) * len, me.y + Math.sin(me.aim) * len, ABILITIES.rpg.radius, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------- health packs
@@ -585,7 +806,7 @@ const Game = (() => {
   Net.on('st', m => {
     if (!inMP()) return;
     const r = remote(m.from);
-    Object.assign(r, { tx: m.x, ty: m.y, aim: m.aim, hp: m.hp, gun: m.gun });
+    Object.assign(r, { tx: m.x, ty: m.y, aim: m.aim, hp: m.hp, sh: m.sh || 0, gun: m.gun });
     if (!m.alive) r.alive = false;
   });
   Net.on('kit', m => {
@@ -616,6 +837,8 @@ const Game = (() => {
     burst(r.x, r.y, r.color, 20, 280);
     addFeed(m.by, m.from);
   });
+  Net.on('nade', m => { if (inMP()) G.nades.push({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, t: 0, owner: m.from }); });
+  Net.on('rpg', m => { if (inMP()) addRocket(m.x, m.y, m.a, m.from); });
   Net.on('packs', m => { if (inMP()) addPacks(m.packs); });
   Net.on('took', m => { if (inMP()) removePack(m.id); });
   Net.on('leave', m => {
@@ -658,6 +881,7 @@ const Game = (() => {
     ctx.clip();
 
     drawPacks();
+    drawProjectiles();
     ctx.lineCap = 'round';
     ctx.lineWidth = 3;
     for (const b of G.bullets) {
@@ -678,7 +902,8 @@ const Game = (() => {
       if (!r.alive) continue;
       const sprite = r.sprites[r.gun];
       drawPlayer(r, r.color, sprite, r.flash > 0);
-      drawBar(r.x, r.y - PLAYER.r - 14, 54, 7, r.hp / PLAYER.hp);
+      if (r.sh > 0) drawBar(r.x, r.y - PLAYER.r - 14, 54, 7, r.sh / ABILITIES.shield.hp, false, '#3b82f6');
+      else drawBar(r.x, r.y - PLAYER.r - 14, 54, 7, r.hp / PLAYER.hp);
       nameTag(r.name, r.x, r.y - PLAYER.r - 20, isEnemy(r) ? '#ff5050' : '#4aa3ff');
     }
 
@@ -687,10 +912,12 @@ const Game = (() => {
     if (me.alive) {
       const gun = me.guns[me.cur];
       // aim area: on mobile while aiming (it auto-shoots there); on PC always shown, but you shoot yourself
-      if (Settings.mobile ? Input.sticks.aim : Input.mouse.active) drawAimLine(me);
+      if (me.abAiming) drawAbilityAim(me);
+      else if (Settings.mobile ? Input.sticks.aim : Input.mouse.active) drawAimLine(me);
       drawPlayer(me, me.color, gun.sprite, false, me.meleeInv > 0 && Math.floor(me.meleeInv * 20) % 2);
       // health bar right above you — the middle of the screen
-      drawBar(me.x, me.y - me.r - 16, 64, 9, me.hp / me.maxHp, true);
+      if (me.shield > 0) drawBar(me.x, me.y - me.r - 16, 64, 9, me.shield / ABILITIES.shield.hp, true, '#3b82f6');
+      else drawBar(me.x, me.y - me.r - 16, 64, 9, me.hp / me.maxHp, true);
       if (G.mode === 'mp') nameTag(me.name, me.x, me.y - me.r - 22, G.teams ? '#4aa3ff' : '#ffffff');
     }
 
@@ -825,10 +1052,10 @@ const Game = (() => {
     ctx.strokeRect(-5, -5, MAP.w + 10, MAP.h + 10);
   }
 
-  function drawBar(x, y, w, h, frac, mine) {
+  function drawBar(x, y, w, h, frac, mine, color) {
     ctx.fillStyle = 'rgba(0,0,0,0.65)';
     ctx.fillRect(x - w / 2 - 1, y - 1, w + 2, h + 2);
-    ctx.fillStyle = mine ? '#ff2e2e' : '#e05a5a';
+    ctx.fillStyle = color || (mine ? '#ff2e2e' : '#e05a5a');
     ctx.fillRect(x - w / 2, y, w * clamp(frac, 0, 1), h);
   }
 
@@ -1021,6 +1248,7 @@ const Game = (() => {
     if (!G) return;
     const me = G.me;
     const key = me.cur + me.guns.map(g => `${g.ammo}/${g.reserve}/${g.reload > 0 ? Math.ceil(g.reload * 10) : 0}`).join('|');
+    updateAbilityBtn();
     if (!force && key === barCache) return;
     barCache = key;
     me.guns.forEach((g, i) => {
@@ -1030,6 +1258,25 @@ const Game = (() => {
         : g.ammo === 0 && g.reserve === 0 ? 'OUT OF AMMO' : `${g.ammo} | ${g.reserve}`;
     });
   }
+  let abCache = '';
+  function updateAbilityBtn() {
+    const me = G.me, A = ABILITIES[me.ability], btn = el('abilityBtn');
+    if (!A) { btn.classList.add('hidden'); return; }
+    const state = A.type === 'passive' ? 'Passive'
+      : me.abUses <= 0 ? 'Used'
+      : me.shieldT > 0 ? `${Math.ceil(me.shieldT)}s`
+      : me.abCd > 0 ? `${Math.ceil(me.abCd)}s`
+      : me.abUses === Infinity ? 'Ready' : `Ready ×${me.abUses}`;
+    const key = A.name + state;
+    if (key === abCache) return;
+    abCache = key;
+    btn.classList.remove('hidden');
+    btn.classList.toggle('passive', A.type === 'passive');
+    btn.classList.toggle('cooling', A.type !== 'passive' && !state.startsWith('Ready'));
+    btn.querySelector('.ab-name').textContent = A.name;
+    btn.querySelector('.ab-state').textContent = state;
+  }
+
   el('gun0').addEventListener('click', () => G && switchGun(0));
   el('gun1').addEventListener('click', () => G && switchGun(1));
   el('reloadBtn').addEventListener('pointerdown', e => { e.preventDefault(); Input.flags.reload = true; });
