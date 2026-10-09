@@ -681,7 +681,8 @@ const Game = (() => {
 
     if (me.alive) {
       const gun = me.guns[me.cur];
-      if (gun.stats && Settings.mobile && Input.sticks.aim) drawAimLine(me);
+      // aim area: on mobile while aiming (it auto-shoots there); on PC always shown, but you shoot yourself
+      if (Settings.mobile ? Input.sticks.aim : Input.mouse.active) drawAimLine(me);
       drawPlayer(me, me.color, gun.sprite, false, me.meleeInv > 0 && Math.floor(me.meleeInv * 20) % 2);
       // health bar right above you — the middle of the screen
       drawBar(me.x, me.y - me.r - 16, 64, 9, me.hp / me.maxHp, true);
@@ -882,6 +883,9 @@ const Game = (() => {
     ctx.arc(m.x, m.y, len, me.aim - half, me.aim + half);
     ctx.closePath();
     ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
   // red edges fading toward the middle, like classic shooters
