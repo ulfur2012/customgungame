@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0e1014">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Custom Gun Game</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- in-game HUD -->
+  <div id="hud">
+    <div id="weaponBar">
+      <button id="gun0" class="gun-btn"><span class="gun-name">Main</span><span class="ammo"></span></button>
+      <button id="gun1" class="gun-btn"><span class="gun-name">Sidearm</span><span class="ammo"></span></button>
+    </div>
+    <button id="pauseBtn" class="round-btn" aria-label="Pause">❚❚</button>
+    <button id="reloadBtn" class="round-btn" aria-label="Reload">R</button>
+  </div>
+
+  <!-- login -->
+  <section id="login" class="screen center">
+    <form id="loginForm" class="panel">
+      <h1 class="logo">CUSTOM<br>GUN GAME</h1>
+      <div class="auth-tabs">
+        <button type="button" id="tabLogin" class="active">Log in</button>
+        <button type="button" id="tabSignup">Sign up</button>
+      </div>
+      <label>Name<input id="loginName" maxlength="16" autocomplete="username" required></label>
+      <label>Password<input id="loginPass" type="password" autocomplete="current-password" required></label>
+      <p id="loginError" class="error"></p>
+      <button id="authSubmit" class="primary" type="submit">Log in</button>
+      <p class="hint">Accounts are saved on this device.</p>
+    </form>
+  </section>
+
+  <!-- main menu -->
+  <section id="menu" class="screen center hidden">
+    <div class="panel">
+      <h1 class="logo">CUSTOM<br>GUN GAME</h1>
+      <p class="welcome">Welcome, <b id="menuName"></b> <span id="menuBest"></span></p>
+      <button id="spBtn" class="primary big">Single Player</button>
+      <button id="mpBtn" class="primary big alt">Multiplayer</button>
+      <button id="customizeBtn">Customize Guns</button>
+      <button id="settingsBtn">Settings</button>
+      <button id="logoutBtn" class="ghost">Log out</button>
+    </div>
+  </section>
+
+  <!-- gun builder -->
+  <section id="loadout" class="screen hidden">
+    <header class="ws-header">
+      <button id="loadoutBack" class="ghost small">← Back</button>
+      <nav id="gunTabs" class="gun-tabs"></nav>
+    </header>
+    <div class="ws-body">
+      <section class="ws-left">
+        <div id="previewWrap" class="preview-wrap"><canvas id="preview"></canvas></div>
+        <div id="stats" class="stats"></div>
+      </section>
+      <section class="ws-right">
+        <nav id="slotTabs" class="tabs"></nav>
+        <div id="parts" class="parts"></div>
+      </section>
+    </div>
+    <footer class="ws-footer">
+      <button id="loadoutDone" class="primary big">Start</button>
+    </footer>
+  </section>
+
+  <!-- multiplayer: host or join -->
+  <section id="mp" class="screen center hidden">
+    <div class="panel">
+      <h2>Multiplayer</h2>
+      <button id="hostBtn" class="primary big">Host a game</button>
+      <div class="or">or join a friend</div>
+      <div class="row">
+        <input id="joinCode" placeholder="ROOM CODE" maxlength="5" autocapitalize="characters" autocomplete="off">
+        <button id="joinBtn" class="primary alt">Join</button>
+      </div>
+      <p id="mpStatus" class="hint"></p>
+      <button id="mpBack" class="ghost">Back</button>
+    </div>
+  </section>
+
+  <!-- lobby -->
+  <section id="lobby" class="screen center hidden">
+    <div class="panel">
+      <h2>Lobby</h2>
+      <div class="room-code">Room code <b id="roomCode"></b></div>
+      <p class="hint">Friends join with this code from Multiplayer → Join.</p>
+      <ul id="playerList" class="player-list"></ul>
+      <button id="lobbyCustomize">Customize guns</button>
+      <button id="startRoundBtn" class="primary big">Start round</button>
+      <p id="lobbyStatus" class="hint"></p>
+      <button id="leaveLobby" class="ghost">Leave</button>
+    </div>
+  </section>
+
+  <!-- overlays -->
+  <div id="pauseScreen" class="overlay hidden">
+    <div class="panel">
+      <h2>Paused</h2>
+      <p id="pauseNote" class="hint"></p>
+      <button id="resumeBtn" class="primary">Resume</button>
+      <button id="pauseSettings">Settings</button>
+      <button id="quitBtn">Quit round</button>
+    </div>
+  </div>
+
+  <div id="resultScreen" class="overlay hidden">
+    <div class="panel">
+      <h2 id="resultTitle"></h2>
+      <p id="resultText"></p>
+      <div id="resultButtons" class="stack"></div>
+    </div>
+  </div>
+
+  <div id="settingsScreen" class="overlay hidden">
+    <div class="panel">
+      <h2>Settings</h2>
+      <label class="toggle">
+        <input id="mobileToggle" type="checkbox">
+        <span class="switch"></span>
+        <span><b>Mobile version</b><br><small>Two joysticks: left moves, right aims and fires by itself when an enemy is in your sights. Tap the right side to auto-aim at the closest enemy.</small></span>
+      </label>
+      <button id="settingsClose" class="primary">Done</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
+</body>
+</html>
