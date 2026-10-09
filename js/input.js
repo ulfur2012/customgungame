@@ -5,6 +5,12 @@ const Input = (() => {
   const mouse = { x: 0, y: 0, down: false, active: false };
   const sticks = { move: null, aim: null };
   const STICK_R = 60;
+  const MOVE_X = 110, MOVE_Y = 120; // fixed move stick position (from the bottom-left)
+  // keep the knob inside the ring instead of dragging the stick along
+  function clampKnob(s) {
+    const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy);
+    if (d > STICK_R) { s.x = s.ox + dx / d * STICK_R; s.y = s.oy + dy / d * STICK_R; }
+  }
   const flags = { reload: false, swap: false, select: -1, tap: false, abPress: false };
 
   addEventListener('keydown', e => {
@@ -32,7 +38,10 @@ const Input = (() => {
     // mobile version: left half = move stick, right half = aim stick (mouse works too, for testing)
     const side = e.clientX < innerWidth / 2 ? 'move' : 'aim';
     if (sticks[side]) return;
-    sticks[side] = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY, t: performance.now(), far: 0 };
+    // the move stick stays put in the bottom-left corner; the aim stick appears where you touch
+    const ox = side === 'move' ? MOVE_X : e.clientX, oy = side === 'move' ? innerHeight - MOVE_Y : e.clientY;
+    sticks[side] = { id: e.pointerId, ox, oy, x: e.clientX, y: e.clientY, t: performance.now(), far: 0 };
+    if (side === 'move') clampKnob(sticks.move);
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   });
 
@@ -44,7 +53,8 @@ const Input = (() => {
       s.x = e.clientX; s.y = e.clientY;
       const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy);
       s.far = Math.max(s.far, d);
-      if (d > STICK_R) { s.ox = s.x - dx / d * STICK_R; s.oy = s.y - dy / d * STICK_R; }
+      if (k === 'move') clampKnob(s);
+      else if (d > STICK_R) { s.ox = s.x - dx / d * STICK_R; s.oy = s.y - dy / d * STICK_R; }
     }
   });
 
