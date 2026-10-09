@@ -77,8 +77,8 @@ const PARTS = {
     // sidearm bodies. fixed = stats that are set no matter what else is equipped
     // totalAmmo = all the shots you get for the whole round (no ammo boxes help beyond this)
     { id: 'flare', name: 'Flare Gun', gun: 'secondary', w: 52, h: 28, color: '#ff7b00', shape: [[0, 0, 52, 18], [7, 14, 11, 14]],
-      fixed: { damage: 50, magSize: 1 }, totalAmmo: 3, speed: 900, flare: true, add: { reloadTime: 0.4 },
-      note: '1 bullet · 50 damage · only 3 shots per round' },
+      fixed: { damage: 50, magSize: 1, reloadTime: 6 }, totalAmmo: 3, speed: 900, flare: true,
+      note: '1 in the chamber · 50 damage · 6s reload · 3 shots (+1 from ammo boxes when main gun is full)' },
     { id: 'revolver', name: 'Revolver', gun: 'secondary', w: 52, h: 28, color: '#a4b0be', shape: [[0, 2, 52, 12], [16, 0, 16, 18], [7, 14, 11, 14]],
       fixed: { magSize: 6 }, add: { damage: 6, knockback: 1 },
       note: '6 shots · reloadable' },
@@ -312,5 +312,6 @@ const HEALTH_PACK = { heal: 20, every: 30, count: 3, r: 18, max: 12 };
 const PING = { every: 180, calm: 10, show: 3 };
 
 // Limited ammo: every gun starts with this many spare mags (plus the one loaded).
-// Ammo boxes (yellow) refill spare ammo and spawn together with health packs.
+// Ammo boxes (yellow) spawn with health packs. Each gives 1 mag to the main gun and/or sidearm,
+// whichever needs it (both if both do). The flare gun only gets 1 shot, and only when the main gun is full.
 const AMMO = { spareMags: 3, box: { count: 2, refillMags: 1, r: 16 } };

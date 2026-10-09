@@ -149,7 +149,7 @@ function computeStats(kind, build) {
   s.hearRadius = s.loudness * HEAR_UNIT;
   const body = findPart('body', build.body) || {};
   s.pellets = body.pellets || 1;
-  s.spread = body.spread || 0.05;
+  s.spread = body.spread || (kind === 'secondary' ? 0.012 : 0.05); // sidearms are more accurate
   s.range = body.range || BULLET_RANGE;
   s.speed = body.speed || BULLET_SPEED;
   s.falloff = body.falloff || 0;
@@ -158,7 +158,7 @@ function computeStats(kind, build) {
   s.flare = !!body.flare;
   // limited ammo: spare rounds on top of the loaded mag
   s.maxReserve = body.totalAmmo ? Math.max(0, body.totalAmmo - s.magSize) : s.magSize * AMMO.spareMags;
-  s.boxRefill = body.totalAmmo ? 0 : s.magSize * AMMO.box.refillMags;
+  s.boxRefill = body.flare ? 1 : body.totalAmmo ? 0 : s.magSize * AMMO.box.refillMags;
   return s;
 }
 

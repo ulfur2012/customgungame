@@ -374,7 +374,12 @@ const Game = (() => {
     for (const p of G.packs) {
       if (Math.hypot(p.x - me.x, p.y - me.y) > me.r + HEALTH_PACK.r) continue;
       if (p.kind === 'ammo') {
-        const needs = me.guns.filter(gn => gn.reserve < gn.stats.maxReserve && gn.stats.boxRefill > 0);
+        // main gun first; the sidearm too if it needs ammo (the flare gun only once the main gun is full)
+        const wants = gn => gn.reserve < gn.stats.maxReserve && gn.stats.boxRefill > 0;
+        const [main, side] = me.guns;
+        const needs = [];
+        if (wants(main)) needs.push(main);
+        if (wants(side) && !(side.stats.flare && needs.length)) needs.push(side);
         if (!needs.length) continue;
         for (const gn of needs) gn.reserve = Math.min(gn.stats.maxReserve, gn.reserve + gn.stats.boxRefill);
         G.texts.push({ x: me.x, y: me.y - 34, text: '+AMMO', color: '#ffd23f', life: 0.9 });
