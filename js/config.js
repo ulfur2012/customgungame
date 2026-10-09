@@ -334,3 +334,6 @@ const ABILITIES = {
              desc: 'Eat it to heal 100 HP.' },
 };
 const LOADOUT_PRESETS = 3; // saved loadouts you can switch between
+
+// Rare red crate: restores all your ability uses. Chance that one shows up each time packs spawn.
+const ABILITY_CRATE = { chance: 0.25 };

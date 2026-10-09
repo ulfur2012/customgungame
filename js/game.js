@@ -587,6 +587,7 @@ const Game = (() => {
         const fresh = [];
         for (let i = 0; i < HEALTH_PACK.count && G.packs.length + fresh.length < HEALTH_PACK.max; i++) fresh.push(randomFloorSpot());
         for (let i = 0; i < AMMO.box.count; i++) fresh.push({ ...randomFloorSpot(), kind: 'ammo' });
+        if (Math.random() < ABILITY_CRATE.chance) fresh.push({ ...randomFloorSpot(), kind: 'ability' });
         addPacks(fresh);
         if (G.mode === 'mp') Net.send({ t: 'packs', packs: fresh });
       }
@@ -596,14 +597,25 @@ const Game = (() => {
       if (Math.hypot(p.x - me.x, p.y - me.y) > me.r + HEALTH_PACK.r) continue;
       if (p.kind === 'ammo') {
         // main gun first; the sidearm too if it needs ammo (the flare gun only once the main gun is full)
-        const wants = gn => gn.reserve < gn.stats.maxReserve && gn.stats.boxRefill > 0;
+        // counts the loaded mag too, so a box still helps while you're reloading or your mag is empty
+        const room = gn => gn.stats.magSize + gn.stats.maxReserve - gn.ammo - gn.reserve;
+        const wants = gn => room(gn) > 0 && gn.stats.boxRefill > 0;
         const [main, side] = me.guns;
         const needs = [];
         if (wants(main)) needs.push(main);
         if (wants(side) && !(side.stats.flare && needs.length)) needs.push(side);
         if (!needs.length) continue;
-        for (const gn of needs) gn.reserve = Math.min(gn.stats.maxReserve, gn.reserve + gn.stats.boxRefill);
+        for (const gn of needs) gn.reserve += Math.min(room(gn), gn.stats.boxRefill);
         G.texts.push({ x: me.x, y: me.y - 34, text: '+AMMO', color: '#ffd23f', life: 0.9 });
+        updateWeaponBar(true);
+      } else if (p.kind === 'ability') {
+        // rare red crate: all ability uses back and no cooldown
+        const A = ABILITIES[me.ability];
+        const full = !A || A.type === 'passive' || (me.abUses >= (A.uses ?? Infinity) && me.abCd === 0);
+        if (full) continue;
+        me.abUses = A.uses ?? Infinity;
+        me.abCd = 0;
+        G.texts.push({ x: me.x, y: me.y - 34, text: 'ABILITY RESTORED', color: '#ff5d5d', life: 1.2 });
         updateWeaponBar(true);
       } else {
         if (me.hp >= me.maxHp) continue;
@@ -627,6 +639,19 @@ const Game = (() => {
   function addPacks(list) { G.packs.push(...list); }
   function removePack(id) { G.packs = G.packs.filter(p => p.id !== id); }
 
+  function drawAbilityCrate(p) {
+    const s = 20, glow = 0.25 + 0.15 * Math.sin(performance.now() / 200);
+    ctx.fillStyle = `rgba(255,40,40,${glow})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#c0392b'; ctx.strokeStyle = '#4a0d07'; ctx.lineWidth = 3;
+    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2);
+    ctx.strokeRect(p.x - s, p.y - s, s * 2, s * 2);
+    ctx.strokeStyle = '#ff8a7a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(p.x - s, p.y - s); ctx.lineTo(p.x + s, p.y + s); ctx.moveTo(p.x + s, p.y - s); ctx.lineTo(p.x - s, p.y + s); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = '900 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('★', p.x, p.y + 1);
+  }
+
   function drawAmmoBox(p) {
     const s = AMMO.box.r;
     ctx.fillStyle = 'rgba(255,210,60,0.16)';
@@ -643,6 +668,7 @@ const Game = (() => {
   function drawPacks() {
     for (const p of G.packs) {
       if (p.kind === 'ammo') { drawAmmoBox(p); continue; }
+      if (p.kind === 'ability') { drawAbilityCrate(p); continue; }
       const pulse = 1 + Math.sin(performance.now() / 250) * 0.08, s = HEALTH_PACK.r * pulse, t = s * 0.38;
       ctx.fillStyle = 'rgba(40,255,110,0.18)';
       ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.4, 0, Math.PI * 2); ctx.fill();
@@ -1158,6 +1184,8 @@ const Game = (() => {
       ctx.fillText(`WAVE ${G.wave}`, pad, pad);
       ctx.fillStyle = '#ffd36b';
       ctx.fillText(`SCORE ${G.score}`, pad, pad + 20);
+      ctx.fillStyle = '#ff8a8a';
+      ctx.fillText(`ENEMIES LEFT ${G.enemies.length + G.queue.length}`, pad, pad + 40);
     } else {
       const alive = [...G.remotes.values()].filter(r => r.alive).length + (G.me.alive ? 1 : 0);
       ctx.fillText(`ALIVE ${alive}/${G.remotes.size + 1}`, pad, pad);
