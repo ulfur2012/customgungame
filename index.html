@@ -88,13 +88,40 @@
     </div>
   </section>
 
+  <!-- host setup: rules for the room -->
+  <section id="hostSetup" class="screen center hidden">
+    <div class="panel wide">
+      <h2>Room settings</h2>
+      <div class="setting">
+        <span class="setting-label">Mode</span>
+        <div id="modePick" class="seg">
+          <button data-v="ffa">Free for all</button>
+          <button data-v="teams">Teams</button>
+        </div>
+        <small id="modeHint" class="hint"></small>
+      </div>
+      <div class="setting">
+        <span class="setting-label">Walls</span>
+        <div id="layoutPick" class="seg"></div>
+      </div>
+      <div class="setting">
+        <span class="setting-label">Remove upgrades <small class="hint">(tap to remove — nobody can use them)</small></span>
+        <div id="banList" class="ban-list"></div>
+      </div>
+      <button id="hostConfirm" class="primary big">Create room</button>
+      <button id="hostCancel" class="ghost">Back</button>
+    </div>
+  </section>
+
   <!-- lobby -->
   <section id="lobby" class="screen center hidden">
     <div class="panel">
       <h2>Lobby</h2>
       <div class="room-code">Room code <b id="roomCode"></b></div>
       <p class="hint">Friends join with this code from Multiplayer → Join.</p>
+      <p id="lobbyRules" class="rules"></p>
       <ul id="playerList" class="player-list"></ul>
+      <button id="roomSettingsBtn">Room settings</button>
       <button id="lobbyCustomize">Customize guns</button>
       <button id="startRoundBtn" class="primary big">Start round</button>
       <p id="lobbyStatus" class="hint"></p>

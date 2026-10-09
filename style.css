@@ -329,3 +329,18 @@ body.mobile .gun-btn { min-width: 0; padding: 6px 10px; }
 .auth-tabs { display: flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: 12px; }
 .auth-tabs button { flex: 1; padding: 10px !important; border-radius: 9px !important; background: transparent !important; color: var(--muted); }
 .auth-tabs button.active { background: var(--panel) !important; color: var(--text); box-shadow: 0 1px 0 var(--line); }
+
+/* host setup */
+.panel.wide { width: min(560px, 100%); text-align: left; }
+.panel.wide h2 { text-align: center; }
+.setting { display: flex; flex-direction: column; gap: 6px; }
+.setting-label { font-weight: 800; font-size: 14px; }
+.seg { display: flex; gap: 4px; background: var(--panel-2); padding: 4px; border-radius: 12px; }
+.seg button { flex: 1; padding: 10px !important; border-radius: 9px !important; background: transparent !important; color: var(--muted); }
+.seg button.active { background: var(--accent) !important; color: #1a1200; }
+.ban-list { display: flex; flex-direction: column; gap: 8px; max-height: 34vh; overflow-y: auto; }
+.ban-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ban-group > span { width: 100%; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.chip { --chip: #888; padding: 6px 10px !important; border-radius: 999px !important; font-size: 13px; font-weight: 700 !important; background: var(--panel-2) !important; border-left: 6px solid var(--chip) !important; }
+.chip.banned { opacity: 0.45; text-decoration: line-through; border-left-color: #444 !important; }
+.rules { font-size: 13px; font-weight: 700; color: var(--accent) !important; }

@@ -51,9 +51,19 @@ function lineOfSight(x1, y1, x2, y2) {
 // ---------------------------------------------------------------- guns
 const DRAW_ORDER = { stock: 0, mag: 1, barrel: 2, silencer: 3, body: 4, handle: 5 };
 
+// Multiplayer rules set by the host. banned = Set of 'slot:id' upgrades nobody can use.
+const Rules = { banned: new Set() };
+
 // parts a gun is allowed to use in a slot
 function partsFor(kind, slot) {
-  return PARTS[slot].filter(p => (p.gun || 'main') === kind || p.gun === 'both');
+  return PARTS[slot].filter(p => ((p.gun || 'main') === kind || p.gun === 'both') && !Rules.banned.has(slot + ':' + p.id));
+}
+
+// a copy of the build with anything not allowed (wrong gun or banned) removed
+function allowedBuild(kind, build) {
+  const out = {};
+  for (const s of SLOTS) out[s.key] = partsFor(kind, s.key).some(p => p.id === build[s.key]) ? build[s.key] : null;
+  return out;
 }
 
 function findPart(slot, id) {

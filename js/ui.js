@@ -1,7 +1,7 @@
 // Screens and flow: login → menu → loadout → game, plus the multiplayer lobby.
 (() => {
   const el = id => document.getElementById(id);
-  const SCREENS = ['login', 'menu', 'loadout', 'mp', 'lobby'];
+  const SCREENS = ['login', 'menu', 'loadout', 'mp', 'hostSetup', 'lobby'];
   const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
   function show(id) {
@@ -57,12 +57,13 @@
   });
 
   function goMenu() {
+    Rules.banned = new Set(); // host rules only apply inside a multiplayer room
     el('menuName').textContent = Account.user.name;
     el('menuBest').textContent = Account.user.best ? `· best wave ${Account.user.best}` : '';
     show('menu');
   }
 
-  const spLoadout = () => openLoadout('Start', () => { show(null); Game.startSP(); }, goMenu);
+  const spLoadout = () => openLoadout('Start', () => { show(null); buildMap('medium'); Game.startSP(); }, goMenu);
   el('spBtn').onclick = spLoadout;
   el('mpBtn').onclick = () => { el('mpStatus').textContent = ''; show('mp'); };
   el('customizeBtn').onclick = () => openLoadout('Save', goMenu, goMenu);
@@ -234,7 +235,77 @@
   });
 
   // ---------------------------------------------------------------- multiplayer
-  const lobby = { players: [], inRound: false, alive: new Set() };
+  const lobby = { players: [], inRound: false, alive: new Set(), round: [], settings: { mode: 'ffa', layout: 'medium', banned: [] } };
+
+  function applyRules() { Rules.banned = new Set(lobby.settings.banned); }
+  function rulesText() {
+    const s = lobby.settings;
+    return `${s.mode === 'teams' ? 'Teams (random)' : 'Free for all'} · ${MAP.layouts[s.layout].label}` +
+      (s.banned.length ? ` · ${s.banned.length} upgrade${s.banned.length === 1 ? '' : 's'} removed` : '');
+  }
+
+  // ---- host setup screen
+  let editing = { ...lobby.settings };
+  function openHostSetup(inRoom) {
+    editing = { ...lobby.settings, banned: [...lobby.settings.banned] };
+    el('hostConfirm').textContent = inRoom ? 'Save' : 'Create room';
+    el('hostConfirm').onclick = inRoom ? saveRoomSettings : createRoom;
+    el('hostCancel').onclick = inRoom ? showLobby : () => show('mp');
+    show('hostSetup');
+    renderHostSetup();
+  }
+  function renderHostSetup() {
+    for (const b of el('modePick').children) {
+      b.classList.toggle('active', b.dataset.v === editing.mode);
+      b.onclick = () => { editing.mode = b.dataset.v; renderHostSetup(); };
+    }
+    el('modeHint').textContent = editing.mode === 'teams' ? 'Players are split into two random teams. No friendly fire.' : 'Everyone against everyone.';
+    el('layoutPick').innerHTML = '';
+    for (const key in MAP.layouts) {
+      const b = document.createElement('button');
+      b.textContent = MAP.layouts[key].label;
+      b.className = key === editing.layout ? 'active' : '';
+      b.onclick = () => { editing.layout = key; renderHostSetup(); };
+      el('layoutPick').appendChild(b);
+    }
+    el('banList').innerHTML = '';
+    for (const s of SLOTS) {
+      const group = document.createElement('div');
+      group.className = 'ban-group';
+      group.innerHTML = `<span>${s.label}</span>`;
+      for (const p of PARTS[s.key]) {
+        const key = s.key + ':' + p.id, banned = editing.banned.includes(key);
+        const chip = document.createElement('button');
+        chip.className = 'chip' + (banned ? ' banned' : '');
+        chip.style.setProperty('--chip', p.color);
+        chip.textContent = p.name;
+        chip.onclick = () => {
+          editing.banned = banned ? editing.banned.filter(k => k !== key) : [...editing.banned, key];
+          renderHostSetup();
+        };
+        group.appendChild(chip);
+      }
+      el('banList').appendChild(group);
+    }
+  }
+  async function createRoom() {
+    lobby.settings = editing;
+    show('mp');
+    el('mpStatus').textContent = 'Creating room…';
+    try {
+      await Net.host();
+      lobby.players = [{ id: Net.state.myId, name: Account.user.name, wins: 0 }];
+      lobby.inRound = false;
+      applyRules();
+      showLobby();
+    } catch (err) { netError(err); }
+  }
+  function saveRoomSettings() {
+    lobby.settings = editing;
+    applyRules();
+    broadcastRoster();
+    showLobby();
+  }
 
   function netError(err) {
     const msg = typeof Peer === 'undefined' ? 'Multiplayer needs an internet connection.' : (err && err.message) || 'Connection failed.';
@@ -242,15 +313,8 @@
   }
 
   el('mpBack').onclick = () => { Net.leave(); goMenu(); };
-  el('hostBtn').onclick = async () => {
-    el('mpStatus').textContent = 'Creating room…';
-    try {
-      await Net.host();
-      lobby.players = [{ id: Net.state.myId, name: Account.user.name, wins: 0 }];
-      lobby.inRound = false;
-      showLobby();
-    } catch (err) { netError(err); }
-  };
+  el('hostBtn').onclick = () => openHostSetup(false);
+  el('roomSettingsBtn').onclick = () => openHostSetup(true);
   el('joinBtn').onclick = async () => {
     const code = el('joinCode').value.trim().toUpperCase();
     if (code.length !== 5) { el('mpStatus').textContent = 'Room codes are 5 characters.'; return; }
@@ -275,6 +339,8 @@
       <li><i style="background:${PLAYER_COLORS[i % PLAYER_COLORS.length]}"></i>
       <span>${esc(p.name)}${p.id === Net.state.myId ? ' (you)' : ''}${i === 0 ? ' · host' : ''}</span>
       <b>${p.wins} ${p.wins === 1 ? 'win' : 'wins'}</b></li>`).join('') || '<li><span>Connecting…</span></li>';
+    el('lobbyRules').textContent = rulesText();
+    el('roomSettingsBtn').classList.toggle('hidden', !Net.state.isHost || lobby.inRound);
     el('startRoundBtn').classList.toggle('hidden', !Net.state.isHost);
     el('startRoundBtn').disabled = lobby.inRound;
     el('lobbyStatus').textContent = lobby.inRound ? 'A round is in progress…'
@@ -286,7 +352,7 @@
   el('leaveLobby').onclick = () => { Net.leave(); goMenu(); };
 
   function broadcastRoster() {
-    Net.send({ t: 'roster', players: lobby.players, inRound: lobby.inRound });
+    Net.send({ t: 'roster', players: lobby.players, inRound: lobby.inRound, settings: lobby.settings });
     if (!el('lobby').classList.contains('hidden')) renderLobby();
   }
 
@@ -294,35 +360,48 @@
     if (lobby.players.length < 2) { toast('You need at least 2 players.'); return; }
     lobby.inRound = true;
     lobby.alive = new Set(lobby.players.map(p => p.id));
-    const players = lobby.players.map(p => ({ id: p.id, name: p.name }));
-    Net.send({ t: 'start', players });
+    // random teams: shuffle, then alternate
+    const order = lobby.players.map(p => ({ id: p.id, name: p.name })).sort(() => Math.random() - 0.5);
+    order.forEach((p, i) => { p.team = lobby.settings.mode === 'teams' ? i % 2 : i; });
+    const seed = Math.floor(Math.random() * 1e9);
+    Net.send({ t: 'start', players: order, settings: lobby.settings, seed });
     broadcastRoster();
-    beginRound(players);
+    beginRound(order, lobby.settings, seed);
   };
 
-  function beginRound(players) {
+  function beginRound(players, settings, seed) {
     for (const o of ['pauseScreen', 'resultScreen', 'settingsScreen']) overlay(o, false);
     show(null);
-    Game.startMP(players, Net.state.myId);
+    lobby.round = players;
+    lobby.settings = settings;
+    applyRules();
+    buildMap(settings.layout, seed);
+    Game.startMP(players, Net.state.myId, settings.mode === 'teams');
   }
 
   // host bookkeeping
   function handleDead(id) {
     if (!Net.state.isHost || !lobby.inRound) return;
     lobby.alive.delete(id);
-    if (lobby.alive.size > 1) return;
-    const winner = [...lobby.alive][0] || null;
+    const teamOf = pid => (lobby.round.find(p => p.id === pid) || {}).team;
+    const teamsLeft = new Set([...lobby.alive].map(teamOf));
+    if (teamsLeft.size > 1) return;
+    const winTeam = teamsLeft.size ? [...teamsLeft][0] : null;
+    const winners = winTeam === null ? [] : lobby.round.filter(p => p.team === winTeam).map(p => p.id);
     lobby.inRound = false;
-    const p = lobby.players.find(x => x.id === winner);
-    if (p) p.wins++;
-    Net.send({ t: 'end', winner });
+    for (const p of lobby.players) if (winners.includes(p.id)) p.wins++;
+    const winner = lobby.settings.mode === 'teams' ? null : winners[0] || null;
+    Net.send({ t: 'end', winner, team: winTeam });
     broadcastRoster();
-    roundOver(winner);
+    roundOver(winner, winTeam);
   }
 
-  function roundOver(winner) {
+  function roundOver(winner, team) {
     const name = (lobby.players.find(p => p.id === winner) || {}).name;
-    const title = winner === Net.state.myId ? 'You win!' : name ? `${name} wins!` : 'Round over';
+    const mine = (lobby.round.find(p => p.id === Net.state.myId) || {}).team;
+    const title = lobby.settings.mode === 'teams'
+      ? (team === null || team === undefined ? 'Round over' : team === mine ? 'Your team wins!' : 'Your team lost')
+      : winner === Net.state.myId ? 'You win!' : name ? `${name} wins!` : 'Round over';
     setTimeout(() => {
       if (Game.mode === 'mp') Game.stop();
       overlay('pauseScreen', false);
@@ -342,6 +421,7 @@
     if (Net.state.isHost) return;
     lobby.players = m.players;
     lobby.inRound = m.inRound;
+    if (m.settings) { lobby.settings = m.settings; applyRules(); }
     if (!el('lobby').classList.contains('hidden')) renderLobby();
   });
   Net.on('leave', m => {
@@ -350,10 +430,10 @@
     handleDead(m.from);
     broadcastRoster();
   });
-  Net.on('start', m => { if (!Net.state.isHost) { lobby.inRound = true; beginRound(m.players); } });
+  Net.on('start', m => { if (!Net.state.isHost) { lobby.inRound = true; beginRound(m.players, m.settings, m.seed); } });
   Net.on('dead', m => handleDead(m.from));
   Game.on('myDeath', () => handleDead(Net.state.myId));
-  Net.on('end', m => { if (!Net.state.isHost) { lobby.inRound = false; roundOver(m.winner); } });
+  Net.on('end', m => { if (!Net.state.isHost) { lobby.inRound = false; roundOver(m.winner, m.team); } });
   Net.on('hostLeft', () => {
     Game.stop();
     Net.leave();

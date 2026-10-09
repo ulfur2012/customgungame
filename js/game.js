@@ -33,13 +33,13 @@ const Game = (() => {
       me: {
         x: spawn[0], y: spawn[1], r: PLAYER.r, hp: PLAYER.hp, maxHp: PLAYER.hp, aim: 0, vx: 0, vy: 0,
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
-        guns: [makeGun('main', L.main), makeGun('secondary', L.secondary)], cur: 0,
+        guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
       bullets: [], fx: [], texts: [], hears: [], feed: [],
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
-      sendT: 0, packs: [], packT: 0,
+      sendT: 0, packs: [], packT: 0, time: 0, lastCombat: 0, pingT: PING.every, ping: 0,
     };
   }
 
@@ -49,25 +49,26 @@ const Game = (() => {
     begin();
   }
 
-  // players: [{id, name}] in spawn order
-  function startMP(players, myId) {
+  // players: [{id, name, team}] in spawn order. team mode = no friendly fire, last team standing wins
+  function startMP(players, myId, teams) {
     resize();
     const idx = Math.max(0, players.findIndex(p => p.id === myId));
     const spawnOf = i => MAP.spawns[i % MAP.spawns.length];
     G = newState('mp', spawnOf(idx), PLAYER_COLORS[idx % PLAYER_COLORS.length]);
     G.myId = myId;
+    G.teams = !!teams;
+    G.me.team = (players[idx] || {}).team || 0;
     players.forEach((p, i) => {
       if (p.id === myId) return;
       const [x, y] = spawnOf(i);
       G.remotes.set(p.id, {
-        id: p.id, name: p.name, color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+        id: p.id, name: p.name, team: p.team || 0, color: PLAYER_COLORS[i % PLAYER_COLORS.length],
         x, y, tx: x, ty: y, aim: 0, hp: PLAYER.hp, gun: 0, alive: true, kick: 0, flash: 0, sprites: [null, null],
       });
     });
-    G.banner = { text: 'Last one standing wins!', t: 2.5 };
+    G.banner = { text: G.teams ? 'Team match — last team standing wins!' : 'Last one standing wins!', t: 2.5 };
     begin();
-    const L = Account.user.loadout;
-    Net.send({ t: 'kit', main: L.main, secondary: L.secondary });
+    Net.send({ t: 'kit', main: G.me.guns[0].build, secondary: G.me.guns[1].build });
   }
 
   function begin() {
@@ -116,6 +117,16 @@ const Game = (() => {
     }
     updateBullets(dt);
     updatePacks(dt);
+    G.time += dt;
+    if (G.mode === 'mp') {
+      // every 3 minutes, anyone who hasn't been fighting gets pinged toward the enemies
+      G.ping = Math.max(0, G.ping - dt);
+      G.pingT -= dt;
+      if (G.pingT <= 0) {
+        G.pingT = PING.every;
+        if (G.time - G.lastCombat > PING.calm) { G.ping = PING.show; G.banner = { text: 'Enemies pinged!', t: 1.5 }; }
+      }
+    }
 
     for (const f of G.fx) { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.9; f.vy *= 0.9; f.life -= dt; }
     G.fx = G.fx.filter(f => f.life > 0);
@@ -182,9 +193,13 @@ const Game = (() => {
     updateWeaponBar(true);
   }
 
+  // in team mode, people on your team aren't enemies
+  const isEnemy = r => !G.teams || r.team !== G.me.team;
+  const teamOf = id => (G.remotes.has(id) ? G.remotes.get(id).team : G.me.team);
+
   function targets() {
     if (G.mode === 'sp') return G.enemies;
-    return [...G.remotes.values()].filter(r => r.alive).map(r => ({ x: r.x, y: r.y, r: PLAYER.r }));
+    return [...G.remotes.values()].filter(r => r.alive && isEnemy(r)).map(r => ({ x: r.x, y: r.y, r: PLAYER.r }));
   }
 
   function targetInSights(angle) {
@@ -213,6 +228,7 @@ const Game = (() => {
     const m = gunToWorld(me, gun.sprite.muzzle);
     const a = me.aim + (Math.random() - 0.5) * 0.05;
     addBullet(m.x, m.y, a, BULLET_SPEED, s.damage, s.knockback, 'me', G.myId);
+    G.lastCombat = G.time;
     gun.ammo--;
     me.kick = Math.min(10, 3 + s.knockback * 2);
     me.vx -= Math.cos(me.aim) * s.knockback * 12;
@@ -252,6 +268,7 @@ const Game = (() => {
     me.vx += Math.cos(angle) * kb * 60;
     me.vy += Math.sin(angle) * kb * 60;
     G.hurt = 1;
+    G.lastCombat = G.time;
     G.shake = Math.min(12, G.shake + 5);
     G.texts.push({ x: me.x, y: me.y - 34, text: `-${Math.round(dmg)}`, color: '#ff6b6b', life: 0.8 });
     if (G.mode === 'mp') Net.send({ t: 'hit', by, dmg });
@@ -298,18 +315,19 @@ const Game = (() => {
           }
         } else {
           for (const r of G.remotes.values()) {
-            if (r.alive && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) { b.life = 0; r.flash = 0.08; break; }
+            if (r.alive && isEnemy(r) && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) { b.life = 0; r.flash = 0.08; break; }
           }
         }
       } else {
-        if (me.alive && segHitsCircle(x1, y1, b.x, b.y, me.x, me.y, me.r)) {
+        const friendly = G.mode === 'mp' && G.teams && teamOf(b.owner) === me.team;
+        if (me.alive && !friendly && segHitsCircle(x1, y1, b.x, b.y, me.x, me.y, me.r)) {
           hurtMe(b.dmg, b.kb, a, b.owner);
           b.life = 0;
           continue;
         }
         if (b.team === 'r') {
           for (const r of G.remotes.values()) {
-            if (r.id !== b.owner && r.alive && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) { b.life = 0; break; }
+            if (r.id !== b.owner && r.alive && (!G.teams || r.team !== teamOf(b.owner)) && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) { b.life = 0; break; }
           }
         }
       }
@@ -545,6 +563,7 @@ const Game = (() => {
     const r = G.remotes.get(m.from);
     r.flash = 0.1;
     G.texts.push({ x: r.x, y: r.y - 34, text: `-${Math.round(m.dmg)}`, color: m.by === G.myId ? '#fff' : '#ffb0b0', life: 0.6 });
+    if (m.by === G.myId) G.lastCombat = G.time;
   });
   Net.on('dead', m => {
     if (!inMP()) return;
@@ -615,10 +634,7 @@ const Game = (() => {
       const sprite = r.sprites[r.gun];
       drawPlayer(r, r.color, sprite, r.flash > 0);
       drawBar(r.x, r.y - PLAYER.r - 14, 54, 7, r.hp / PLAYER.hp);
-      ctx.fillStyle = '#fff';
-      ctx.font = '700 13px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(r.name, r.x, r.y - PLAYER.r - 20);
+      nameTag(r.name, r.x, r.y - PLAYER.r - 20, isEnemy(r) ? '#ff5050' : '#4aa3ff');
     }
 
     ctx.restore();
@@ -629,6 +645,7 @@ const Game = (() => {
       drawPlayer(me, me.color, gun.sprite, false, me.meleeInv > 0 && Math.floor(me.meleeInv * 20) % 2);
       // health bar right above you — the middle of the screen
       drawBar(me.x, me.y - me.r - 16, 64, 9, me.hp / me.maxHp, true);
+      if (G.mode === 'mp') nameTag(me.name, me.x, me.y - me.r - 22, G.teams ? '#4aa3ff' : '#ffffff');
     }
 
     for (const f of G.fx) {
@@ -656,6 +673,7 @@ const Game = (() => {
     ctx.restore();
 
     drawHearing();
+    drawPing();
     drawHud();
   }
 
@@ -697,6 +715,41 @@ const Game = (() => {
       if (best < Infinity) pts.push({ x: ox + dx * best, y: oy + dy * best });
     }
     return pts;
+  }
+
+  // name above a player: blue = your team, red = enemy
+  function nameTag(name, x, y, color) {
+    ctx.font = '800 14px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+    ctx.strokeText(name, x, y);
+    ctx.fillStyle = color;
+    ctx.fillText(name, x, y);
+  }
+
+  // red arrows around you pointing at every enemy, during a ping
+  function drawPing() {
+    if (!G.ping || G.mode !== 'mp' || !G.me.alive) return;
+    const a = Math.min(1, G.ping), R = Math.min(W, H) * 0.36;
+    for (const r of G.remotes.values()) {
+      if (!r.alive || !isEnemy(r)) continue;
+      const ang = Math.atan2(r.y - G.me.y, r.x - G.me.x);
+      const x = W / 2 + Math.cos(ang) * R, y = H / 2 + Math.sin(ang) * R;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(ang);
+      ctx.globalAlpha = a * (0.75 + 0.25 * Math.sin(performance.now() / 90));
+      ctx.fillStyle = '#ff2b2b';
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(22, 0); ctx.lineTo(-12, -15); ctx.lineTo(-5, 0); ctx.lineTo(-12, 15);
+      ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function drawFloor() {

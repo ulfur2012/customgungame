@@ -118,7 +118,12 @@ const PLAYER_COLORS = ['#4aa3ff', '#ff5d5d', '#5dff8a', '#ffd35d', '#c45dff', '#
 const MAP = {
   w: 4000, h: 4000, seed: 1337,
   grid: 80,       // everything snaps to this grid (also the floor lines)
-  houses: 8, lWalls: 25, straightWalls: 40,  // how many of each to try to place
+  // wall amounts the host can pick (single player uses medium). maze = a real maze with 2-wide halls
+  layouts: {
+    small:  { label: 'Few walls',  houses: 4, lWalls: 12, straightWalls: 20 },
+    medium: { label: 'Medium',     houses: 8, lWalls: 25, straightWalls: 40 },
+    maze:   { label: 'MAZE',       maze: true },
+  },
   openAreas: [2, 4], openSize: 8,             // 2-4 empty 8x8 grid areas with no walls
   walls: [],      // filled in below
   spawns: [[200, 200], [3800, 3800], [3800, 200], [200, 3800], [2000, 200], [2000, 3800], [200, 2000], [3800, 2000]],
@@ -143,9 +148,10 @@ for (const id in ENEMIES) ENEMIES[id].img = ENEMIES[id].img || `assets/character
 
 // ---- build the map: straight walls, L walls and houses, all on the grid ----
 // Every structure keeps at least one free grid square around it so you can always walk between them.
-(() => {
+function buildMap(layout = 'medium', seed = MAP.seed) {
+  const D = MAP.layouts[layout] || MAP.layouts.medium;
   const C = MAP.grid, cols = MAP.w / C, rows = MAP.h / C;
-  let s = MAP.seed;
+  let s = seed | 0;
   const rand = () => ((s = Math.imul(s ^ (s >>> 15), 2246822507) + 0x6d2b79f5 | 0) >>> 0) / 4294967296;
   const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
   const owner = new Int32Array(cols * rows).fill(-1); // which structure uses each square
@@ -215,10 +221,40 @@ for (const id in ENEMIES) ENEMIES[id].img = ENEMIES[id].img || `assets/character
   }
 
   const fill = (n, make) => { for (let placed = 0, tries = 0; placed < n && tries < n * 40; tries++) if (make()) placed++; };
-  fill(Math.ceil(MAP.houses / 2), () => house(true));
-  fill(Math.floor(MAP.houses / 2), () => house(false));
-  fill(MAP.lWalls, lShape);
-  fill(MAP.straightWalls, straight);
+  if (D.maze) {
+    // maze cells are 3 squares: 1 wall + 2 hallway. Carved with a random depth-first search.
+    const mc = Math.floor((cols - 1) / 3), mr = Math.floor((rows - 1) / 3);
+    for (let y = 0; y <= mr * 3; y++) for (let x = 0; x <= mc * 3; x++) solid[idx(x, y)] = 1;
+    const carve = (x, y) => { for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) solid[idx(x + dx, y + dy)] = 0; };
+    const seen = new Uint8Array(mc * mr), stack = [[0, 0]];
+    seen[0] = 1; carve(1, 1);
+    while (stack.length) {
+      const [cx, cy] = stack[stack.length - 1];
+      const nb = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => [cx + dx, cy + dy, dx, dy])
+        .filter(([x, y]) => x >= 0 && y >= 0 && x < mc && y < mr && !seen[y * mc + x]);
+      if (!nb.length) { stack.pop(); continue; }
+      const [nx, ny, dx, dy] = nb[Math.floor(rand() * nb.length)];
+      seen[ny * mc + nx] = 1;
+      carve(nx * 3 + 1, ny * 3 + 1);
+      // knock down the wall between the two cells
+      if (dx) for (let k = 1; k <= 2; k++) solid[idx(Math.max(cx, nx) * 3, cy * 3 + k)] = 0;
+      else for (let k = 1; k <= 2; k++) solid[idx(cx * 3 + k, Math.max(cy, ny) * 3)] = 0;
+      stack.push([nx, ny]);
+    }
+    // extra openings so it's not one single path
+    for (let i = 0; i < mc * mr * 0.15; i++) {
+      const x = ri(1, mc - 1) * 3, y = ri(0, mr - 1) * 3;
+      if (rand() < 0.5) { solid[idx(x, y + 1)] = 0; solid[idx(x, y + 2)] = 0; }
+      else { solid[idx(y + 1, x)] = 0; solid[idx(y + 2, x)] = 0; }
+    }
+    // spawns, the middle and open areas stay clear
+    for (let i = 0; i < owner.length; i++) if (owner[i] === -2) solid[i] = 0;
+  } else {
+    fill(Math.ceil(D.houses / 2), () => house(true));
+    fill(Math.floor(D.houses / 2), () => house(false));
+    fill(D.lWalls, lShape);
+    fill(D.straightWalls, straight);
+  }
 
   // merge wall squares into as few rectangles as possible
   let open = new Map();
@@ -239,7 +275,12 @@ for (const id in ENEMIES) ENEMIES[id].img = ENEMIES[id].img || `assets/character
   MAP.walls = rects.map(r => [r.x * C, r.y * C, r.w * C, r.h * C]);
   MAP.solid = solid;
   MAP.cols = cols;
-})();
+}
+buildMap();
 
 // Health pickups: a green + that heals you. 3 appear every 30 seconds (no natural healing).
 const HEALTH_PACK = { heal: 20, every: 30, count: 3, r: 18, max: 12 };
+
+// Multiplayer ping: every 3 minutes, players who haven't fought for `calm` seconds
+// see red arrows pointing at the enemies for 3 seconds.
+const PING = { every: 180, calm: 10, show: 3 };
