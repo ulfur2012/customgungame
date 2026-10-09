@@ -247,10 +247,10 @@ const Game = (() => {
     const a = me.aim;
     G.lastCombat = G.time;
     gun.ammo--;
-    me.kick = Math.min(10, 3 + s.knockback * 2);
-    me.vx -= Math.cos(me.aim) * s.knockback * 12;
-    me.vy -= Math.sin(me.aim) * s.knockback * 12;
-    G.shake = Math.min(6, G.shake + 1 + s.knockback * 0.5);
+    me.kick = Math.min(10 * s.recoil, (3 + s.knockback * 2) * s.recoil);
+    me.vx -= Math.cos(me.aim) * s.knockback * 12 * s.recoil;
+    me.vy -= Math.sin(me.aim) * s.knockback * 12 * s.recoil;
+    G.shake = Math.min(6 * s.recoil, G.shake + (1 + s.knockback * 0.5) * s.recoil);
     muzzleFlash(m.x, m.y, a);
     if (G.mode === 'mp') {
       Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, fl: s.flare ? 1 : 0, rng: s.range, fo: s.falloff, dmg: s.damage, kb: s.knockback, loud: s.hearRadius });
@@ -737,18 +737,59 @@ const Game = (() => {
     if (type === 'boss') G.boss = e;
   }
 
+  // ---- pathfinding: a distance map from the player over the grid (refreshed a few times a second)
+  let flow = null, flowT = 0;
+  function updateFlow(dt) {
+    flowT -= dt;
+    if (flow && flowT > 0) return;
+    flowT = 0.25;
+    const C = MAP.grid, cols = MAP.cols, n = cols * cols;
+    flow = flow && flow.length === n ? flow : new Int32Array(n);
+    flow.fill(-1);
+    const sx = clamp(Math.floor(G.me.x / C), 0, cols - 1), sy = clamp(Math.floor(G.me.y / C), 0, cols - 1);
+    const q = new Int32Array(n);
+    let head = 0, tail = 0;
+    flow[sy * cols + sx] = 0; q[tail++] = sy * cols + sx;
+    while (head < tail) {
+      const i = q[head++], x = i % cols, y = (i - x) / cols;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= cols) continue;
+        const j = ny * cols + nx;
+        if (flow[j] !== -1 || MAP.solid[j]) continue;
+        flow[j] = flow[i] + 1;
+        q[tail++] = j;
+      }
+    }
+  }
+  // the centre of the next grid square on the way to the player (no cutting corners)
+  function pathStep(e) {
+    if (!flow) return null;
+    const C = MAP.grid, cols = MAP.cols;
+    const x = clamp(Math.floor(e.x / C), 0, cols - 1), y = clamp(Math.floor(e.y / C), 0, cols - 1);
+    const free = (a, b) => a >= 0 && b >= 0 && a < cols && b < cols && flow[b * cols + a] >= 0;
+    let best = null, bd = free(x, y) ? flow[y * cols + x] : Infinity;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if ((!dx && !dy) || !free(x + dx, y + dy)) continue;
+      if (dx && dy && (!free(x + dx, y) || !free(x, y + dy))) continue;
+      const v = flow[(y + dy) * cols + x + dx] + (dx && dy ? 0.4 : 0);
+      if (v < bd) { bd = v; best = { x: (x + dx + 0.5) * C, y: (y + dy + 0.5) * C }; }
+    }
+    return best;
+  }
+
   function updateEnemies(dt) {
     const me = G.me, list = G.enemies;
+    updateFlow(dt);
     for (const e of list) {
       const dx = me.x - e.x, dy = me.y - e.y, d = Math.hypot(dx, dy) || 1;
       const sees = lineOfSight(e.x, e.y, me.x, me.y);
       let mx = dx / d, my = dy / d;
       if (!me.alive) { mx = my = 0; }
       else if (e.def.keepDistance && sees && d < e.def.keepDistance) { mx *= -0.6; my *= -0.6; }
-      else if (!sees) { // slide around walls
-        const sx = -my * e.side, sy = mx * e.side;
-        mx = mx * 0.6 + sx * 0.8; my = my * 0.6 + sy * 0.8;
-        const l = Math.hypot(mx, my); mx /= l; my /= l;
+      else if (!sees) { // can't see you: follow the path around the walls toward you
+        const step = pathStep(e);
+        if (step) { const l = Math.hypot(step.x - e.x, step.y - e.y) || 1; mx = (step.x - e.x) / l; my = (step.y - e.y) / l; }
       }
       e.x += (mx * e.speed + e.kx) * dt;
       e.y += (my * e.speed + e.ky) * dt;

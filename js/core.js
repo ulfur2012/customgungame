@@ -154,6 +154,7 @@ function computeStats(kind, build) {
   s.speed = body.speed || BULLET_SPEED;
   s.falloff = body.falloff || 0;
   s.assist = body.assist || 1;
+  s.recoil = body.recoil || 1; // extra kick (sniper)
   if (body.fixed) Object.assign(s, body.fixed);
   s.flare = !!body.flare;
   // limited ammo: spare rounds on top of the loaded mag

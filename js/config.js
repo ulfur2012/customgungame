@@ -71,7 +71,7 @@ const PARTS = {
     { id: 'ak', name: 'AK', w: 96, h: 32, color: '#b5651d', shape: [[0, 2, 96, 16], [22, 16, 12, 16]],
       assist: 1.8, note: 'Normal gun · bigger auto-shoot area' },
     { id: 'sniper', name: 'Sniper', w: 96, h: 32, color: '#2f3640', shape: [[0, 3, 96, 14], [22, 15, 12, 17]],
-      range: 2000, speed: 2400, assist: 0.35,
+      range: 2000, speed: 2400, assist: 0.35, recoil: 4,
       add: { damage: 40, knockback: 5 }, mul: { magSize: 0.25 },
       note: 'Very long range · thin auto-shoot area' },
     // sidearm bodies. fixed = stats that are set no matter what else is equipped
