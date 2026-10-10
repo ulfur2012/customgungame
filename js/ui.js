@@ -246,7 +246,22 @@
       none.onclick = () => pick(null);
       wrap.appendChild(none);
     }
-    for (const id in ABILITIES) {
+    // abilities in sections: Buildings, Placeables, Throwables ... Passives
+    const listed = new Set(ABILITY_GROUPS.flatMap(g => g.ids));
+    const others = Object.keys(ABILITIES).filter(id => !listed.has(id));
+    const groups = [...ABILITY_GROUPS,
+      { label: '✨ Passives', note: 'always on', ids: others.filter(id => ABILITIES[id].type === 'passive') },
+      { label: 'Other', ids: others.filter(id => ABILITIES[id].type !== 'passive') }];
+    for (const grp of groups) {
+      const ids = grp.ids.filter(id => ABILITIES[id]);
+      if (!ids.length) continue;
+      const sec = document.createElement('div');
+      sec.className = 'ab-section';
+      sec.innerHTML = `${grp.label}${grp.note ? ` <small>${grp.note}</small>` : ''}`;
+      wrap.appendChild(sec);
+      for (const id of ids) addAbilityCard(id);
+    }
+    function addAbilityCard(id) {
       const A = ABILITIES[id];
       const card = document.createElement('button');
       card.className = 'card' + (id === current ? ' equipped' : '');

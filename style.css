@@ -488,3 +488,7 @@ body.mobile #ability2Btn .ab-state { color: #062b12; font-weight: 800; font-size
 body.mobile:has(#ability2Btn:not(.hidden)) #ultBtn { bottom: calc(205px + var(--safe-b)); }
 .card.combo { border-style: dotted; cursor: default; }
 .card.combo.ready { border: 1px solid var(--good); }
+
+/* section titles in the Ability tab (Buildings, Placeables, ...) */
+.ab-section { grid-column: 1 / -1; margin-top: 10px; padding-bottom: 4px; border-bottom: 1px solid var(--line); font-weight: 900; font-size: 15px; color: var(--text); }
+.ab-section small { font-weight: 600; font-size: 11px; color: var(--muted); margin-left: 6px; }

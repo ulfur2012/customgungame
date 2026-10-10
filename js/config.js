@@ -512,6 +512,16 @@ const ABILITY_CRATE = { chance: 0.6 };
 // chance = per health pack spawn (every 30s), so about one every 6 minutes.
 const EPIC_CRATE = { chance: 0.08 };
 
+// How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
+const ABILITY_GROUPS = [
+  { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla'] },
+  { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'barrier', 'mine', 'jumppad', 'bubble', 'medic', 'smoke'] },
+  { label: '💣 Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
+  { label: '🔫 Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
+  { label: '🏃 Movement', ids: ['dash', 'blink', 'grapple', 'phase', 'shadowstep', 'recall'] },
+  { label: '🛡️ Support', ids: ['shield', 'burger', 'energy', 'stim', 'reflect', 'slowmo', 'resupply'] },
+];
+
 // Ability combos: throw one ability's thing onto another's (needs both, e.g. one in each ability slot).
 const COMBOS = [
   { a: 'turret', b: 'tesla',   name: 'Railgun',        how: '3 Turrets → Rocket Turret, 3 Teslas → Big Tesla. Line up Big Tesla, Rocket Turret, Big Tesla.' },
