@@ -577,9 +577,10 @@ const COMBOS = [
   { a: 'scavenger', b: 'vampire', name: 'Bloodhound',   passive: true, how: 'Equip both: hits heal 5 HP and kills heal 20 HP.', syn: { vampire: { add: { heal: 2 } }, scavenger: { add: { heal: 10 } } } },
   { a: 'ninja', b: 'shadowstep', name: 'Assassin',      passive: true, how: 'Equip both: +2 Shadow Steps that reach 40% further.', syn: { shadowstep: { add: { uses: 2 }, mul: { range: 1.4 } } } },
   { a: 'adrenaline', b: 'stim', name: 'Racing Heart',   passive: true, how: 'Equip both: Stim Shot costs no HP and lasts 12s.', syn: { stim: { add: { cost: -10, duration: 4 } } } },
+  { a: 'resupply', b: 'decoy', name: 'Supply Decoy',  passive: true, how: 'Equip both: using Resupply also sends out a Supply Decoy (no gun, never attacks). It runs to your decoys that are low on ammo and gives each one 3 mags. Up to 2 at once.', syn: {} },
   { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
 ];
-const COMBO = { healBeam: 50, healBeamMe: 20, healEvery: 3, healRange: 700,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
+const COMBO = { supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 3, healRange: 700,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
 
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.

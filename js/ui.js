@@ -232,7 +232,7 @@
       head.textContent = `🔗 Combos with ${ABILITIES[current].name}`;
       wrap.appendChild(head);
       for (const c of combos) {
-        const other = ABILITIES[c.a === current ? c.b : c.a], have = [L.ability, L.ability2].includes(c.a) && [L.ability, L.ability2].includes(c.b);
+        const other = ABILITIES[c.a === current ? c.b : c.a], have = [L.ability, L.ability2, L.ability3, L.ability4].includes(c.a) && [L.ability, L.ability2, L.ability3, L.ability4].includes(c.b);
         const card = document.createElement('div');
         card.className = 'card combo' + (have ? ' ready' : '');
         card.innerHTML = `<div class="card-name">${c.name} <small class="hint">+ ${other.name}${have ? ' ✓' : ''}</small></div><div class="card-desc">${c.how}</div>`;
@@ -283,7 +283,7 @@
     wrap.appendChild(csec);
     for (const c of COMBOS) {
       const A1 = ABILITIES[c.a], A2 = ABILITIES[c.b];
-      const on = (L.ability === c.a && L.ability2 === c.b) || (L.ability === c.b && L.ability2 === c.a);
+      const eq = [L.ability, L.ability2, L.ability3, L.ability4], on = eq.includes(c.a) && eq.includes(c.b);
       const card = document.createElement('button');
       card.className = 'card combo-pick' + (on ? ' equipped' : '');
       card.innerHTML = `<div class="combo-icons"><span>${abilityIconSVG(c.a, 32)}</span>+<span>${abilityIconSVG(c.b, 32)}</span></div>

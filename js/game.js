@@ -81,7 +81,7 @@ const Game = (() => {
     // passive combos: both equipped -> their numbers go up
     me.synergies = [];
     for (const c of COMBOS) {
-      if (!c.syn || !((me.ability === c.a && me.alt.ability === c.b) || (me.ability === c.b && me.alt.ability === c.a))) continue;
+      if (!c.syn || !hasAb(c.a) || !hasAb(c.b)) continue;
       me.synergies.push(c.name);
       for (const ab in c.syn) {
         const A = ABILITIES[ab], m = c.syn[ab];
@@ -723,6 +723,10 @@ const Game = (() => {
         g.ammo = g.stats.magSize; g.reload = 0;
       }
       G.banner = { text: 'Resupplied!', t: 1 };
+      if ((me.synergies || []).includes('Supply Decoy')) { // SUPPLY DECOY combo
+        const n = G.gadgets.filter(g => g.kind === 'decoy' && g.supply && !g.dead && isMine(g.owner)).length;
+        if (n < COMBO.supplyMax) { landGadget({ kind: 'decoy', x1: me.x + Math.cos(me.aim) * 50, y1: me.y + Math.sin(me.aim) * 50, a: me.aim, owner: myOwnerId(), supply: true }); G.banner = { text: 'Supply Decoy out!', t: 1.2 }; }
+      }
       updateWeaponBar(true);
     }
   }
@@ -831,12 +835,12 @@ const Game = (() => {
     if (ABILITIES[n.kind].building && !n.noMerge) ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
     const main = G.me.guns[0];
-    addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite, hp: n.hp, dur: n.dur, big: n.big });
+    addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: n.supply ? null : main.stats, sprite: n.supply ? null : main.sprite, hp: n.hp, dur: n.dur, big: n.big, supply: n.supply });
     if (n.kind === 'barrier' && isMine(n.owner) && myGadget('tesla', n.x1, n.y1, COMBO.fenceNear)) { // ELECTRIC FENCE
       const g = G.gadgets.find(x => x.id === id);
       setTimeout(() => { if (G && g && !g.dead) { upgradeGadget(g, 'electric'); comboFx(g.x, g.y, '#feca57', 'ELECTRIC FENCE'); } }, 0);
     }
-    if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build, hp: n.hp, dur: n.dur, g: n.big ? 1 : 0 });
+    if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: n.supply ? null : main.build, hp: n.hp, dur: n.dur, g: n.big ? 1 : 0, s: n.supply ? 1 : 0 });
     if (ABILITIES[n.kind].building && !n.big && !n.noMerge) mergeBuildings(n.kind, n.x1, n.y1);
   }
 
@@ -1008,7 +1012,7 @@ const Game = (() => {
           if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id });
         }
       }
-      if (g.kind === 'decoy' && isMine(g.owner)) updateBuddy(g, dt);
+      if (g.kind === 'decoy' && isMine(g.owner)) (g.supply ? updateSupply : updateBuddy)(g, dt);
       if (g.kind === 'decoy' && g.medicBuddy && isMine(g.owner)) {
         g.healT -= dt;
         if (g.healT <= 0) {
@@ -1064,11 +1068,30 @@ const Game = (() => {
     }
   }
 
+  // SUPPLY DECOY: no gun, never attacks. Runs to your decoys that are low on ammo and gives each 3 mags.
+  function updateSupply(g, dt) {
+    const me = G.me, low = b => b.kind === 'decoy' && !b.supply && !b.dead && isMine(b.owner) && b.stats && b.ammo + b.reserve <= b.stats.magSize;
+    let tgt = null, bd = Infinity;
+    for (const b of G.gadgets) if (low(b)) { const d = Math.hypot(b.x - g.x, b.y - g.y); if (d < bd) { tgt = b; bd = d; } }
+    let mx = 0, my = 0;
+    if (tgt) {
+      if (bd < 46) { // hand over the mags
+        tgt.reserve += tgt.stats.magSize * COMBO.supplyMags;
+        if (tgt.ammo === 0) { const k = Math.min(tgt.stats.magSize, tgt.reserve); tgt.ammo = k; tgt.reserve -= k; }
+        G.texts.push({ x: tgt.x, y: tgt.y - 34, text: `+${COMBO.supplyMags} MAGS`, color: '#fff200', life: 1 });
+        burst(tgt.x, tgt.y, '#fff200', 12, 180);
+      } else ({ x: mx, y: my } = buddyPath(g, tgt.x, tgt.y, dt));
+    } else if (Math.hypot(me.x - g.x, me.y - g.y) > 120) ({ x: mx, y: my } = buddyPath(g, me.x, me.y, dt)); // nobody needs ammo: stay with you
+    if (mx || my) g.aim = Math.atan2(my, mx);
+    g.x += mx * ABILITIES.decoy.speed * 1.1 * dt; g.y += my * ABILITIES.decoy.speed * 1.1 * dt;
+    collideWorld(g);
+  }
+
   // where a buddy that needs ammo or healing should go (null = nothing to go for)
   function buddyNeed(g) {
     const A = ABILITIES.decoy, near = list => list.reduce((b, o) => (!b || Math.hypot(o.x - g.x, o.y - g.y) < Math.hypot(b.x - g.x, b.y - g.y) ? o : b), null);
     if (g.stats && g.ammo === 0 && g.reserve === 0) {
-      const box = near(G.packs.filter(p => p.kind === 'ammo'));
+      const box = near([...G.packs.filter(p => p.kind === 'ammo'), ...G.gadgets.filter(o => o.supply && !o.dead && isMine(o.owner))]);
       if (box) return { x: box.x, y: box.y, why: 'ammo' };
     }
     // between waves it tops up on any healing in the 8x8 squares around it; during a fight only when it's low
@@ -1268,10 +1291,15 @@ const Game = (() => {
           ctx.strokeStyle = `rgba(50,255,126,${0.5 * (1 - k)})`; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(g.x, g.y, 24 + k * (COMBO.buddyRadius - 24), 0, Math.PI * 2); ctx.stroke();
         }
-        drawPlayer({ x: g.x, y: g.y, aim: g.aim ?? g.a, kick: g.kick || 0 }, g.color, g.sprite, g.flash > 0);
+        drawPlayer({ x: g.x, y: g.y, aim: g.aim ?? g.a, kick: g.kick || 0 }, g.supply ? '#e1b12c' : g.color, g.sprite, g.flash > 0);
+        if (g.supply) { // ammo crate on its back
+          ctx.fillStyle = '#c99a1e'; ctx.strokeStyle = '#4a3700'; ctx.lineWidth = 2;
+          ctx.fillRect(g.x - 9, g.y - 6, 18, 12); ctx.strokeRect(g.x - 9, g.y - 6, 18, 12);
+          ctx.fillStyle = '#ffe27a'; ctx.fillRect(g.x - 6, g.y - 3, 3, 6); ctx.fillRect(g.x - 1.5, g.y - 3, 3, 6); ctx.fillRect(g.x + 3, g.y - 3, 3, 6);
+        }
         if (g.medicBuddy) { ctx.fillStyle = '#32ff7e'; ctx.fillRect(g.x - 3, g.y - 9, 6, 18); ctx.fillRect(g.x - 9, g.y - 3, 18, 6); }
         drawBar(g.x, g.y - PLAYER.r - 14, 54, 7, g.hp / g.maxHp, false, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
-        nameTag(`${g.name}'s buddy`, g.x, g.y - PLAYER.r - 20, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
+        nameTag(g.supply ? `${g.name}'s supply` : `${g.name}'s buddy`, g.x, g.y - PLAYER.r - 20, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
         if (isMine(g.owner) && g.stats) {
           const txt = g.ammo === 0 && g.reserve === 0 ? 'NO AMMO' : g.ammo === 0 ? 'RELOADING' : g.need === 'heal' ? 'HEALING' : `${g.ammo}/${g.reserve}`;
           ctx.font = '700 10px system-ui, sans-serif'; ctx.textAlign = 'center';
@@ -1899,7 +1927,7 @@ const Game = (() => {
     const me = G.me, t = grenadeTarget();
     const kind = me.ability;
     if (kind === 'decoy') { // max 5 decoys out at once (clones from Clone Army don't count)
-      const out = G.gadgets.filter(g => g.kind === 'decoy' && !g.dead && !g.dur && isMine(g.owner)).length + G.nades.filter(n => n.kind === 'decoy').length;
+      const out = G.gadgets.filter(g => g.kind === 'decoy' && !g.dead && !g.dur && !g.supply && isMine(g.owner)).length + G.nades.filter(n => n.kind === 'decoy').length;
       if (out >= ABILITIES.decoy.max) { G.banner = { text: `Max ${ABILITIES.decoy.max} decoys`, t: 1.2 }; return; }
     }
     G.nades.push({ x0: me.x, y0: me.y, x1: t.x, y1: t.y, t: 0, owner: myOwnerId(), kind, a: me.aim });
@@ -2670,7 +2698,7 @@ const Game = (() => {
   Net.on('gad', m => {
     if (!inMP()) return;
     const sprite = m.k === 'decoy' && m.b ? renderGunSprite('main', m.b) : null;
-    addGadget({ kind: m.k, x: m.x, y: m.y, a: m.a, owner: m.from, id: m.id, color: m.c, name: m.n, sprite, hp: m.hp, dur: m.dur, big: !!m.g });
+    addGadget({ kind: m.k, x: m.x, y: m.y, a: m.a, owner: m.from, id: m.id, color: m.c, name: m.n, sprite, hp: m.hp, dur: m.dur, big: !!m.g, supply: !!m.s });
   });
   Net.on('gadx', m => {
     if (!inMP()) return;
