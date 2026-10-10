@@ -383,24 +383,40 @@ body.mobile #reloadBtn { bottom: calc(290px + var(--safe-b)); }
 body.mobile #reloadBtn { right: calc(24px + var(--safe-r)); bottom: calc(205px + var(--safe-b)); }
 
 /* ------------------------------------------------------------ easier phone navigation */
-@media (max-width: 700px), (pointer: coarse) {
+@media (max-width: 900px), (pointer: coarse) {
   .panel button { padding: 15px; font-size: 17px; }
   .panel .big { padding: 18px !important; font-size: 19px; }
   #menu .panel { gap: 12px; }
-  .ws-header { position: sticky; top: 0; z-index: 2; background: var(--bg); }
-  #loadoutBack { padding: 12px 14px !important; font-size: 16px; color: var(--text); background: var(--panel) !important; border: 1px solid var(--line); border-radius: 10px; }
-  .gun-tab { flex: 1; padding: 12px 8px; font-size: 15px; }
-  .preset-tabs button { width: 40px; height: 40px; }
-  /* every upgrade slot visible at once, no hidden sideways scrolling */
-  .tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
-  .tab { min-width: 0; padding: 9px 8px; }
-  .tab-value { font-size: 12px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .parts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .card { padding: 12px; }
-  .ws-footer { padding: 10px 16px calc(10px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
   .seg button { padding: 13px 6px !important; }
   .chip { padding: 10px 12px !important; font-size: 14px; }
-}
-@media (max-width: 700px) and (orientation: portrait) {
-  .preview-wrap { height: 20dvh; min-height: 100px; }
+
+  /* gun builder: top = Main / Sidearm / Ability, left = gun + stats, right = upgrades */
+  .ws-header { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+  .gun-tabs { order: 3; width: 100%; flex: none; }
+  .gun-tab { flex: 1; padding: 12px 6px; font-size: 15px; }
+  #loadoutBack { padding: 10px 12px !important; font-size: 15px; color: var(--text); background: var(--panel) !important; border: 1px solid var(--line); border-radius: 10px; }
+  .preset-tabs { margin-left: auto; }
+  .preset-tabs button { width: 38px; height: 38px; }
+
+  .ws-body { grid-template-columns: 42% minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; gap: 8px; padding: 0 10px; }
+  .ws-left { overflow-y: auto; }
+  .preview-wrap { flex: none; height: 110px; min-height: 0; }
+  .stats { font-size: 11px; gap: 5px; }
+  .stat { grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 2px 6px; }
+  .stat-label { grid-column: 1; }
+  .stat-val { grid-column: 2; }
+  .stat-bar { grid-column: 1 / 3; grid-row: 2; height: 6px; }
+  .stat-note { display: block !important; font-size: 11px; }
+
+  /* upgrade slots: one row, swipe sideways */
+  .tabs { display: flex; overflow-x: auto; scrollbar-width: thin; padding-bottom: 6px; }
+  .tab { min-width: 78px; padding: 8px 10px; }
+  /* upgrades: 2 side by side, scroll down */
+  .parts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .card { padding: 8px; gap: 4px; }
+  .thumb, .ab-icon { height: 40px; }
+  .card-name { font-size: 13px; }
+  .card-mods span, .card-desc { font-size: 10px; }
+
+  .ws-footer { padding: 8px 10px calc(8px + var(--safe-b)); border-top: 1px solid var(--line); }
 }
