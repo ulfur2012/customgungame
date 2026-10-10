@@ -2960,7 +2960,7 @@ const Game = (() => {
     btn.classList.remove('hidden');
     btn.classList.toggle('passive', A.type === 'passive');
     btn.classList.toggle('cooling', A.type !== 'passive' && !state.startsWith('Ready'));
-    btn.querySelector('.ab-name').textContent = A.name;
+    btn.querySelector('.ab-name').textContent = `${A.icon} ${A.name}`;
     btn.querySelector('.ab-state').textContent = state;
     return key;
   }

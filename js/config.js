@@ -512,6 +512,18 @@ const ABILITY_CRATE = { chance: 0.6 };
 // chance = per health pack spawn (every 30s), so about one every 6 minutes.
 const EPIC_CRATE = { chance: 0.08 };
 
+// Ability icons (shown in the Ability tab, the in-game buttons and combo cards)
+const ABILITY_ICONS = {
+  grenade: '💣', shield: '🛡️', regen: '💚', rpg: '🚀', energy: '🥤', burger: '🍔', dash: '💨', rapid: '⏩',
+  armor: '🦺', hands: '✋', blink: '✨', nova: '💥', slowmo: '⏳', medic: '🩹', turret: '🔫', resupply: '📦',
+  vampire: '🧛', laststand: '💀', sprinter: '👟', bandolier: '🎒', blackhole: '🌀', firepit: '🔥', freeze: '❄️',
+  decoy: '🤖', barrier: '🧱', mine: '🧨', jumppad: '🦘', radar: '📡', tesla: '⚡', smoke: '🌫️', grapple: '🪝',
+  phase: '👻', reflect: '🪞', overcharge: '🔋', quake: '🔨', recall: '⏪', thorns: '🌵', scavenger: '🦴',
+  glass: '🔮', adrenaline: '❤️‍🔥', cluster: '🎆', bubble: '🫧', stim: '💉', shadowstep: '🥷', magnet: '🧲',
+  ninja: '🌑', lucky: '🍀',
+};
+for (const id in ABILITIES) ABILITIES[id].icon = ABILITY_ICONS[id] || ABILITIES[id].name[0];
+
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
 const ABILITY_GROUPS = [
   { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier'] },

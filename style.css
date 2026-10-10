@@ -496,3 +496,4 @@ body.mobile:has(#ability2Btn:not(.hidden)) #ultBtn { bottom: calc(205px + var(--
 /* combo loadout cards at the bottom of the Ability tab */
 .combo-icons { display: flex; align-items: center; gap: 6px; font-weight: 900; color: var(--muted); }
 .combo-icons span { flex: 1; height: 40px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-size: 20px; font-weight: 900; }
+.card .ab-icon, .card .combo-icons span { font-size: 32px; line-height: 1; text-shadow: 0 2px 3px rgba(0,0,0,0.35); }

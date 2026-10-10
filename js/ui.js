@@ -271,7 +271,7 @@
       const on = (L.ability === c.a && L.ability2 === c.b) || (L.ability === c.b && L.ability2 === c.a);
       const card = document.createElement('button');
       card.className = 'card combo-pick' + (on ? ' equipped' : '');
-      card.innerHTML = `<div class="combo-icons"><span style="background:${A1.color}">${A1.name[0]}</span>+<span style="background:${A2.color}">${A2.name[0]}</span></div>
+      card.innerHTML = `<div class="combo-icons"><span style="background:${A1.color}">${A1.icon}</span>+<span style="background:${A2.color}">${A2.icon}</span></div>
         <div class="card-name">${c.name}${c.passive ? ' <small class="hint">auto</small>' : ''}${on ? ' ✓' : ''}</div>
         <div class="card-desc"><b>${A1.name} + ${A2.name}</b><br>${c.how}</div>`;
       card.onclick = () => {
@@ -289,7 +289,7 @@
       const A = ABILITIES[id];
       const card = document.createElement('button');
       card.className = 'card' + (id === current ? ' equipped' : '');
-      card.innerHTML = `<div class="ab-icon" style="background:${A.color}">${A.name[0]}</div>
+      card.innerHTML = `<div class="ab-icon" style="background:${A.color}">${A.icon}</div>
         <div class="card-name">${A.name} <small class="hint">${A.type}${id === L[abSlot ? 'ability' : 'ability2'] ? ' · other slot' : ''}</small></div>
         <div class="card-desc">${A.desc}</div>`;
       card.onclick = () => pick(id);
@@ -309,7 +309,7 @@
       ctx.fillStyle = '#fff';
       ctx.font = `900 ${Math.round(Math.min(w, h) * 0.2)}px system-ui, sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(A.name[0], w / 2, h / 2 - 10);
+      ctx.fillText(A.icon, w / 2, h / 2 - 6);
       ctx.font = '800 16px system-ui, sans-serif';
       ctx.fillText(A.name, w / 2, h - 22);
     }
