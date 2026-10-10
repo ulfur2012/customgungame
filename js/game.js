@@ -26,6 +26,18 @@ const Game = (() => {
     return { kind, build: { ...build }, stats, sprite: renderGunSprite(kind, build), ammo: stats.magSize, reserve: stats.maxReserve, reload: 0, cd: 0 };
   }
 
+  // second ability slot (C on PC). Its state gets swapped into `me` while it runs, so all the ability code works for both.
+  const SLOT_KEYS = ['ability', 'abCd', 'abUses', 'abWasHeld', 'abAiming', 'refillT'];
+  function newSlot(ability) {
+    return { ability: ABILITIES[ability] ? ability : null, abCd: 0, abUses: (ABILITIES[ability] || {}).uses ?? Infinity, abWasHeld: false, abAiming: false, refillT: undefined };
+  }
+  function swapAlt() {
+    const me = G.me;
+    for (const k of SLOT_KEYS) { const v = me[k]; me[k] = me.alt[k]; me.alt[k] = v; }
+  }
+  // is this ability equipped in either slot? (passives work from both)
+  const hasAb = id => G.me.ability === id || G.me.alt.ability === id;
+
   function newState(mode, spawn, color) {
     const L = Account.user.loadout;
     return {
@@ -34,6 +46,7 @@ const Game = (() => {
         x: spawn[0], y: spawn[1], r: PLAYER.r, hp: PLAYER.hp, maxHp: PLAYER.hp, aim: 0, vx: 0, vy: 0,
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
+        alt: newSlot(L.ability2),
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
         ult: null, stimT: 0, frenzyT: 0, stormN: 0, stormT: 0, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
@@ -53,20 +66,22 @@ const Game = (() => {
   const ABILITY_BASE = structuredClone(ABILITIES); // (structuredClone keeps Infinity)
   function applyPerk(me) {
     for (const k in ABILITIES) Object.assign(ABILITIES[k], structuredClone(ABILITY_BASE[k]));
-    const perk = (ABILITY_PERKS[me.ability] || []).find(p => p.id === Account.user.loadout.perk);
-    const A = ABILITIES[me.ability];
-    if (perk && A) {
+    const L = Account.user.loadout;
+    for (const [ab, pid] of [[me.ability, L.perk], [me.alt.ability, L.perk2]]) {
+      const perk = (ABILITY_PERKS[ab] || []).find(p => p.id === pid), A = ABILITIES[ab];
+      if (!perk || !A) continue;
       for (const k in perk.add || {}) A[k] = (A[k] || 0) + perk.add[k];
       for (const k in perk.mul || {}) A[k] *= perk.mul[k];
     }
-    me.abUses = (A || {}).uses ?? Infinity;
+    me.abUses = (ABILITIES[me.ability] || {}).uses ?? Infinity;
+    me.alt.abUses = (ABILITIES[me.alt.ability] || {}).uses ?? Infinity;
   }
 
   function applyBandolier(me) {
     applyPerk(me);
-    me.maxHp = me.ability === 'glass' ? ABILITIES.glass.hp : PLAYER.hp;
+    me.maxHp = hasAb('glass') ? ABILITIES.glass.hp : PLAYER.hp;
     me.hp = Math.min(me.hp, me.maxHp);
-    if (me.ability !== 'bandolier') return;
+    if (!hasAb('bandolier')) return;
     for (const g of me.guns) {
       if (g.stats.flare || g.stats.maxReserve === 0) continue;
       const extra = g.stats.magSize * ABILITIES.bandolier.mags;
@@ -102,6 +117,7 @@ const Game = (() => {
     me.cur = 0;
     me.ability = L.ability;
     me.abCd = 0; me.abUses = (ABILITIES[L.ability] || {}).uses ?? Infinity;
+    me.alt = newSlot(L.ability2); abCache2 = '';
     me.shield = 0; me.shieldT = 0; me.speedT = 0; me.rapidT = 0; me.slowT = 0; me.lastStand = false;
     applyBandolier(me);
     abCache = '';
@@ -133,7 +149,7 @@ const Game = (() => {
   function begin() {
     applyBandolier(G.me);
     Input.reset();
-    abCache = '';
+    abCache = abCache2 = '';
     updateWeaponBar(true);
     document.body.classList.add('in-game');
     last = performance.now();
@@ -210,7 +226,7 @@ const Game = (() => {
   function updateMe(dt) {
     const me = G.me;
     const mv = Input.move();
-    const speed = PLAYER.speed * (me.speedT > 0 ? ABILITIES.energy.speed : 1) * (me.ability === 'sprinter' ? ABILITIES.sprinter.speed : 1)
+    const speed = PLAYER.speed * (me.speedT > 0 ? ABILITIES.energy.speed : 1) * (hasAb('sprinter') ? ABILITIES.sprinter.speed : 1)
       * (adrenalineOn() ? ABILITIES.adrenaline.speed : 1) * (me.frozenT > 0 ? 0.2 : 1) * (me.godT > 0 ? ULTIMATES.god.speed : 1)
       * (me.stimT > 0 ? ABILITIES.stim.speed : 1) * (me.frenzyT > 0 ? ULTIMATES.frenzy.speed : 1);
     me.x += (mv.x * speed + me.vx) * dt;
@@ -235,10 +251,11 @@ const Game = (() => {
     const aim = Input.aim(scr.x, scr.y);
     if (aim.angle !== null) me.aim = aim.angle;
     updateAbility(dt);
-    let fire = aim.fire && !me.abAiming;
+    const abAim = me.abAiming || me.alt.abAiming;
+    let fire = aim.fire && !abAim;
     if (Settings.mobile) {
       // Brawl Stars style: hold the aim stick and it fires by itself when an enemy is in your sights
-      fire = aim.aiming && !me.abAiming && targetInSights(me.aim);
+      fire = aim.aiming && !abAim && targetInSights(me.aim);
       if (Input.take('tap')) {
         const t = nearestVisibleTarget();
         if (t) { me.aim = Math.atan2(t.y - me.y, t.x - me.x); fire = true; }
@@ -270,7 +287,7 @@ const Game = (() => {
 
   // Quick Hands passive shortens every reload
   function reloadTimeOf(s) {
-    return s.reloadTime * (G.me.ability === 'hands' ? ABILITIES.hands.reloadMul : 1);
+    return s.reloadTime * (hasAb('hands') ? ABILITIES.hands.reloadMul : 1);
   }
 
   function switchGun(i) {
@@ -330,7 +347,7 @@ const Game = (() => {
     const kind = { bounce: s.bounce, pierce: s.pierce, boom: s.boom };
     if (me.aimShots > 0) { me.aimShots--; kind.homing = 1; }
     if (me.wallT > 0) kind.ghost = 1;
-    let dmg = s.damage * (me.ability === 'glass' ? ABILITIES.glass.mul : 1) * (me.juggT > 0 ? ULTIMATES.juggernaut.mul : 1);
+    let dmg = s.damage * (hasAb('glass') ? ABILITIES.glass.mul : 1) * (me.juggT > 0 ? ULTIMATES.juggernaut.mul : 1);
     if (me.overShots > 0) { me.overShots--; dmg *= ABILITIES.overcharge.mul; }
     for (const a of angles) addBullet(m.x, m.y, a, s.speed, dmg, s.knockback, 'me', G.myId, s.range, s.falloff, s.flare, kind);
     const a = me.aim;
@@ -342,7 +359,7 @@ const Game = (() => {
     G.shake = Math.min(6 * s.recoil, G.shake + (1 + s.knockback * 0.5) * s.recoil);
     muzzleFlash(m.x, m.y, a);
     if (G.mode === 'mp') {
-      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, fl: s.flare ? 1 : 0, bt: kind, rng: s.range, fo: s.falloff, dmg, kb: s.knockback, loud: s.hearRadius * (me.ability === 'ninja' ? ABILITIES.ninja.quiet : 1) });
+      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, fl: s.flare ? 1 : 0, bt: kind, rng: s.range, fo: s.falloff, dmg, kb: s.knockback, loud: s.hearRadius * (hasAb('ninja') ? ABILITIES.ninja.quiet : 1) });
     }
   }
 
@@ -373,11 +390,11 @@ const Game = (() => {
   function hurtMe(dmg, kb, angle, by) {
     const me = G.me;
     if (!me.alive || me.invT > 0 || me.godT > 0) return;
-    if (me.ability === 'armor') dmg *= ABILITIES.armor.takeMul;
+    if (hasAb('armor')) dmg *= ABILITIES.armor.takeMul;
     const soaked = Math.min(me.shield, dmg);
     me.shield -= soaked;
     me.hp = Math.max(0, me.hp - (dmg - soaked));
-    if (me.ability === 'thorns' && me.hp > 0 && me.thornCd <= 0) {
+    if (hasAb('thorns') && me.hp > 0 && me.thornCd <= 0) {
       const T = ABILITIES.thorns;
       me.thornCd = T.cd;
       fireBullets(me.x, me.y, Array.from({ length: T.count }, (_, i) => +(i * Math.PI * 2 / T.count).toFixed(4)), 900, T.damage, 1, 350, 3 * HEAR_UNIT);
@@ -389,7 +406,7 @@ const Game = (() => {
     G.shake = Math.min(12, G.shake + 5);
     G.texts.push({ x: me.x, y: me.y - 34, text: `-${Math.round(dmg)}`, color: '#ff6b6b', life: 0.8 });
     if (G.mode === 'mp') Net.send({ t: 'hit', by, dmg });
-    if (me.hp <= 0 && me.ability === 'laststand' && !me.lastStand) {
+    if (me.hp <= 0 && hasAb('laststand') && !me.lastStand) {
       me.lastStand = true;
       me.hp = ABILITIES.laststand.hp;
       me.invT = ABILITIES.laststand.inv;
@@ -523,15 +540,8 @@ const Game = (() => {
   const hostileTo = owner => !isMine(owner) && (G.mode === 'sp' ? owner === 'enemy' : (!G.teams || teamOf(owner) !== G.me.team));
 
   function updateAbility(dt) {
-    const me = G.me, A = ABILITIES[me.ability];
-    if (!A) return;
+    const me = G.me;
     me.invT = Math.max(0, me.invT - dt);
-    me.abCd = Math.max(0, me.abCd - dt);
-    if (G.test && G.infAbility) { me.abCd = 0; me.abUses = Infinity; me.frozenT = 0; } // test mode: infinite ability, no stun
-    if (A.respawn && me.abUses < A.uses) { // weak abilities come back by themselves
-      me.refillT = (me.refillT ?? A.respawn) - dt;
-      if (me.refillT <= 0) { me.abUses++; me.refillT = A.respawn; G.texts.push({ x: me.x, y: me.y - 34, text: `+1 ${A.name}`, color: '#2bd96b', life: 1 }); }
-    } else me.refillT = A.respawn;
     me.speedT = Math.max(0, me.speedT - dt);
     me.rapidT = Math.max(0, me.rapidT - dt);
     me.slowT = Math.max(0, me.slowT - dt);
@@ -555,6 +565,20 @@ const Game = (() => {
       me.shieldT -= dt;
       if (me.shieldT <= 0) { me.shieldT = 0; me.shield = 0; }
     }
+    updateSlot(dt, 0);
+    swapAlt(); updateSlot(dt, 1); swapAlt();
+  }
+
+  // one ability slot (slot 1's state is swapped into `me` while this runs)
+  function updateSlot(dt, slot) {
+    const me = G.me, A = ABILITIES[me.ability];
+    if (!A) return;
+    me.abCd = Math.max(0, me.abCd - dt);
+    if (G.test && G.infAbility) { me.abCd = 0; me.abUses = Infinity; me.frozenT = 0; } // test mode: infinite ability, no stun
+    if (A.respawn && me.abUses < A.uses) { // weak abilities come back by themselves
+      me.refillT = (me.refillT ?? A.respawn) - dt;
+      if (me.refillT <= 0) { me.abUses++; me.refillT = A.respawn; G.texts.push({ x: me.x, y: me.y - 34, text: `+1 ${A.name}`, color: '#2bd96b', life: 1 }); }
+    } else me.refillT = A.respawn;
     if (A.type === 'passive' && me.ability !== 'regen') return; // the other passives work where they apply
     if (A.type === 'passive') {
       // regen: +10 HP for every 10 seconds out of combat
@@ -569,9 +593,9 @@ const Game = (() => {
       }
       return;
     }
-    const pressed = Input.take('abPress');
-    const held = Input.abilityHeld();
-    const ready = me.abCd === 0 && me.abUses > 0 && (me.shieldT === 0 || G.infAbility);
+    const pressed = Input.take(slot ? 'ab2Press' : 'abPress');
+    const held = Input.abilityHeld(slot);
+    const ready = me.abCd === 0 && me.abUses > 0 && (me.ability !== 'shield' || me.shieldT === 0 || G.infAbility);
     const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'resupply', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability);
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
@@ -678,7 +702,7 @@ const Game = (() => {
   // Vampire passive: every hit you land heals you a little
   function vampire() {
     const me = G.me;
-    if (me.ability !== 'vampire' || !me.alive || me.hp >= me.maxHp) return;
+    if (!hasAb('vampire') || !me.alive || me.hp >= me.maxHp) return;
     me.hp = Math.min(me.maxHp, me.hp + ABILITIES.vampire.heal);
   }
 
@@ -689,12 +713,12 @@ const Game = (() => {
     if (G.mode === 'mp') Net.send({ t: 'shot', x: Math.round(x), y: Math.round(y), as: angles, sp: speed, fl: 0, bt: kind, rng: range, fo: falloff, dmg, kb, loud });
   }
 
-  const adrenalineOn = () => G.me.ability === 'adrenaline' && G.me.hp < G.me.maxHp * ABILITIES.adrenaline.below;
+  const adrenalineOn = () => hasAb('adrenaline') && G.me.hp < G.me.maxHp * ABILITIES.adrenaline.below;
 
   // Scavenger passive: kills give health and ammo
   function onKill() {
     const me = G.me, S = ABILITIES.scavenger;
-    if (me.ability !== 'scavenger' || !me.alive) return;
+    if (!hasAb('scavenger') || !me.alive) return;
     heal(S.heal);
     for (const g of me.guns) g.reserve = Math.min(g.stats.maxReserve, g.reserve + Math.ceil(g.stats.magSize * S.mags));
     updateWeaponBar(true);
@@ -1173,9 +1197,9 @@ const Game = (() => {
   }
 
   // random ultimate, weighted toward the one that matches your ability (hidden)
-  function rollUlt(ability) {
-    const fav = ULT_AFFINITY[ability];
-    const pool = Object.keys(ULTIMATES).map(k => [k, k === fav ? ULT_AFFINITY.weight : 1]);
+  function rollUlt(abilities) {
+    const favs = abilities.map(a => ULT_AFFINITY[a]);
+    const pool = Object.keys(ULTIMATES).map(k => [k, favs.includes(k) ? ULT_AFFINITY.weight : 1]);
     let r = Math.random() * pool.reduce((n, [, w]) => n + w, 0);
     for (const [k, w] of pool) { if ((r -= w) < 0) return k; }
     return pool[0][0];
@@ -1293,7 +1317,7 @@ const Game = (() => {
         } else me.stormN = 0;
       }
     }
-    if (me.overT > 0) { me.abCd = 0; if (me.abUses < 1) me.abUses = 1; } // overdrive: ability spam
+    if (me.overT > 0) for (const s of [me, me.alt]) { s.abCd = 0; if (s.abUses < 1) s.abUses = 1; } // overdrive: ability spam
     if (me.fountT > 0) {
       me.fountT -= dt; me.fountTick -= dt;
       if (me.fountTick <= 0) { me.fountTick = 1; if (me.alive && me.hp < me.maxHp) heal(ULTIMATES.fountain.perSec); }
@@ -1689,13 +1713,13 @@ const Game = (() => {
         for (let i = 0; i < HEALTH_PACK.count && G.packs.length + fresh.length < HEALTH_PACK.max; i++) fresh.push(randomFloorSpot());
         for (let i = 0; i < AMMO.box.count; i++) fresh.push({ ...randomFloorSpot(), kind: 'ammo' });
         if (Math.random() < ABILITY_CRATE.chance) fresh.push({ ...randomFloorSpot(), kind: 'ability' });
-        if (Math.random() < EPIC_CRATE.chance * (G.me.ability === 'lucky' ? ABILITIES.lucky.epic : 1)) fresh.push({ ...randomFloorSpot(), kind: 'epic' });
+        if (Math.random() < EPIC_CRATE.chance * (hasAb('lucky') ? ABILITIES.lucky.epic : 1)) fresh.push({ ...randomFloorSpot(), kind: 'epic' });
         addPacks(fresh);
         if (G.mode === 'mp') Net.send({ t: 'packs', packs: fresh });
       }
     }
     if (!me.alive) return;
-    if (me.ability === 'magnet') for (const p of G.packs) {
+    if (hasAb('magnet')) for (const p of G.packs) {
       const d = Math.hypot(me.x - p.x, me.y - p.y), M = ABILITIES.magnet;
       if (d < M.range && d > 1) { p.x += (me.x - p.x) / d * M.pull * dt; p.y += (me.y - p.y) / d * M.pull * dt; }
     }
@@ -1716,16 +1740,14 @@ const Game = (() => {
         updateWeaponBar(true);
       } else if (p.kind === 'epic') {
         if (me.ult) continue; // already holding one
-        me.ult = rollUlt(me.ability);
+        me.ult = rollUlt([me.ability, me.alt.ability]);
         G.banner = { text: `ULTIMATE: ${ULTIMATES[me.ult].name}! (${Settings.mobile ? 'gold button' : 'press F'})`, t: 3 };
         burst(me.x, me.y, '#ffd700', 40, 400);
       } else if (p.kind === 'ability') {
         // rare red crate: all ability uses back and no cooldown
-        const A = ABILITIES[me.ability];
-        const full = !A || A.type === 'passive' || (me.abUses >= (A.uses ?? Infinity) && me.abCd === 0);
-        if (full) continue;
-        me.abUses = A.uses ?? Infinity;
-        me.abCd = 0;
+        const needs = s => { const A = ABILITIES[s.ability]; return A && A.type !== 'passive' && (s.abUses < (A.uses ?? Infinity) || s.abCd > 0); };
+        if (!needs(me) && !needs(me.alt)) continue;
+        for (const s of [me, me.alt]) if (needs(s)) { s.abUses = ABILITIES[s.ability].uses ?? Infinity; s.abCd = 0; }
         G.texts.push({ x: me.x, y: me.y - 34, text: 'ABILITY RESTORED', color: '#ff5d5d', life: 1.2 });
         updateWeaponBar(true);
       } else {
@@ -2129,8 +2151,10 @@ const Game = (() => {
       leaveArena();
       G.boss = null;
       // beating a boss gives your ability back
-      const A = ABILITIES[G.me.ability];
-      if (A && A.type !== 'passive') { G.me.abUses = A.uses ?? Infinity; G.me.abCd = 0; }
+      for (const s of [G.me, G.me.alt]) {
+        const A = ABILITIES[s.ability];
+        if (A && A.type !== 'passive') { s.abUses = A.uses ?? Infinity; s.abCd = 0; }
+      }
       G.banner = { text: `${e.name || 'Boss'} defeated! Ability restored`, t: 2.5 };
       updateWeaponBar(true);
     }
@@ -2294,6 +2318,7 @@ const Game = (() => {
       const gun = me.guns[me.cur];
       // aim area: on mobile while aiming (it auto-shoots there); on PC always shown, but you shoot yourself
       if (me.abAiming) drawAbilityAim(me);
+      else if (me.alt.abAiming) { swapAlt(); drawAbilityAim(me); swapAlt(); }
       else if (Settings.mobile ? Input.sticks.aim : Input.mouse.active) drawAimLine(me);
       drawPlayer(me, me.color, gun.sprite, false, me.meleeInv > 0 && Math.floor(me.meleeInv * 20) % 2);
       // health bar right above you — the middle of the screen
@@ -2657,33 +2682,35 @@ const Game = (() => {
         : g.ammo === 0 && g.reserve === 0 ? 'OUT OF AMMO' : `${g.ammo} | ${g.reserve}`;
     });
   }
-  let abCache = '';
+  let abCache = '', abCache2 = '';
+  // which timer a running ability shows on its button
+  const RUNNING = { shield: 'shieldT', rapid: 'rapidT', slowmo: 'slowT', phase: 'phaseT', reflect: 'reflectT', stim: 'stimT' };
   function updateAbilityBtn() {
     const ub = el('ultBtn'), U = G.me.ult && ULTIMATES[G.me.ult];
     ub.classList.toggle('hidden', !U);
     if (U && ub.dataset.k !== G.me.ult) { ub.dataset.k = G.me.ult; ub.querySelector('.ult-name').textContent = U.name; }
     if (!U) ub.dataset.k = '';
-    const me = G.me, A = ABILITIES[me.ability], btn = el('abilityBtn');
-    if (!A) { btn.classList.add('hidden'); return; }
+    abCache = paintAbilityBtn(el('abilityBtn'), abCache);
+    swapAlt(); abCache2 = paintAbilityBtn(el('ability2Btn'), abCache2); swapAlt();
+  }
+  function paintAbilityBtn(btn, cache) {
+    const me = G.me, A = ABILITIES[me.ability];
+    if (!A) { btn.classList.add('hidden'); return ''; }
+    const run = RUNNING[me.ability] && me[RUNNING[me.ability]];
     const state = A.type === 'passive' ? 'Passive'
       : me.abUses <= 0 && A.respawn ? `+1 in ${Math.ceil(me.refillT ?? A.respawn)}s`
       : me.abUses <= 0 ? 'Used'
-      : me.shieldT > 0 ? `${Math.ceil(me.shieldT)}s`
-      : me.rapidT > 0 ? `${Math.ceil(me.rapidT)}s`
-      : me.slowT > 0 ? `${Math.ceil(me.slowT)}s`
-      : me.phaseT > 0 ? `${Math.ceil(me.phaseT)}s`
-      : me.reflectT > 0 ? `${Math.ceil(me.reflectT)}s`
-      : me.stimT > 0 ? `${Math.ceil(me.stimT)}s`
+      : run > 0 ? `${Math.ceil(run)}s`
       : me.abCd > 0 ? `${Math.ceil(me.abCd)}s`
       : me.abUses === Infinity ? 'Ready' : `Ready ×${me.abUses}`;
     const key = A.name + state;
-    if (key === abCache) return;
-    abCache = key;
+    if (key === cache) return cache;
     btn.classList.remove('hidden');
     btn.classList.toggle('passive', A.type === 'passive');
     btn.classList.toggle('cooling', A.type !== 'passive' && !state.startsWith('Ready'));
     btn.querySelector('.ab-name').textContent = A.name;
     btn.querySelector('.ab-state').textContent = state;
+    return key;
   }
 
   el('gun0').addEventListener('click', () => G && switchGun(0));

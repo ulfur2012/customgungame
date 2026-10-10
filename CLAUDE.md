@@ -26,7 +26,7 @@ clarifying questions — make a sensible call, then say what was assumed. The us
 - Bullets: bouncing (4 wall bounces), armor piercing, boom (5 dmg blast on walls); specials do 20% less damage.
 - Limited ammo: 3 spare mags; ammo boxes give 1 mag to main first, both if both need it, work while reloading.
 - Every placeable ability must be THROWN (hold = aim arc, release = throw; mark `thrown: true`), never dropped.
-- Abilities (pick 1, 2 uses per round, RPG only 1): grenade (arcs over walls, white path line while
+- Abilities (pick 2: slot 1 = E, slot 2 = C / second green button; 2 uses per round, RPG only 1): grenade (arcs over walls, white path line while
   holding E), shield (200 HP, blue bar, 7s), regen (passive, +10 HP per 10s out of combat), RPG,
   energy drink (+10 HP, 1.7x speed), burger (+100 HP). Red crates and boss kills restore abilities.
 - Hearing: unsilenced shots nearby = yellow screen edge, strongest toward the shot. Damage = red edge.

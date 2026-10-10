@@ -346,7 +346,7 @@ body.mobile .gun-btn { min-width: 0; padding: 6px 10px; }
 .rules { font-size: 13px; font-weight: 700; color: var(--accent) !important; }
 
 /* ability button: bar next to the guns on PC, green round button above the shoot stick on mobile */
-#abilityBtn {
+#abilityBtn, #ability2Btn {
   position: fixed; z-index: 5;
   right: calc(16px + var(--safe-r)); bottom: calc(14px + var(--safe-b));
   display: flex; align-items: center; gap: 8px;
@@ -468,3 +468,21 @@ body.light .gun-btn, body.light #abilityBtn:not(.passive) { color: #fff; }
 .perk-head { grid-column: 1 / -1; font-weight: 800; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
 .card.perk { border-style: dashed; }
 .card.perk.equipped { border-style: solid; background: var(--panel-2); }
+
+/* second ability button: above the first one */
+#ability2Btn { bottom: calc(66px + var(--safe-b)); }
+#ability2Btn.hidden { display: none; }
+#ability2Btn.cooling { border-color: rgba(255, 255, 255, 0.2); opacity: 0.7; }
+#ability2Btn.passive { border-color: rgba(43, 217, 107, 0.4); }
+body:has(#ability2Btn:not(.hidden)) #ultBtn { bottom: calc(118px + var(--safe-b)); }
+body.mobile #ability2Btn {
+  right: calc(120px + var(--safe-r)); bottom: calc(285px + var(--safe-b));
+  width: 74px; height: 74px; padding: 0; border-radius: 50%;
+  flex-direction: column; justify-content: center; gap: 0;
+  background: rgba(43, 217, 107, 0.85); border: 3px solid #b8ffd0; color: #062b12;
+}
+body.mobile #ability2Btn.cooling { background: rgba(43, 217, 107, 0.3); }
+body.mobile #ability2Btn .ab-key { display: none; }
+body.mobile #ability2Btn .ab-name { font-size: 11px; }
+body.mobile #ability2Btn .ab-state { color: #062b12; font-weight: 800; font-size: 12px; }
+body.mobile:has(#ability2Btn:not(.hidden)) #ultBtn { bottom: calc(205px + var(--safe-b)); }

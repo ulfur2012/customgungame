@@ -177,15 +177,26 @@
     renderStats();
   }
 
+  let abSlot = 0; // which ability slot the Ability tab is editing (0 = E, 1 = C)
   function renderAbilities() {
-    const current = Account.user.loadout.ability;
+    const L = Account.user.loadout;
+    const key = abSlot ? 'ability2' : 'ability', perkKey = abSlot ? 'perk2' : 'perk';
+    const current = L[key];
+    // two slot tabs, like the upgrade slots
     el('slotTabs').innerHTML = '';
+    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2']].forEach(([label, k], i) => {
+      const b = document.createElement('button'), A = ABILITIES[L[k]];
+      b.className = 'tab' + (i === abSlot ? ' active' : '');
+      b.innerHTML = `<span class="tab-label">${label}</span><span class="tab-value">${A ? A.name : 'None'}</span>`;
+      if (A) b.style.setProperty('--chip', A.color);
+      b.onclick = () => { abSlot = i; renderLoadout(); };
+      el('slotTabs').appendChild(b);
+    });
     const wrap = el('parts');
     wrap.innerHTML = '';
-    // boosts for the equipped ability (only shown for that ability)
+    // boosts for the ability in this slot (only shown for that ability)
     const perks = ABILITY_PERKS[current] || [];
-    const L = Account.user.loadout;
-    if (!perks.some(p => p.id === L.perk)) L.perk = null;
+    if (!perks.some(p => p.id === L[perkKey])) L[perkKey] = null;
     if (perks.length) {
       const head = document.createElement('div');
       head.className = 'perk-head';
@@ -193,25 +204,48 @@
       wrap.appendChild(head);
       for (const p of [null, ...perks]) {
         const card = document.createElement('button');
-        card.className = 'card perk' + ((L.perk || null) === (p ? p.id : null) ? ' equipped' : '');
+        card.className = 'card perk' + ((L[perkKey] || null) === (p ? p.id : null) ? ' equipped' : '');
         card.innerHTML = `<div class="card-name">${p ? p.name : 'No boost'}</div><div class="card-desc">${p ? p.desc : 'Plain ability'}</div>`;
-        card.onclick = () => { L.perk = p ? p.id : null; Account.save(); renderLoadout(); };
+        card.onclick = () => { L[perkKey] = p ? p.id : null; Account.save(); renderLoadout(); };
         wrap.appendChild(card);
       }
-      const head2 = document.createElement('div');
-      head2.className = 'perk-head';
-      head2.textContent = 'Abilities';
-      wrap.appendChild(head2);
+    }
+    const head2 = document.createElement('div');
+    head2.className = 'perk-head';
+    head2.textContent = abSlot ? 'Second ability' : 'Abilities';
+    wrap.appendChild(head2);
+    // picking the ability that's in the other slot swaps the two
+    const pick = id => {
+      const other = abSlot ? 'ability' : 'ability2', otherPerk = abSlot ? 'perk' : 'perk2';
+      if (id && L[other] === id) {
+        if (!L[key] && other === 'ability') return; // slot 1 can't be empty
+        [L[other], L[otherPerk]] = [L[key], L[perkKey]];
+      } else if (L[key] !== id) L[perkKey] = null;
+      L[key] = id;
+      Account.save(); renderLoadout();
+    };
+    if (abSlot) {
+      const none = document.createElement('button');
+      none.className = 'card' + (!current ? ' equipped' : '');
+      none.innerHTML = `<div class="ab-icon" style="background:#555c68">–</div><div class="card-name">None</div><div class="card-desc">No second ability.</div>`;
+      none.onclick = () => pick(null);
+      wrap.appendChild(none);
     }
     for (const id in ABILITIES) {
       const A = ABILITIES[id];
       const card = document.createElement('button');
       card.className = 'card' + (id === current ? ' equipped' : '');
       card.innerHTML = `<div class="ab-icon" style="background:${A.color}">${A.name[0]}</div>
-        <div class="card-name">${A.name} <small class="hint">${A.type}</small></div>
+        <div class="card-name">${A.name} <small class="hint">${A.type}${id === L[abSlot ? 'ability' : 'ability2'] ? ' · other slot' : ''}</small></div>
         <div class="card-desc">${A.desc}</div>`;
-      card.onclick = () => { if (Account.user.loadout.ability !== id) Account.user.loadout.perk = null; Account.user.loadout.ability = id; Account.save(); renderLoadout(); };
+      card.onclick = () => pick(id);
       wrap.appendChild(card);
+    }
+    if (!current) {
+      const { ctx, w, h } = fitCanvas(el('preview'));
+      if (w && h) { ctx.fillStyle = '#8a93a3'; ctx.font = '800 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('No second ability', w / 2, h / 2); }
+      el('stats').innerHTML = '<p class="stat-note">Pick a second ability to use with C (or the second green button on mobile).</p>';
+      return;
     }
     const A = ABILITIES[current];
     const { ctx, w, h } = fitCanvas(el('preview'));
