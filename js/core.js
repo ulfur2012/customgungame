@@ -49,7 +49,7 @@ function lineOfSight(x1, y1, x2, y2) {
 }
 
 // ---------------------------------------------------------------- guns
-const DRAW_ORDER = { stock: 0, mag: 1, barrel: 2, silencer: 3, body: 4, handle: 5 };
+const DRAW_ORDER = { stock: 0, mag: 1, barrel: 2, silencer: 3, body: 4, handle: 5, extra: 6 };
 
 // Multiplayer rules set by the host. banned = Set of 'slot:id' upgrades nobody can use.
 const Rules = { banned: new Set() };
@@ -89,6 +89,21 @@ function layoutGun(kind, build) {
     if (!part) continue;
     const pc = put(slot, part, muzzle);
     muzzle = { x: pc.x + part.tip.x, y: pc.y + part.tip.y };
+  }
+  // Extra: where it sits depends on its mount (muzzle = on the end, top = on top of the body, ...)
+  const extra = findPart('extra', build.extra);
+  if (extra) {
+    const bodyW = g.w, bar = socket('barrel'), hd = socket('handle');
+    if (extra.mount === 'muzzle') {
+      const pc = put('extra', extra, muzzle);
+      muzzle = { x: pc.x + extra.w, y: pc.y + extra.h / 2 };
+    } else {
+      const at = extra.mount === 'top'     ? { x: ox + bodyW * 0.55 - extra.w / 2, y: oy - extra.h + 2 }
+               : extra.mount === 'under'   ? { x: bar.x - extra.w - 4, y: bar.y + 6 }
+               : extra.mount === 'trigger' ? { x: hd.x + 7, y: hd.y - 2 }
+               :                             { x: ox + bodyW * 0.3, y: oy + 3 }; // side
+      pieces.push({ slot: 'extra', part: extra, x: at.x, y: at.y });
+    }
   }
   for (const slot of ['mag', 'handle', 'stock']) {
     if (!g.sockets[slot]) continue;

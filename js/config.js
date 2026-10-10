@@ -127,15 +127,15 @@ const PARTS = {
   ],
   // Extra gadgets. rangeMul = how far bullets fly, speedMul = bullet speed, spreadMul = accuracy (lower = tighter)
   extra: [
-    { id: 'scope',   name: 'Scope',         w: 26, h: 10, color: '#74b9ff', rangeMul: 1.5, assist: 0.85,
+    { id: 'scope',   name: 'Scope', mount: 'top',         w: 26, h: 10, color: '#74b9ff', rangeMul: 1.5, assist: 0.85,
       note: '+50% range · slightly thinner auto-shoot area' },
-    { id: 'muzzle',  name: 'Muzzle Boost',  w: 14, h: 10, color: '#fdcb6e', gun: 'both', speedMul: 1.6, add: { loudness: 1 },
+    { id: 'muzzle',  name: 'Muzzle Boost', mount: 'muzzle',  w: 14, h: 10, color: '#fdcb6e', gun: 'both', speedMul: 1.6, add: { loudness: 1 },
       note: 'Bullets fly 60% faster' },
-    { id: 'laser',   name: 'Laser Sight',   w: 18, h: 6,  color: '#ff3838', gun: 'both', spreadMul: 0.4,
+    { id: 'laser',   name: 'Laser Sight', mount: 'under',   w: 18, h: 6,  color: '#ff3838', gun: 'both', spreadMul: 0.4,
       note: 'Much tighter bullet spread' },
-    { id: 'trigger', name: 'Hair Trigger',  w: 10, h: 10, color: '#00cec9', gun: 'both', add: { knockback: -0.5, damage: -2 },
+    { id: 'trigger', name: 'Hair Trigger', mount: 'trigger',  w: 10, h: 10, color: '#00cec9', gun: 'both', add: { knockback: -0.5, damage: -2 },
       note: 'Shoots faster' },
-    { id: 'hollow',  name: 'Hollow Points', w: 12, h: 8,  color: '#e17055', gun: 'both', mul: { damage: 1.25, magSize: 0.8 },
+    { id: 'hollow',  name: 'Hollow Points', mount: 'side', w: 12, h: 8,  color: '#e17055', gun: 'both', mul: { damage: 1.25, magSize: 0.8 },
       note: 'Hit harder, fewer bullets per mag' },
   ],
   // Silencers make you much quieter but each one makes one stat worse.
