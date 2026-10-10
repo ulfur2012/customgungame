@@ -67,7 +67,7 @@
   const spLoadout = () => openLoadout(testMode ? 'Start test' : 'Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); Game.startSP(testMode); }, goMenu);
   // Single Player first asks: test mode on or off?
   el('spBtn').onclick = () => { el('testToggle').checked = testMode; overlay('spScreen', true); };
-  el('spStart').onclick = () => { testMode = el('testToggle').checked; overlay('spScreen', false); spLoadout(); };
+  el('spStart').onclick = () => { testMode = el('testToggle').checked; shopOn = !el('freeToggle').checked; overlay('spScreen', false); spLoadout(); };
   el('spCancel').onclick = () => overlay('spScreen', false);
   // test mode: change loadout from the pause menu, then jump straight back in
   el('testInfBtn').onclick = () => {
@@ -82,7 +82,7 @@
       () => { show(null); Game.applyLoadout(); Game.resume(); });
   };
   el('mpBtn').onclick = () => { el('mpStatus').textContent = ''; show('mp'); };
-  el('customizeBtn').onclick = () => openLoadout('Save', goMenu, goMenu);
+  el('customizeBtn').onclick = () => { shopOn = false; openLoadout('Save', goMenu, goMenu); };
   el('settingsBtn').onclick = () => overlay('settingsScreen', true);
   el('logoutBtn').onclick = () => { Account.logout(); show('login'); };
 
@@ -121,7 +121,7 @@
   el('loadoutBack').onclick = () => onBack && onBack();
 
   // ---- shop: locked cards show a price, tapping one buys it with banked score
-  const priceTag = cost => cost ? ` <small class="price">⭐ ${cost}</small>` : '';
+  const priceTag = cost => cost && shopOn ? ` <small class="price">⭐ ${cost}</small>` : '';
   // everything can be picked for free while customizing; locking in the loadout asks you to buy what you don't own
   function unowned() {
     const L = Account.user.loadout, list = [];
@@ -133,7 +133,22 @@
     for (const kind of ['main', 'secondary']) for (const sl in L[kind]) if (L[kind][sl]) list.push([`part:${kind}:${sl}:${L[kind][sl]}`, findPart(sl, L[kind][sl]).name]);
     return list.map(([key, name]) => ({ key, name, cost: priceOf(key) })).filter(x => x.cost);
   }
+  let shopOn = false; // only when the single player / host settings say upgrades aren't free
+  function stripUnowned() {
+    const L = Account.user.loadout;
+    for (const x of unowned()) {
+      const [type, a, b, c] = x.key.split(':');
+      if (type === 'part') L[a][b] = null;
+      for (const [k, pk] of [['ability', 'perk'], ['ability2', 'perk2'], ['ability3', 'perk3'], ['ability4', 'perk4']]) {
+        if (type === 'ab' && L[k] === a) { L[k] = k === 'ability' ? 'grenade' : null; L[pk] = null; }
+        if (type === 'perk' && L[pk] === a) L[pk] = null;
+      }
+    }
+    Account.save();
+    toast('Upgrades you do not own were taken out of your loadout');
+  }
   function checkout() {
+    if (!shopOn) return true;
     const u = Account.user, list = unowned();
     if (!list.length) return true;
     const total = list.reduce((n, x) => n + x.cost, 0);
@@ -147,7 +162,7 @@
 
   function renderLoadout() {
     const owe = unowned().reduce((n, x) => n + x.cost, 0);
-    el('bankLine').textContent = `⭐ ${Account.user.bank || 0} score` + (owe ? ` · loadout costs ${owe}` : '');
+    el('bankLine').textContent = `⭐ ${Account.user.bank || 0} score` + (owe && shopOn ? ` · loadout costs ${owe}` : '');
     el('presetTabs').innerHTML = '<span>Loadout</span>';
     for (let i = 0; i < LOADOUT_PRESETS; i++) {
       const b = document.createElement('button');
@@ -478,7 +493,7 @@
   function rulesText() {
     const s = lobby.settings;
     return `${s.mode === 'teams' ? 'Teams (random)' : 'Free for all'} · ${MAP.layouts[s.layout].label} · ${MAP.sizes[s.size || 'medium'].label} map` +
-      (s.banned.length ? ` · ${s.banned.length} upgrade${s.banned.length === 1 ? '' : 's'} removed` : '');
+      (s.free ? ' · all upgrades free' : ' · upgrades cost score') + (s.banned.length ? ` · ${s.banned.length} upgrade${s.banned.length === 1 ? '' : 's'} removed` : '');
   }
 
   // ---- host setup screen
@@ -492,6 +507,8 @@
     renderHostSetup();
   }
   function renderHostSetup() {
+    el('hostFree').checked = !!editing.free;
+    el('hostFree').onchange = () => { editing.free = el('hostFree').checked; };
     for (const b of el('modePick').children) {
       b.classList.toggle('active', b.dataset.v === editing.mode);
       b.onclick = () => { editing.mode = b.dataset.v; renderHostSetup(); };
@@ -593,7 +610,7 @@
       : 'Customize your guns. The host starts the round.';
   }
 
-  el('lobbyCustomize').onclick = () => openLoadout('Done', showLobby, showLobby);
+  el('lobbyCustomize').onclick = () => { shopOn = !lobby.settings.free; openLoadout('Done', showLobby, showLobby); };
   el('leaveLobby').onclick = () => { Net.leave(); goMenu(); };
 
   function broadcastRoster() {
@@ -619,6 +636,9 @@
     show(null);
     lobby.round = players;
     lobby.settings = settings;
+    // paid server: buy what you don't own, or it gets taken out of your loadout
+    shopOn = !settings.free;
+    if (unowned().length && !checkout()) stripUnowned();
     applyRules();
     buildMap(settings.layout, seed, settings.size);
     Game.startMP(players, Net.state.myId, settings.mode === 'teams');
