@@ -453,7 +453,7 @@ const ABILITIES = {
                radius: 170, time: 2.5,
                desc: 'Throw an ice bomb. Everyone it hits is frozen solid for 2.5s, you too!' },
   decoy:     { name: 'Decoy', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#dfe6e9', cooldown: 20, uses: 2,
-               radius: 20, duration: Infinity, hp: 25, speed: 220, max: 5, spareMags: 1, lowHp: 0.6,
+               radius: 20, duration: Infinity, hp: 25, speed: 220, max: 5, spareMags: 1, lowHp: 0.6, healBox: 8,
                desc: 'Throw a buddy on your team. It carries a copy of your main gun and goes out hunting enemies. 25 HP, stays until it is killed. Enemies go after it just like they go after you. Up to 5 at once. It runs out of ammo (1 spare mag) and goes to find ammo boxes, and heals itself at health packs and heal zones when hurt.' },
   barrier:   { name: 'Barrier', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#54a0ff', cooldown: 15, uses: 3,
                radius: 200, duration: Infinity, len: 400, thick: 40, hp: 150, building: true,

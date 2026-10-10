@@ -1045,13 +1045,16 @@ const Game = (() => {
       const box = near(G.packs.filter(p => p.kind === 'ammo'));
       if (box) return { x: box.x, y: box.y, why: 'ammo' };
     }
-    if (g.hp < g.maxHp * A.lowHp) {
-      const spots = [
+    // between waves it tops up on any healing in the 8x8 squares around it; during a fight only when it's low
+    const between = G.mode === 'sp' && G.phase === 'break', box = A.healBox * MAP.grid / 2;
+    if (g.hp < g.maxHp * A.lowHp || (between && g.hp < g.maxHp)) {
+      let spots = [
         ...G.packs.filter(p => !p.kind),                                   // green health packs
         ...G.zones.map(z => ({ x: z.x, y: z.y })),                         // heal zones
         ...G.turrets.filter(t => t.medic),                                  // medic turrets
         ...G.gadgets.filter(o => o !== g && !o.dead && isMine(o.owner) && (o.medicBuddy || (o.kind === 'bubble' && o.heal))),
       ];
+      if (between && g.hp >= g.maxHp * A.lowHp) spots = spots.filter(o => Math.abs(o.x - g.x) <= box && Math.abs(o.y - g.y) <= box);
       const h = near(spots);
       if (h) return { x: h.x, y: h.y, why: 'heal' };
     }
