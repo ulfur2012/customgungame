@@ -137,37 +137,123 @@ function layoutGun(kind, build) {
 const PART_SLOT = new Map();
 for (const k in PARTS) for (const p of PARTS[k]) PART_SLOT.set(p, k);
 
-// lighten (amt > 0) or darken (amt < 0) a #rrggbb colour
-function shade(hex, amt) {
-  const n = parseInt(hex.slice(1), 16), f = v => clamp(Math.round(v + (amt > 0 ? (255 - v) : v) * amt), 0, 255);
-  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
-}
+// ---- realistic vector parts (until real art arrives): real materials + real silhouettes
+const MATS = {
+  steel: ['#646a74', '#383c43', '#1c1e22'],
+  dark:  ['#4a4e55', '#2a2d32', '#141518'],
+  poly:  ['#45484e', '#2a2c30', '#151618'],
+  wood:  ['#b0723f', '#83502a', '#4f2e15'],
+  tan:   ['#cdb88f', '#a68f66', '#6e5c3d'],
+  brass: ['#f3d37a', '#c9973a', '#7a5718'],
+  pearl: ['#ffffff', '#e8e4dc', '#a9a49a'],
+};
+const EDGE = '#0b0c0e';
 
 function rrect(ctx, x, y, w, h, r) {
-  r = Math.min(r, w / 2, h / 2);
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath();
   ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
-
-// a shaded, rounded block: lighter on top, darker underneath, thin outline and a shine line
-function block(ctx, color, x, y, w, h, r = 3) {
-  const g = ctx.createLinearGradient(0, y, 0, y + h);
-  g.addColorStop(0, shade(color, 0.28)); g.addColorStop(0.45, color); g.addColorStop(1, shade(color, -0.35));
-  rrect(ctx, x, y, w, h, r);
+// fill the current path with a material (lit from above) and outline it
+function paint(ctx, mat, y, h, edge = true) {
+  const m = MATS[mat] || MATS.steel, g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, m[0]); g.addColorStop(0.35, m[1]); g.addColorStop(1, m[2]);
   ctx.fillStyle = g; ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1; ctx.stroke();
-  if (h > 5 && w > 6) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-    ctx.beginPath(); ctx.moveTo(x + Math.min(r, 3) + 1, y + 1.5); ctx.lineTo(x + w - Math.min(r, 3) - 1, y + 1.5); ctx.stroke();
-  }
+  if (edge) { ctx.strokeStyle = EDGE; ctx.lineWidth = 0.9; ctx.stroke(); }
 }
-
-function lines(ctx, list, color = 'rgba(0,0,0,0.35)', width = 1) {
-  ctx.strokeStyle = color; ctx.lineWidth = width;
+// polygon from points given in 0..1 of the box
+function poly(ctx, x, y, w, h, pts) {
+  ctx.beginPath();
+  pts.forEach(([px, py], i) => ctx[i ? 'lineTo' : 'moveTo'](x + px * w, y + py * h));
+  ctx.closePath();
+}
+function box(ctx, mat, x, y, w, h, r = 1.5) { rrect(ctx, x, y, w, h, r); paint(ctx, mat, y, h); }
+function shine(ctx, x1, y1, x2, y2, a = 0.25) {
+  ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+}
+function grooves(ctx, list, a = 0.55, wd = 0.8) {
+  ctx.strokeStyle = `rgba(0,0,0,${a})`; ctx.lineWidth = wd;
   ctx.beginPath();
   for (const [x1, y1, x2, y2] of list) { ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); }
   ctx.stroke();
+}
+const count = n => Array.from({ length: Math.max(0, n) }, (_, i) => i);
+function woodGrain(ctx, x, y, w, h) {
+  ctx.save(); ctx.clip();
+  grooves(ctx, count(4).map(i => [x, y + h * (0.2 + i * 0.2), x + w, y + h * (0.15 + i * 0.22)]), 0.18, 0.6);
+  ctx.restore();
+}
+function dark(ctx, x, y, w, h) { rrect(ctx, x, y, w, h, 0.8); ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fill(); }
+function triggerGuard(ctx, x, y, w, h) {
+  ctx.strokeStyle = '#1b1d21'; ctx.lineWidth = 1.8;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + h * 0.55); ctx.quadraticCurveTo(x, y + h, x + w * 0.5, y + h); ctx.lineTo(x + w * 1.1, y + h); ctx.lineTo(x + w * 1.25, y); ctx.stroke();
+  ctx.strokeStyle = '#3a3e45'; ctx.lineWidth = 1.2; // trigger
+  ctx.beginPath(); ctx.moveTo(x + w * 0.7, y); ctx.quadraticCurveTo(x + w * 0.8, y + h * 0.45, x + w * 0.55, y + h * 0.7); ctx.stroke();
+}
+function rail(ctx, x, y, w) {
+  box(ctx, 'dark', x, y, w, 2.6, 0.5);
+  grooves(ctx, count(Math.floor(w / 3.2)).map(i => [x + 1.6 + i * 3.2, y, x + 1.6 + i * 3.2, y + 2.6]), 0.7, 1);
+}
+
+function drawBody(ctx, part, x, y) {
+  const id = part.id, w = part.w, top = part.shape ? part.shape[0] : [0, 0, w, part.h];
+  const [tx, ty, tw, th] = top, gr = part.shape && part.shape[1] ? part.shape[1] : [w * 0.25, th, 12, part.h - th];
+  const X = x + tx, Y = y + ty, gh = Math.min(10, part.h - th);
+  if (id === 'revolver') {
+    poly(ctx, X, Y + 2, tw, 12, [[0, 0.1], [0.95, 0.1], [1, 0.35], [1, 0.9], [0.05, 1], [0, 0.7]]); paint(ctx, 'steel', Y, 14);
+    box(ctx, 'steel', x + 15, y, 18, 16, 4); // cylinder
+    grooves(ctx, [0.25, 0.5, 0.75].map(f => [x + 15 + 18 * f, y + 2, x + 15 + 18 * f, y + 14]), 0.6);
+    shine(ctx, x + 17, y + 1.5, x + 31, y + 1.5, 0.35);
+    poly(ctx, X, Y, 6, 5, [[0, 1], [0.3, 0], [1, 0.2], [1, 1]]); paint(ctx, 'steel', Y, 5); // hammer
+    triggerGuard(ctx, x + gr[0] + 6, y + 13, 8, 9);
+    return;
+  }
+  if (id === 'sawedoff') {
+    for (const yy of [1, 8]) { box(ctx, 'steel', x + 14, y + yy, w - 14, 7.5, 3.5); shine(ctx, x + 16, y + yy + 1.5, x + w - 2, y + yy + 1.5, 0.3); }
+    poly(ctx, x, y, 22, 17, [[0, 0.1], [1, 0], [1, 1], [0.15, 1], [0, 0.7]]); paint(ctx, 'steel', y, 17);
+    poly(ctx, x + 20, y + 13, 22, 5, [[0, 0], [1, 0], [0.9, 1], [0.05, 1]]); paint(ctx, 'wood', y + 13, 5); // forend
+    triggerGuard(ctx, x + 8, y + 16, 8, 9);
+    return;
+  }
+  if (part.gun === 'secondary' || part === GUNS.secondary) {
+    // pistol: steel slide on a polymer frame
+    const sh = th * 0.55, slideMat = id === 'flare' ? 'tan' : 'steel';
+    poly(ctx, X, Y + sh - 0.5, tw, th - sh + 0.5, [[0.02, 0], [1, 0], [1, 0.7], [0.35, 1], [0, 1]]);
+    paint(ctx, id === 'flare' ? 'tan' : id === 'handcannon' ? 'steel' : 'poly', Y + sh, th - sh);
+    poly(ctx, X, Y, tw, sh, [[0, 0.15], [0.03, 0], [1, 0], [1, 1], [0, 1]]); paint(ctx, slideMat, Y, sh);
+    grooves(ctx, count(5).map(i => [X + 3 + i * 2, Y + 1, X + 3 + i * 2, Y + sh - 1]), 0.6); // serrations
+    shine(ctx, X + 2, Y + 1, X + tw - 1, Y + 1, 0.35);
+    if (id !== 'flare') dark(ctx, X + tw * 0.45, Y + 1.5, tw * 0.18, sh * 0.45); // ejection port
+    else { ctx.beginPath(); ctx.arc(X + tw - 1, Y + sh / 2 + 1, sh * 0.45, 0, Math.PI * 2); ctx.fillStyle = '#1a1a1a'; ctx.fill(); }
+    triggerGuard(ctx, x + gr[0] + gr[2] * 0.6, Y + th - 1, gr[2] * 0.8, gh);
+    return;
+  }
+  // rifles / shotgun: steel receiver, details by model
+  const recv = [[0, 0.1], [0.06, 0], [0.94, 0], [1, 0.12], [1, 0.88], [0.6, 1], [0.04, 1], [0, 0.85]];
+  poly(ctx, X, Y, tw, th, recv); paint(ctx, id === 'sniper' ? 'dark' : 'steel', Y, th);
+  shine(ctx, X + 4, Y + 1.2, X + tw - 4, Y + 1.2, 0.35);
+  if (id === 'ak') {
+    poly(ctx, X + tw * 0.62, Y + th * 0.3, tw * 0.38, th * 0.72, [[0, 0], [1, 0.05], [1, 0.85], [0.08, 1], [0, 0.6]]); paint(ctx, 'wood', Y + th * 0.3, th * 0.7);
+    woodGrain(ctx, X + tw * 0.62, Y + th * 0.3, tw * 0.38, th * 0.7);
+    grooves(ctx, [[X + tw * 0.3, Y + th * 0.45, X + tw * 0.56, Y + th * 0.45]], 0.5); // dust cover line
+    box(ctx, 'steel', X + tw * 0.25, Y + th * 0.25, 4, 2.5, 1); // charging handle
+  } else if (id === 'shotgun') {
+    poly(ctx, X + tw * 0.58, Y + th * 0.5, tw * 0.36, th * 0.6, [[0, 0.1], [1, 0], [1, 0.9], [0, 1]]); paint(ctx, 'wood', Y + th * 0.5, th * 0.6);
+    grooves(ctx, count(6).map(i => [X + tw * 0.62 + i * 4.5, Y + th * 0.55, X + tw * 0.62 + i * 4.5, Y + th * 1.05]), 0.45);
+    dark(ctx, X + tw * 0.3, Y + th * 0.25, tw * 0.2, th * 0.3);
+  } else if (id === 'sniper') {
+    box(ctx, 'steel', X + tw * 0.28, Y - 1, 3, 8, 1.5); // bolt handle
+    ctx.beginPath(); ctx.arc(X + tw * 0.28 + 1.5, Y + 8.5, 2.5, 0, Math.PI * 2); paint(ctx, 'steel', Y + 6, 5);
+    poly(ctx, X + tw * 0.5, Y + th * 0.35, tw * 0.5, th * 0.65, [[0, 0], [1, 0.1], [1, 0.85], [0, 1]]); paint(ctx, 'poly', Y + th * 0.35, th * 0.65);
+  } else {
+    rail(ctx, X + tw * 0.12, Y - 2.2, tw * 0.5);
+    dark(ctx, X + tw * 0.38, Y + th * 0.3, tw * 0.16, th * 0.25); // ejection port
+    poly(ctx, X + tw * 0.6, Y + th * 0.2, tw * 0.4, th * 0.8, [[0, 0], [1, 0], [1, 0.85], [0, 1]]); paint(ctx, 'poly', Y + th * 0.2, th * 0.8); // handguard
+    grooves(ctx, count(4).map(i => [X + tw * 0.65 + i * tw * 0.08, Y + th * 0.45, X + tw * 0.69 + i * tw * 0.08, Y + th * 0.45]), 0.8, 1.6);
+  }
+  triggerGuard(ctx, x + gr[0] + 3, Y + th - 1, gr[2] * 0.7, gh);
 }
 
 function drawPart(ctx, part, x, y) {
@@ -176,71 +262,105 @@ function drawPart(ctx, part, x, y) {
     ctx.drawImage(part._img, x, y, part.w, part.h);
     return;
   }
-  const slot = PART_SLOT.get(part) || 'body', c = part.color, w = part.w, h = part.h;
+  const slot = PART_SLOT.get(part) || 'body', id = part.id, w = part.w, h = part.h;
   ctx.save();
-  ctx.lineJoin = 'round';
-  if (slot === 'barrel') {
-    block(ctx, c, x, y + 1, w - 4, h - 2, h / 2);
-    block(ctx, shade(c, -0.3), x + w - 6, y, 6, h, 2); // muzzle ring
-    if (w > 40) lines(ctx, Array.from({ length: Math.floor(w / 14) }, (_, i) => [x + 8 + i * 12, y + h / 2, x + 13 + i * 12, y + h / 2]), 'rgba(0,0,0,0.45)', 2); // vents
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  if (slot === 'body') drawBody(ctx, part, x, y);
+  else if (slot === 'barrel') {
+    const bh = id === 'heavy' ? h * 0.75 : h * 0.55, by = y + (h - bh) / 2;
+    if (w > 30) { poly(ctx, x + w - 10, y - 3, 4, by - y + 3.5, [[0.2, 0], [0.8, 0], [1, 1], [0, 1]]); paint(ctx, 'dark', y - 3, by - y + 3); } // front sight
+    box(ctx, id === 'sniper' ? 'dark' : 'steel', x, by, w, bh, bh / 2);
+    shine(ctx, x + 1, by + bh * 0.3, x + w - 2, by + bh * 0.3, 0.35);
+    if (id === 'heavy') grooves(ctx, [[x + 4, by + bh * 0.6, x + w - 6, by + bh * 0.6]], 0.6, 1); // fluting
+    if (id === 'short') { box(ctx, 'dark', x + w - 7, y + 1, 7, h - 2, 1); grooves(ctx, [[x + w - 5, y + 2, x + w - 5, y + h - 2], [x + w - 2.5, y + 2, x + w - 2.5, y + h - 2]], 0.8); } // flash hider
+    else box(ctx, 'dark', x + w - 3, by - 0.5, 3, bh + 1, 1); // crown
   } else if (slot === 'silencer') {
-    block(ctx, c, x, y, w, h, h / 2.2);
-    lines(ctx, [0.25, 0.5, 0.75].map(f => [x + w * f, y + 2, x + w * f, y + h - 2]));
+    box(ctx, 'poly', x, y, w, h, h * 0.35);
+    shine(ctx, x + 3, y + h * 0.22, x + w - 3, y + h * 0.22, 0.25);
+    grooves(ctx, [[x + 3, y + 1, x + 3, y + h - 1]], 0.7);
+    rrect(ctx, x + w * 0.62, y + 0.5, 3, h - 1, 0.5); ctx.fillStyle = part.color; ctx.globalAlpha = 0.85; ctx.fill(); ctx.globalAlpha = 1; // colour band
   } else if (slot === 'mag') {
-    if (part.id.includes('drum')) {
-      const r = Math.min(w, h) / 2, g = ctx.createRadialGradient(x + r * 0.7, y + r * 0.7, 1, x + r, y + r, r);
-      g.addColorStop(0, shade(c, 0.35)); g.addColorStop(1, shade(c, -0.35));
-      ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, r, 0, Math.PI * 2);
-      ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
-      ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, r * 0.35, 0, Math.PI * 2); ctx.fillStyle = shade(c, -0.4); ctx.fill();
+    if (id.includes('drum')) {
+      const r = Math.min(w, h) / 2, cx = x + w / 2, cy = y + h / 2;
+      box(ctx, 'dark', cx - r * 0.45, y - 1, r * 0.9, r * 0.6, 1); // feed neck
+      ctx.beginPath(); ctx.arc(cx, cy + 1, r, 0, Math.PI * 2); paint(ctx, 'poly', cy - r, r * 2);
+      ctx.beginPath(); ctx.arc(cx, cy + 1, r * 0.72, 0, Math.PI * 2); ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath(); ctx.arc(cx, cy + 1, r * 0.25, 0, Math.PI * 2); paint(ctx, 'steel', cy - r * 0.25, r * 0.5);
+    } else if (id === 'extended' || id === 'dual') {
+      // curved "banana" mag (dual = two taped together)
+      const k = id === 'dual' ? w / 2 : w;
+      for (const ox of id === 'dual' ? [w / 2, 0] : [0]) {
+        ctx.beginPath();
+        ctx.moveTo(x + ox, y); ctx.lineTo(x + ox + k, y);
+        ctx.quadraticCurveTo(x + ox + k + k * 0.15, y + h * 0.6, x + ox + k + k * 0.55, y + h);
+        ctx.lineTo(x + ox + k * 0.55, y + h); ctx.quadraticCurveTo(x + ox - k * 0.1, y + h * 0.55, x + ox, y);
+        ctx.closePath(); paint(ctx, id === 'dual' ? 'steel' : 'poly', y, h);
+        grooves(ctx, count(Math.floor(h / 7)).map(i => [x + ox + 2 + i * 0.6, y + 5 + i * 7, x + ox + k - 1 + i * 0.9, y + 5 + i * 7]), 0.35);
+      }
+      if (id === 'dual') grooves(ctx, [[x, y + h * 0.45, x + w, y + h * 0.45]], 0.85, 3); // tape
     } else {
-      block(ctx, c, x, y, w, h, 2);
-      lines(ctx, Array.from({ length: Math.floor(h / 6) }, (_, i) => [x + 2, y + 5 + i * 6, x + w - 2, y + 5 + i * 6]), 'rgba(0,0,0,0.25)');
-      block(ctx, shade(c, -0.3), x - 1, y + h - 4, w + 2, 4, 1.5); // base plate
+      box(ctx, id === 'heavy' ? 'steel' : 'poly', x, y, w, h - 2, 1);
+      grooves(ctx, count(Math.floor((h - 6) / 6)).map(i => [x + 2, y + 5 + i * 6, x + w - 2, y + 5 + i * 6]), 0.3);
+      box(ctx, 'dark', x - 0.5, y + h - 3, w + 1, 3, 1); // floor plate
+      if (id === 'speedload') { ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, w * 0.3, 0, Math.PI * 2); paint(ctx, 'brass', y, h); }
     }
   } else if (slot === 'handle') {
-    // slanted grip
-    const g = ctx.createLinearGradient(x, 0, x + w, 0);
-    g.addColorStop(0, shade(c, 0.25)); g.addColorStop(1, shade(c, -0.35));
-    ctx.beginPath();
-    ctx.moveTo(x + 1, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w - 2, y + h - 2);
-    ctx.quadraticCurveTo(x + w - 3, y + h, x + w - 6, y + h); ctx.lineTo(x - 2, y + h); ctx.quadraticCurveTo(x - 4, y + h, x - 3, y + h - 3); ctx.closePath();
-    ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
-    lines(ctx, Array.from({ length: Math.floor(h / 5) - 1 }, (_, i) => [x + 1 - i * 0.3, y + 5 + i * 5, x + w - 3 - i * 0.1, y + 5 + i * 5]), 'rgba(0,0,0,0.3)');
+    const mat = id === 'pearl' ? 'pearl' : id === 'heavy' ? 'wood' : 'poly';
+    const lean = id === 'angled' ? 0.45 : 0.25;
+    poly(ctx, x, y, w, h, [[0, 0], [1, 0], [1 - lean * 0.3, 0.92], [0.72 - lean, 1], [-lean, 1], [-lean * 0.7, 0.85]]); paint(ctx, mat, y, h);
+    ctx.save(); ctx.clip();
+    if (mat === 'poly') { ctx.fillStyle = 'rgba(0,0,0,0.35)'; for (let yy = 4; yy < h - 2; yy += 2.2) for (let xx = -6; xx < w; xx += 2.2) ctx.fillRect(x + xx, y + yy, 0.8, 0.8); } // stipple
+    if (id === 'wrapped') grooves(ctx, count(Math.floor(h / 3)).map(i => [x - 6, y + 3 + i * 3, x + w, y + 1 + i * 3]), 0.6, 1.2);
+    if (mat === 'wood') grooves(ctx, count(4).map(i => [x - 6, y + h * (0.2 + i * 0.2), x + w, y + h * (0.1 + i * 0.22)]), 0.18, 0.6);
+    ctx.restore();
+    shine(ctx, x + w - 1.5, y + 2, x + w - 1.5 - lean * 3, y + h - 3, 0.2);
   } else if (slot === 'stock') {
-    const g = ctx.createLinearGradient(0, y, 0, y + h);
-    g.addColorStop(0, shade(c, 0.25)); g.addColorStop(1, shade(c, -0.35));
-    ctx.beginPath(); // thin at the gun, wide butt at the back
-    ctx.moveTo(x + w, y + 1); ctx.lineTo(x + 4, y); ctx.quadraticCurveTo(x, y, x, y + 4);
-    ctx.lineTo(x, y + h - 2); ctx.quadraticCurveTo(x, y + h, x + 3, y + h); ctx.lineTo(x + w, y + h * 0.6); ctx.closePath();
-    ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
-    if (part.id === 'skeleton') { rrect(ctx, x + 6, y + 3, w - 14, h * 0.35, 2); ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill(); }
-    block(ctx, shade(c, -0.45), x, y, 3, h, 1); // butt pad
-  } else if (slot === 'bullets') {
-    // a little cartridge: brass case + coloured tip
-    const cw = w * 0.55;
-    block(ctx, '#d4a537', x, y, cw, h, 1.5);
-    ctx.beginPath(); ctx.moveTo(x + cw, y + 0.5); ctx.quadraticCurveTo(x + w, y + h / 2 - 1, x + w, y + h / 2); ctx.quadraticCurveTo(x + w, y + h / 2 + 1, x + cw, y + h - 0.5); ctx.closePath();
-    ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
-  } else if (slot === 'extra' && part.id === 'scope') {
-    block(ctx, c, x + 4, y + 1, w - 8, h - 4, 3);
-    block(ctx, shade(c, -0.25), x, y, 6, h - 2, 2); block(ctx, shade(c, -0.25), x + w - 6, y, 6, h - 2, 2);
-    ctx.fillStyle = 'rgba(180,230,255,0.9)'; ctx.fillRect(x + w - 2, y + 2, 1.5, h - 6); // lens glint
-  } else if (slot === 'extra' && part.id === 'laser') {
-    block(ctx, c, x, y, w, h, 2);
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + w - 2, y + h / 2, 1.5, 0, Math.PI * 2); ctx.fill();
-  } else if (slot === 'extra' && part.id === 'reddot') {
-    block(ctx, c, x, y + h * 0.4, w, h * 0.6, 2);
-    rrect(ctx, x + w * 0.3, y, w * 0.45, h * 0.55, 2); ctx.strokeStyle = shade(c, -0.3); ctx.lineWidth = 1.5; ctx.stroke();
-  } else {
-    // bodies (and anything else): rounded shaded blocks + details
-    for (const [rx, ry, rw, rh] of part.shape || [[0, 0, w, h]]) block(ctx, c, x + rx, y + ry, rw, rh, Math.min(4, rh / 3));
-    if (slot === 'body' && w > 40) {
-      const top = (part.shape ? part.shape[0] : [0, 0, w, h]);
-      ctx.fillStyle = 'rgba(0,0,0,0.35)'; // ejection port
-      rrect(ctx, x + top[0] + top[2] * 0.42, y + top[1] + 3, top[2] * 0.16, Math.max(2, top[3] * 0.22), 1); ctx.fill();
-      lines(ctx, [[x + top[0] + top[2] * 0.68, y + top[1] + top[3] * 0.55, x + top[0] + top[2] * 0.92, y + top[1] + top[3] * 0.55]], 'rgba(255,255,255,0.18)');
+    if (id === 'tactical' || id === 'brace') {
+      box(ctx, 'dark', x + w * 0.35, y + h * 0.3, w * 0.65, h * 0.32, 2); // buffer tube
+      poly(ctx, x, y, w * 0.55, h, [[0, 0], [1, 0.15], [1, 0.75], [0.2, 1], [0, 1]]); paint(ctx, 'poly', y, h);
+      grooves(ctx, [[x + w * 0.1, y + h * 0.3, x + w * 0.45, y + h * 0.35]], 0.5);
+    } else if (id === 'skeleton' || id === 'folding') {
+      ctx.strokeStyle = '#2a2d32'; ctx.lineWidth = id === 'folding' ? 1.6 : 2.4;
+      ctx.beginPath(); ctx.moveTo(x + w, y + h * 0.15); ctx.lineTo(x + 2, y + 1); ctx.lineTo(x + 2, y + h - 1); ctx.lineTo(x + w, y + h * 0.75); ctx.stroke();
+      box(ctx, 'poly', x, y, 3.5, h, 1); // butt plate
+    } else {
+      const mat = id === 'heavy' ? 'wood' : 'poly';
+      ctx.beginPath();
+      ctx.moveTo(x + w, y + h * 0.1); ctx.lineTo(x + 3, y); ctx.lineTo(x, y + 1); ctx.lineTo(x, y + h);
+      ctx.lineTo(x + w * 0.35, y + h); ctx.quadraticCurveTo(x + w * 0.6, y + h * 0.6, x + w, y + h * 0.65); ctx.closePath(); paint(ctx, mat, y, h);
+      if (mat === 'wood') woodGrain(ctx, x, y, w, h);
+      shine(ctx, x + 3, y + 1, x + w - 2, y + h * 0.1 + 0.8, 0.25);
+      box(ctx, id === 'padded' ? 'poly' : 'dark', x - 1, y - 0.5, id === 'padded' ? 5 : 3, h + 1, 1.5); // butt pad
     }
+  } else if (slot === 'bullets') {
+    const cw = w * 0.6;
+    rrect(ctx, x, y, cw, h, 1); paint(ctx, 'brass', y, h);
+    grooves(ctx, [[x + 2, y + 0.5, x + 2, y + h - 0.5]], 0.5);
+    ctx.beginPath(); ctx.moveTo(x + cw, y + 0.6); ctx.quadraticCurveTo(x + w, y + h * 0.2, x + w, y + h / 2); ctx.quadraticCurveTo(x + w, y + h * 0.8, x + cw, y + h - 0.6); ctx.closePath();
+    paint(ctx, id === 'piercing' ? 'steel' : 'brass', y, h);
+    if (id !== 'piercing') { ctx.fillStyle = part.color; ctx.globalAlpha = 0.7; ctx.fill(); ctx.globalAlpha = 1; } // painted tip
+  } else if (id === 'scope') {
+    box(ctx, 'dark', x + w * 0.25, y + h - 3, 3, 3, 0.5); box(ctx, 'dark', x + w * 0.65, y + h - 3, 3, 3, 0.5); // rings
+    poly(ctx, x, y, w, h - 2, [[0, 0], [0.18, 0.2], [0.82, 0.2], [1, 0], [1, 1], [0.82, 0.8], [0.18, 0.8], [0, 1]]); paint(ctx, 'poly', y, h - 2);
+    box(ctx, 'dark', x + w * 0.44, y - 2, 3.5, 3, 0.5); // turret
+    ctx.fillStyle = 'rgba(90,170,255,0.8)'; ctx.fillRect(x + w - 1.2, y + 1, 1, h - 4); // lens
+  } else if (id === 'reddot') {
+    box(ctx, 'poly', x, y + h * 0.55, w, h * 0.45, 1);
+    rrect(ctx, x + w * 0.2, y, w * 0.6, h * 0.65, 1.5); ctx.strokeStyle = '#26282c'; ctx.lineWidth = 1.6; ctx.stroke();
+    ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(x + w * 0.5, y + h * 0.33, 0.9, 0, Math.PI * 2); ctx.fill();
+  } else if (id === 'laser') {
+    box(ctx, 'poly', x, y, w, h, 1.5);
+    ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(x + w - 1.6, y + h / 2, 1.2, 0, Math.PI * 2); ctx.fill();
+  } else if (id === 'muzzle') {
+    box(ctx, 'dark', x, y, w, h, 1.5); // muzzle brake with side ports
+    grooves(ctx, [[x + w * 0.35, y + 2, x + w * 0.35, y + h - 2], [x + w * 0.65, y + 2, x + w * 0.65, y + h - 2]], 0.9, 1.6);
+  } else if (id === 'trigger') {
+    ctx.strokeStyle = '#c9973a'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(x + 2, y); ctx.quadraticCurveTo(x + w * 0.8, y + h * 0.5, x + 3, y + h); ctx.stroke();
+  } else if (id === 'hollow') {
+    for (const ox of [0, 4, 8]) { ctx.beginPath(); ctx.arc(x + ox + 2, y + h / 2, 2, 0, Math.PI * 2); paint(ctx, 'brass', y, h); }
+  } else {
+    box(ctx, 'poly', x, y, w, h, 1.5);
   }
   ctx.restore();
 }
