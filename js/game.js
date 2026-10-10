@@ -8,7 +8,7 @@ const Game = (() => {
 
   let W = 0, H = 0, DPR = 1, zoom = 1;
   let G = null, raf = 0, last = 0;
-  const hooks = { spOver: () => {}, myDeath: () => {} };
+  const hooks = { spOver: () => {}, myDeath: () => {}, bossDown: () => {} };
 
   function resize() {
     DPR = Math.min(devicePixelRatio || 1, 2);
@@ -31,12 +31,15 @@ const Game = (() => {
   function newSlot(ability) {
     return { ability: ABILITIES[ability] ? ability : null, abCd: 0, abUses: (ABILITIES[ability] || {}).uses ?? Infinity, abWasHeld: false, abAiming: false, refillT: undefined };
   }
-  function swapAlt() {
+  // slot = 'alt' (2nd ability) or 'alt3' (3rd ability, unlocks at wave 50)
+  function swapAlt(slot = 'alt') {
     const me = G.me;
-    for (const k of SLOT_KEYS) { const v = me[k]; me[k] = me.alt[k]; me.alt[k] = v; }
+    for (const k of SLOT_KEYS) { const v = me[k]; me[k] = me[slot][k]; me[slot][k] = v; }
   }
-  // is this ability equipped in either slot? (passives work from both)
-  const hasAb = id => G.me.ability === id || G.me.alt.ability === id;
+  // is this ability equipped in any slot? (passives work from all of them)
+  const hasAb = id => G.me.ability === id || G.me.alt.ability === id || G.me.alt3.ability === id;
+  const slot3Open = () => G.mode === 'sp' && (G.test || G.wave >= SLOT3_WAVE);
+  const allSlots = () => [G.me, G.me.alt, G.me.alt3];
 
   function newState(mode, spawn, color) {
     const L = Account.user.loadout;
@@ -46,7 +49,7 @@ const Game = (() => {
         x: spawn[0], y: spawn[1], r: PLAYER.r, hp: PLAYER.hp, maxHp: PLAYER.hp, aim: 0, vx: 0, vy: 0,
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
-        alt: newSlot(L.ability2),
+        alt: newSlot(L.ability2), alt3: newSlot(null),
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
         ult: null, stimT: 0, frenzyT: 0, stormN: 0, stormT: 0, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
@@ -67,7 +70,7 @@ const Game = (() => {
   function applyPerk(me) {
     for (const k in ABILITIES) Object.assign(ABILITIES[k], structuredClone(ABILITY_BASE[k]));
     const L = Account.user.loadout;
-    for (const [ab, pid] of [[me.ability, L.perk], [me.alt.ability, L.perk2]]) {
+    for (const [ab, pid] of [[me.ability, L.perk], [me.alt.ability, L.perk2], [me.alt3.ability, L.perk3]]) {
       const perk = (ABILITY_PERKS[ab] || []).find(p => p.id === pid), A = ABILITIES[ab];
       if (!perk || !A) continue;
       for (const k in perk.add || {}) A[k] = (A[k] || 0) + perk.add[k];
@@ -87,13 +90,15 @@ const Game = (() => {
     }
     me.abUses = (ABILITIES[me.ability] || {}).uses ?? Infinity;
     me.alt.abUses = (ABILITIES[me.alt.ability] || {}).uses ?? Infinity;
+    me.alt3.abUses = (ABILITIES[me.alt3.ability] || {}).uses ?? Infinity;
   }
 
   function applyBandolier(me) {
     applyPerk(me);
     me.maxHp = hasAb('glass') ? ABILITIES.glass.hp : PLAYER.hp;
     me.hp = Math.min(me.hp, me.maxHp);
-    if (!hasAb('bandolier')) return;
+    if (!hasAb('bandolier') || me.guns.bandolier) return;
+    me.guns.bandolier = true;
     for (const g of me.guns) {
       if (g.stats.flare || g.stats.maxReserve === 0) continue;
       const extra = g.stats.magSize * ABILITIES.bandolier.mags;
@@ -122,6 +127,18 @@ const Game = (() => {
     G.packs.push({ id: Math.random().toString(36).slice(2, 9), x, y, kind: 'epic' });
   }
 
+  // after a boss: swap abilities only (guns, ammo and health stay as they are)
+  function applyAbilities() {
+    if (!G) return;
+    const me = G.me, L = Account.user.loadout;
+    me.ability = L.ability; me.abCd = 0; me.abWasHeld = me.abAiming = false;
+    me.alt = newSlot(L.ability2);
+    me.alt3 = newSlot(slot3Open() ? L.ability3 : null);
+    applyBandolier(me);
+    abCache = abCache2 = abCache3 = '';
+    updateWeaponBar(true);
+  }
+
   function applyLoadout() {
     if (!G) return;
     const me = G.me, L = Account.user.loadout;
@@ -130,6 +147,7 @@ const Game = (() => {
     me.ability = L.ability;
     me.abCd = 0; me.abUses = (ABILITIES[L.ability] || {}).uses ?? Infinity;
     me.alt = newSlot(L.ability2); abCache2 = '';
+    me.alt3 = newSlot(slot3Open() ? L.ability3 : null); abCache3 = '';
     me.shield = 0; me.shieldT = 0; me.speedT = 0; me.rapidT = 0; me.slowT = 0; me.lastStand = false;
     applyBandolier(me);
     abCache = '';
@@ -159,10 +177,11 @@ const Game = (() => {
   }
 
   function begin() {
+    if (slot3Open()) G.me.alt3 = newSlot(Account.user.loadout.ability3);
     applyBandolier(G.me);
     if (G.me.synergies.length) G.banner = { text: `COMBO: ${G.me.synergies.join(' + ').toUpperCase()}`, t: 2.5 };
     Input.reset();
-    abCache = abCache2 = '';
+    abCache = abCache2 = abCache3 = '';
     updateWeaponBar(true);
     document.body.classList.add('in-game');
     last = performance.now();
@@ -264,7 +283,7 @@ const Game = (() => {
     const aim = Input.aim(scr.x, scr.y);
     if (aim.angle !== null) me.aim = aim.angle;
     updateAbility(dt);
-    const abAim = me.abAiming || me.alt.abAiming;
+    const abAim = me.abAiming || me.alt.abAiming || me.alt3.abAiming;
     let fire = aim.fire && !abAim;
     if (Settings.mobile) {
       // Brawl Stars style: hold the aim stick and it fires by itself when an enemy is in your sights
@@ -584,6 +603,7 @@ const Game = (() => {
     }
     updateSlot(dt, 0);
     swapAlt(); updateSlot(dt, 1); swapAlt();
+    if (me.alt3.ability) { swapAlt('alt3'); updateSlot(dt, 2); swapAlt('alt3'); }
   }
 
   // one ability slot (slot 1's state is swapped into `me` while this runs)
@@ -610,7 +630,7 @@ const Game = (() => {
       }
       return;
     }
-    const pressed = Input.take(slot ? 'ab2Press' : 'abPress');
+    const pressed = Input.take(['abPress', 'ab2Press', 'ab3Press'][slot]);
     const held = Input.abilityHeld(slot);
     const ready = me.abCd === 0 && me.abUses > 0 && (me.ability !== 'shield' || me.shieldT === 0 || G.infAbility);
     const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'resupply', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability);
@@ -1051,7 +1071,7 @@ const Game = (() => {
       let spots = [
         ...G.packs.filter(p => !p.kind),                                   // green health packs
         ...G.zones.map(z => ({ x: z.x, y: z.y })),                         // heal zones
-        ...G.turrets.filter(t => t.medic),                                  // medic turrets
+        ...G.turrets.filter(t => t.medic),                                  // medic + heal turrets
         ...G.gadgets.filter(o => o !== g && !o.dead && isMine(o.owner) && (o.medicBuddy || (o.kind === 'bubble' && o.heal))),
       ];
       if (between && g.hp >= g.maxHp * A.lowHp) spots = spots.filter(o => Math.abs(o.x - g.x) <= box && Math.abs(o.y - g.y) <= box);
@@ -1514,7 +1534,7 @@ const Game = (() => {
         } else me.stormN = 0;
       }
     }
-    if (me.overT > 0) for (const s of [me, me.alt]) { s.abCd = 0; if (s.abUses < 1) s.abUses = 1; } // overdrive: ability spam
+    if (me.overT > 0) for (const s of allSlots()) { s.abCd = 0; if (s.abUses < 1) s.abUses = 1; } // overdrive: ability spam
     if (me.fountT > 0) {
       me.fountT -= dt; me.fountTick -= dt;
       if (me.fountTick <= 0) { me.fountTick = 1; if (me.alive && me.hp < me.maxHp) heal(ULTIMATES.fountain.perSec); }
@@ -1716,6 +1736,28 @@ const Game = (() => {
         }
         continue;
       }
+      if (t.healer) { // HEAL TURRET: healing beam at the most hurt buddy (or you) it can see
+        t.beamT -= dt;
+        if (t.beam) { t.beam.life -= dt; if (t.beam.life <= 0) t.beam = null; }
+        if (t.beamT <= 0) {
+          const me = G.me, cands = G.gadgets.filter(g => g.kind === 'decoy' && !g.dead && isMine(g.owner) && g.hp < g.maxHp);
+          if (me.alive && me.hp < me.maxHp) cands.push(me);
+          let pick = null, worst = 1;
+          for (const c of cands) {
+            const frac = c.hp / c.maxHp;
+            if (frac < worst && Math.hypot(c.x - t.x, c.y - t.y) <= COMBO.healRange && lineOfSight(t.x, t.y, c.x, c.y)) { pick = c; worst = frac; }
+          }
+          if (pick) {
+            t.beamT = COMBO.healEvery;
+            const amt = pick === me ? COMBO.healBeamMe : COMBO.healBeam;
+            if (pick === me) heal(amt);
+            else { pick.hp = Math.min(pick.maxHp, pick.hp + amt); G.texts.push({ x: pick.x, y: pick.y - 34, text: `+${amt}`, color: '#4cff7a', life: 0.9 }); }
+            t.beam = { x: pick.x, y: pick.y, life: 0.35 };
+            t.aim = Math.atan2(pick.y - t.y, pick.x - t.x);
+            burst(pick.x, pick.y, '#32ff7e', 12, 180);
+          } else t.beamT = 0.3;
+        }
+      }
       if (t.medic) { // medic turret heals you when you're close
         t.healT -= dt;
         if (t.healT <= 0) { t.healT = 1; const me = G.me; if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - t.x, me.y - t.y) <= COMBO.medicRadius) heal(COMBO.medicHeal); healBuddies(t.x, t.y, COMBO.medicRadius, COMBO.medicHeal); }
@@ -1773,6 +1815,15 @@ const Game = (() => {
         drawBar(t.x, t.y - 38, 56, 6, t.hp / t.maxHp, false, '#e17055');
         continue;
       }
+      if (t.beam) {
+        ctx.save(); ctx.lineCap = 'round';
+        ctx.strokeStyle = `rgba(50,255,126,${0.35 * t.beam.life / 0.35})`; ctx.lineWidth = 14;
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(t.beam.x, t.beam.y); ctx.stroke();
+        ctx.strokeStyle = `rgba(220,255,230,${t.beam.life / 0.35})`; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.lineTo(t.beam.x, t.beam.y); ctx.stroke();
+        ctx.restore();
+      }
+      if (t.healer) { ctx.strokeStyle = '#32ff7e'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(t.x, t.y, 22, 0, Math.PI * 2); ctx.stroke(); }
       if (t.medic) {
         const k = (G.time % 1.2) / 1.2;
         ctx.strokeStyle = `rgba(50,255,126,${0.5 * (1 - k)})`; ctx.lineWidth = 3;
@@ -1874,6 +1925,8 @@ const Game = (() => {
       n.t += dt;
       if (n.t < G_.flight) continue;
       n.done = true;
+      const medT = n.kind === 'medic' && isMine(n.owner) && G.turrets.find(t => t.medic && !t.healer && t.hp > 0 && Math.hypot(t.x - n.x1, t.y - n.y1) <= COMBO.near);
+      if (medT) { medT.healer = true; medT.beamT = 1; comboFx(medT.x, medT.y, '#32ff7e', 'HEAL TURRET'); continue; }
       const dome = n.kind === 'medic' && isMine(n.owner) && myGadget('bubble', n.x1, n.y1, ABILITIES.bubble.radius);
       const bud = n.kind === 'medic' && isMine(n.owner) && myGadget('decoy', n.x1, n.y1, COMBO.near);
       if (dome && !dome.heal) { upgradeGadget(dome, 'heal'); dome.t += COMBO.domeTime; comboFx(dome.x, dome.y, '#32ff7e', 'HEALING DOME'); }
@@ -2059,14 +2112,14 @@ const Game = (() => {
         updateWeaponBar(true);
       } else if (p.kind === 'epic') {
         if (me.ult) continue; // already holding one
-        me.ult = rollUlt([me.ability, me.alt.ability]);
+        me.ult = rollUlt(allSlots().map(s => s.ability));
         G.banner = { text: `ULTIMATE: ${ULTIMATES[me.ult].name}! (${Settings.mobile ? 'gold button' : 'press F'})`, t: 3 };
         burst(me.x, me.y, '#ffd700', 40, 400);
       } else if (p.kind === 'ability') {
         // rare red crate: all ability uses back and no cooldown
         const needs = s => { const A = ABILITIES[s.ability]; return A && A.type !== 'passive' && (s.abUses < (A.uses ?? Infinity) || s.abCd > 0); };
-        if (!needs(me) && !needs(me.alt)) continue;
-        for (const s of [me, me.alt]) if (needs(s)) { s.abUses = ABILITIES[s.ability].uses ?? Infinity; s.abCd = 0; }
+        if (!allSlots().some(needs)) continue;
+        for (const s of allSlots()) if (needs(s)) { s.abUses = ABILITIES[s.ability].uses ?? Infinity; s.abCd = 0; }
         G.texts.push({ x: me.x, y: me.y - 34, text: 'ABILITY RESTORED', color: '#ff5d5d', life: 1.2 });
         updateWeaponBar(true);
       } else {
@@ -2158,6 +2211,9 @@ const Game = (() => {
       G.breakT -= dt;
       if (G.breakT > 0) return;
       G.wave++;
+      if (G.mode === 'sp' && G.wave === SLOT3_WAVE && !G.me.alt3.ability && Account.user.loadout.ability3) {
+        G.me.alt3 = newSlot(Account.user.loadout.ability3); applyPerk(G.me); abCache3 = '';
+      }
       G.phase = 'fight';
       G.spawnT = 0;
       if (G.wave % BOSS_EVERY === 0) {
@@ -2507,11 +2563,12 @@ const Game = (() => {
       leaveArena();
       G.boss = null;
       // beating a boss gives your ability back
-      for (const s of [G.me, G.me.alt]) {
+      for (const s of allSlots()) {
         const A = ABILITIES[s.ability];
         if (A && A.type !== 'passive') { s.abUses = A.uses ?? Infinity; s.abCd = 0; }
       }
       G.banner = { text: `${e.name || 'Boss'} defeated! Ability restored`, t: 2.5 };
+      if (G.mode === 'sp') setTimeout(() => G && hooks.bossDown({ unlocked3: G.wave >= SLOT3_WAVE && G.wave - BOSS_EVERY < SLOT3_WAVE }), 1200);
       updateWeaponBar(true);
     }
   }
@@ -2692,6 +2749,7 @@ const Game = (() => {
       // aim area: on mobile while aiming (it auto-shoots there); on PC always shown, but you shoot yourself
       if (me.abAiming) drawAbilityAim(me);
       else if (me.alt.abAiming) { swapAlt(); drawAbilityAim(me); swapAlt(); }
+      else if (me.alt3.abAiming) { swapAlt('alt3'); drawAbilityAim(me); swapAlt('alt3'); }
       else if (Settings.mobile ? Input.sticks.aim : Input.mouse.active) drawAimLine(me);
       drawPlayer(me, me.color, gun.sprite, false, me.meleeInv > 0 && Math.floor(me.meleeInv * 20) % 2);
       // health bar right above you — the middle of the screen
@@ -3055,7 +3113,7 @@ const Game = (() => {
         : g.ammo === 0 && g.reserve === 0 ? 'OUT OF AMMO' : `${g.ammo} | ${g.reserve}`;
     });
   }
-  let abCache = '', abCache2 = '';
+  let abCache = '', abCache2 = '', abCache3 = '';
   // which timer a running ability shows on its button
   const RUNNING = { shield: 'shieldT', rapid: 'rapidT', slowmo: 'slowT', phase: 'phaseT', reflect: 'reflectT', stim: 'stimT' };
   function updateAbilityBtn() {
@@ -3065,6 +3123,7 @@ const Game = (() => {
     if (!U) ub.dataset.k = '';
     abCache = paintAbilityBtn(el('abilityBtn'), abCache);
     swapAlt(); abCache2 = paintAbilityBtn(el('ability2Btn'), abCache2); swapAlt();
+    swapAlt('alt3'); abCache3 = paintAbilityBtn(el('ability3Btn'), abCache3); swapAlt('alt3');
   }
   function paintAbilityBtn(btn, cache) {
     const me = G.me, A = ABILITIES[me.ability];
@@ -3094,7 +3153,7 @@ const Game = (() => {
   function resume() { if (G) { G.paused = false; last = performance.now(); } }
 
   return {
-    startSP, startMP, stop, pause, resume, applyLoadout, spawnEpic,
+    startSP, startMP, stop, pause, resume, applyLoadout, applyAbilities, spawnEpic,
     get test() { return !!(G && G.test); },
     get infAbility() { return !!(G && G.infAbility); },
     set infAbility(v) { if (G) G.infAbility = v; },

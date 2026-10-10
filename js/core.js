@@ -364,6 +364,7 @@ const Account = {
     u.loadout = u.presets[u.active];
     for (const p of u.presets) if (!ABILITIES[p.ability]) p.ability = 'grenade';
     for (const p of u.presets) if (p.ability2 && (!ABILITIES[p.ability2] || p.ability2 === p.ability)) p.ability2 = null;
+    for (const p of u.presets) if (p.ability3 && (!ABILITIES[p.ability3] || p.ability3 === p.ability || p.ability3 === p.ability2)) p.ability3 = null;
     for (const L of this.user.presets) for (const kind of ['main', 'secondary']) {
       const b = { ...emptyBuild(), ...L[kind] };
       for (const s of SLOTS) if (b[s.key] && !partsFor(kind, s.key).some(p => p.id === b[s.key])) b[s.key] = null;

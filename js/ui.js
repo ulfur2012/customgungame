@@ -109,7 +109,9 @@
   // ---------------------------------------------------------------- loadout builder
   let gunKind = 'main', slot = 'barrel', onDone = null, onBack = null;
 
-  function openLoadout(doneLabel, done, back) {
+  function openLoadout(doneLabel, done, back, abilitiesOnly = false) {
+    el('loadout').classList.toggle('abilities-only', abilitiesOnly);
+    if (abilitiesOnly) gunKind = 'ability';
     el('loadoutDone').textContent = doneLabel;
     onDone = done; onBack = back;
     show('loadout');
@@ -130,7 +132,7 @@
     el('gunTabs').innerHTML = '';
     for (const kind of ['main', 'secondary', 'ability']) {
       const b = document.createElement('button');
-      b.className = 'gun-tab' + (kind === gunKind ? ' active' : '');
+      b.className = 'gun-tab' + (kind === gunKind ? ' active' : '') + (kind === 'ability' ? ' ability-tab' : '');
       b.textContent = kind === 'ability' ? 'Ability' : GUNS[kind].name;
       b.onclick = () => { gunKind = kind; renderLoadout(); };
       el('gunTabs').appendChild(b);
@@ -190,11 +192,12 @@
   let abSlot = 0; // which ability slot the Ability tab is editing (0 = E, 1 = C)
   function renderAbilities() {
     const L = Account.user.loadout;
-    const key = abSlot ? 'ability2' : 'ability', perkKey = abSlot ? 'perk2' : 'perk';
+    const KEYS = ['ability', 'ability2', 'ability3'], PERKS = ['perk', 'perk2', 'perk3'];
+    const key = KEYS[abSlot], perkKey = PERKS[abSlot];
     const current = L[key];
     // two slot tabs, like the upgrade slots
     el('slotTabs').innerHTML = '';
-    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2']].forEach(([label, k], i) => {
+    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2'], [`Ability 3 (V) · wave ${SLOT3_WAVE}+`, 'ability3']].forEach(([label, k], i) => {
       const b = document.createElement('button'), A = ABILITIES[L[k]];
       b.className = 'tab' + (i === abSlot ? ' active' : '');
       b.innerHTML = `<span class="tab-label">${label}</span><span class="tab-value">${A ? A.name : 'None'}</span>`;
@@ -238,14 +241,14 @@
     }
     const head2 = document.createElement('div');
     head2.className = 'perk-head';
-    head2.textContent = abSlot ? 'Second ability' : 'Abilities';
+    head2.textContent = ['Abilities', 'Second ability', 'Third ability'][abSlot];
     wrap.appendChild(head2);
     // picking the ability that's in the other slot swaps the two
     const pick = id => {
-      const other = abSlot ? 'ability' : 'ability2', otherPerk = abSlot ? 'perk' : 'perk2';
-      if (id && L[other] === id) {
-        if (!L[key] && other === 'ability') return; // slot 1 can't be empty
-        [L[other], L[otherPerk]] = [L[key], L[perkKey]];
+      const j = id ? KEYS.findIndex((k, i) => i !== abSlot && L[k] === id) : -1;
+      if (j >= 0) { // it's in another slot: swap the two
+        if (!L[key] && j === 0) return; // slot 1 can't be empty
+        [L[KEYS[j]], L[PERKS[j]]] = [L[key], L[perkKey]];
       } else if (L[key] !== id) L[perkKey] = null;
       L[key] = id;
       Account.save(); keepInPlace(`[data-ab="${id}"]`, renderLoadout);
@@ -253,7 +256,7 @@
     if (abSlot) {
       const none = document.createElement('button');
       none.className = 'card' + (!current ? ' equipped' : '');
-      none.innerHTML = `<div class="ab-icon" style="background:#555c68">–</div><div class="card-name">None</div><div class="card-desc">No second ability.</div>`;
+      none.innerHTML = `<div class="ab-icon" style="background:#555c68">–</div><div class="card-name">None</div><div class="card-desc">Leave this slot empty.</div>`;
       none.dataset.ab = 'none';
       none.onclick = () => pick(null);
       wrap.appendChild(none);
@@ -303,7 +306,7 @@
       const card = document.createElement('button');
       card.className = 'card' + (id === current ? ' equipped' : '');
       card.innerHTML = `<div class="ab-icon">${abilityIconSVG(id, 36)}</div>
-        <div class="card-name">${A.name}${id === L[abSlot ? 'ability' : 'ability2'] ? ' <small class="hint">other slot</small>' : ''}</div>
+        <div class="card-name">${A.name}${KEYS.some((k, i) => i !== abSlot && L[k] === id) ? ' <small class="hint">other slot</small>' : ''}</div>
         <div class="card-desc">${A.desc}</div>`;
       card.dataset.ab = id;
       card.onclick = () => pick(id);
@@ -415,6 +418,19 @@
     if (document.hidden && Game.running && Game.mode === 'sp' && el('pauseScreen').classList.contains('hidden')) el('pauseBtn').click();
   });
 
+  // after beating a boss: change abilities (guns stay), then jump back in
+  Game.on('bossDown', r => {
+    if (!Game.running) return;
+    Game.pause();
+    for (const o of ['pauseScreen', 'resultScreen', 'settingsScreen']) overlay(o, false);
+    if (r.unlocked3) abSlot = 2;
+    openLoadout('Back to game', () => { show(null); Game.applyAbilities(); Game.resume(); },
+      () => { show(null); Game.applyAbilities(); Game.resume(); }, true);
+    const note = document.createElement('div');
+    note.className = 'boss-pick';
+    note.textContent = r.unlocked3 ? `Boss down! 3rd ability slot unlocked — press V to use it.` : 'Boss down! You can switch your abilities now.';
+    el('parts').prepend(note);
+  });
   Game.on('spOver', r => {
     if (!r.test) { Account.user.best = Math.max(Account.user.best || 0, r.wave); Account.save(); }
     Game.stop();
