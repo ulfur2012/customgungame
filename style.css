@@ -502,3 +502,4 @@ body.mobile:has(#ability2Btn:not(.hidden)) #ultBtn { bottom: calc(205px + var(--
 .combo-icons span { background: rgba(0,0,0,0.28); }
 .ab-icon svg, .combo-icons svg { display: block; }
 .ab-name svg { vertical-align: -3px; }
+.card, .card:active { transform: none; }

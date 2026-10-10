@@ -164,10 +164,11 @@
       const info = document.createElement('div');
       info.innerHTML = `<div class="card-name">${part ? part.name : 'None'}</div><div class="card-mods">${mods || '<span>no changes</span>'}</div>`;
       card.appendChild(info);
+      card.dataset.part = part ? part.id : 'none';
       card.onclick = () => {
         build[slot] = part ? part.id : null;
         Account.save();
-        renderLoadout();
+        keepInPlace(`[data-part="${part ? part.id : 'none'}"]`, renderLoadout);
       };
       wrap.appendChild(card);
       requestAnimationFrame(() => drawThumb(thumb, part));
@@ -177,6 +178,15 @@
     renderStats();
   }
 
+  // re-render without the list jumping: the card you tapped stays exactly where it was on screen
+  function keepInPlace(selector, render) {
+    const box = el('parts'), before = box.querySelector(selector);
+    const top = before ? before.getBoundingClientRect().top : null, scroll = box.scrollTop;
+    render();
+    const after = box.querySelector(selector);
+    box.scrollTop = scroll;
+    if (top !== null && after) box.scrollTop += after.getBoundingClientRect().top - top;
+  }
   let abSlot = 0; // which ability slot the Ability tab is editing (0 = E, 1 = C)
   function renderAbilities() {
     const L = Account.user.loadout;
@@ -206,7 +216,8 @@
         const card = document.createElement('button');
         card.className = 'card perk' + ((L[perkKey] || null) === (p ? p.id : null) ? ' equipped' : '');
         card.innerHTML = `<div class="card-name">${p ? p.name : 'No boost'}</div><div class="card-desc">${p ? p.desc : 'Plain ability'}</div>`;
-        card.onclick = () => { L[perkKey] = p ? p.id : null; Account.save(); renderLoadout(); };
+        card.dataset.perk = p ? p.id : 'none';
+        card.onclick = () => { L[perkKey] = p ? p.id : null; Account.save(); keepInPlace(`[data-perk="${p ? p.id : 'none'}"]`, renderLoadout); };
         wrap.appendChild(card);
       }
     }
@@ -237,12 +248,13 @@
         [L[other], L[otherPerk]] = [L[key], L[perkKey]];
       } else if (L[key] !== id) L[perkKey] = null;
       L[key] = id;
-      Account.save(); renderLoadout();
+      Account.save(); keepInPlace(`[data-ab="${id}"]`, renderLoadout);
     };
     if (abSlot) {
       const none = document.createElement('button');
       none.className = 'card' + (!current ? ' equipped' : '');
       none.innerHTML = `<div class="ab-icon" style="background:#555c68">–</div><div class="card-name">None</div><div class="card-desc">No second ability.</div>`;
+      none.dataset.ab = 'none';
       none.onclick = () => pick(null);
       wrap.appendChild(none);
     }
@@ -281,8 +293,9 @@
           L.ability = c.a; L.ability2 = c.b;
           toast(`Equipped ${A1.name} (E) + ${A2.name} (C)`);
         }
-        Account.save(); renderLoadout();
+        Account.save(); keepInPlace(`[data-combo="${c.name}"]`, renderLoadout);
       };
+      card.dataset.combo = c.name;
       wrap.appendChild(card);
     }
     function addAbilityCard(id) {
@@ -290,8 +303,9 @@
       const card = document.createElement('button');
       card.className = 'card' + (id === current ? ' equipped' : '');
       card.innerHTML = `<div class="ab-icon">${abilityIconSVG(id, 36)}</div>
-        <div class="card-name">${A.name} <small class="hint">${A.type}${id === L[abSlot ? 'ability' : 'ability2'] ? ' · other slot' : ''}</small></div>
+        <div class="card-name">${A.name}${id === L[abSlot ? 'ability' : 'ability2'] ? ' <small class="hint">other slot</small>' : ''}</div>
         <div class="card-desc">${A.desc}</div>`;
+      card.dataset.ab = id;
       card.onclick = () => pick(id);
       wrap.appendChild(card);
     }
