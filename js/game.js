@@ -1387,6 +1387,88 @@ const Game = (() => {
     }
   }
 
+  // RAILGUN look: spinning armored ring, hex base, glowing coil barrel, pulsing core, layered electric bolt
+  function drawRailgun(t) {
+    const T = G.time, spin = t.spin || 0, kick = t.kick || 0;
+    ctx.save();
+    // electric glow on the floor
+    const glow = ctx.createRadialGradient(t.x, t.y, 10, t.x, t.y, 70);
+    glow.addColorStop(0, 'rgba(72,219,251,0.35)'); glow.addColorStop(1, 'rgba(72,219,251,0)');
+    ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(t.x, t.y, 70, 0, Math.PI * 2); ctx.fill();
+    // hexagon base
+    ctx.fillStyle = '#141a20'; ctx.strokeStyle = '#2e86de'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6; ctx.lineTo(t.x + Math.cos(a) * 34, t.y + Math.sin(a) * 34); }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    // spinning outer ring segments
+    ctx.strokeStyle = '#48dbfb'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) {
+      const a = spin + i * Math.PI * 2 / 3;
+      ctx.beginPath(); ctx.arc(t.x, t.y, 40, a, a + 1.3); ctx.stroke();
+    }
+    // corner capacitor lights
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3 + Math.PI / 6, on = Math.sin(T * 8 + i) > 0;
+      ctx.fillStyle = on ? '#c7f4ff' : '#1e5f7a';
+      ctx.beginPath(); ctx.arc(t.x + Math.cos(a) * 28, t.y + Math.sin(a) * 28, 2.5, 0, Math.PI * 2); ctx.fill();
+    }
+    // the gun itself
+    ctx.translate(t.x, t.y); ctx.rotate(t.aim); ctx.translate(-kick, 0);
+    // twin rails
+    ctx.fillStyle = '#2f3640'; ctx.strokeStyle = '#0c1014'; ctx.lineWidth = 2;
+    ctx.fillRect(-14, -12, 76, 7); ctx.strokeRect(-14, -12, 76, 7);
+    ctx.fillRect(-14, 5, 76, 7); ctx.strokeRect(-14, 5, 76, 7);
+    // energy channel between the rails
+    const ch = ctx.createLinearGradient(0, 0, 66, 0);
+    ch.addColorStop(0, 'rgba(72,219,251,0.4)'); ch.addColorStop(1, `rgba(199,244,255,${0.6 + 0.4 * Math.sin(T * 30)})`);
+    ctx.fillStyle = ch; ctx.fillRect(-4, -4, 68, 8);
+    // glowing coils along the barrel
+    for (let i = 0; i < 4; i++) {
+      const x = 8 + i * 14, pulse = 0.5 + 0.5 * Math.sin(T * 14 - i * 1.2);
+      ctx.fillStyle = `rgba(72,219,251,${0.4 + 0.6 * pulse})`;
+      ctx.fillRect(x, -15, 5, 30);
+    }
+    // muzzle charge
+    const mz = ctx.createRadialGradient(68, 0, 0, 68, 0, 12);
+    mz.addColorStop(0, 'rgba(255,255,255,0.95)'); mz.addColorStop(1, 'rgba(72,219,251,0)');
+    ctx.fillStyle = mz; ctx.beginPath(); ctx.arc(68, 0, 12 + Math.sin(T * 40) * 2, 0, Math.PI * 2); ctx.fill();
+    // back housing
+    ctx.fillStyle = '#1e272e'; ctx.strokeStyle = '#2e86de'; ctx.lineWidth = 2;
+    ctx.fillRect(-22, -16, 20, 32); ctx.strokeRect(-22, -16, 20, 32);
+    ctx.restore();
+    // pulsing core
+    const core = ctx.createRadialGradient(t.x, t.y, 0, t.x, t.y, 14);
+    core.addColorStop(0, '#ffffff'); core.addColorStop(0.5, '#7efcff'); core.addColorStop(1, 'rgba(46,134,222,0)');
+    ctx.fillStyle = core; ctx.beginPath(); ctx.arc(t.x, t.y, 12 + Math.sin(T * 25) * 2, 0, Math.PI * 2); ctx.fill();
+    // the bolt: wide soft glow, then a jagged white-hot core, plus a few side forks
+    if (t.zap) {
+      const z = t.zap, a = z.life / 0.09;
+      const pts = [[z.x0, z.y0]];
+      for (let i = 1; i < 12; i++) { const k = i / 12; pts.push([z.x0 + (z.x - z.x0) * k + (Math.random() - 0.5) * 24, z.y0 + (z.y - z.y0) * k + (Math.random() - 0.5) * 24]); }
+      pts.push([z.x, z.y]);
+      const path = () => { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (const p of pts) ctx.lineTo(p[0], p[1]); };
+      ctx.save();
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = `rgba(72,219,251,${0.35 * a})`; ctx.lineWidth = 16; path(); ctx.stroke();
+      ctx.strokeStyle = `rgba(126,252,255,${0.8 * a})`; ctx.lineWidth = 6; path(); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${a})`; ctx.lineWidth = 2; path(); ctx.stroke();
+      ctx.strokeStyle = `rgba(199,244,255,${0.7 * a})`; ctx.lineWidth = 2;
+      for (let i = 3; i < pts.length - 1; i += 3) {
+        const [px, py] = pts[i], fa = Math.random() * Math.PI * 2;
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + Math.cos(fa) * 30, py + Math.sin(fa) * 30); ctx.stroke();
+      }
+      // impact flash
+      const im = ctx.createRadialGradient(z.x, z.y, 0, z.x, z.y, 26);
+      im.addColorStop(0, `rgba(255,255,255,${a})`); im.addColorStop(1, 'rgba(72,219,251,0)');
+      ctx.fillStyle = im; ctx.beginPath(); ctx.arc(z.x, z.y, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    if (t.flash > 0) { t.flash -= 1 / 60; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(t.x, t.y, 34, 0, Math.PI * 2); ctx.fill(); }
+    drawBar(t.x, t.y - 50, 64, 6, t.hp / t.maxHp, false, '#48dbfb');
+    ctx.fillStyle = '#c7f4ff'; ctx.font = '900 10px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('RAILGUN', t.x, t.y - 56);
+  }
+
   // heal zones and turrets
   function updateGadgets(dt) {
     const me = G.me, M = ABILITIES.medic, T = ABILITIES.turret;
@@ -1403,14 +1485,21 @@ const Game = (() => {
       if (t.rail) { // RAILGUN: fast, long range bolts of electricity
         const R = MERGE.railgun;
         if (t.zap) { t.zap.life -= dt; if (t.zap.life <= 0) t.zap = null; }
+        t.kick = Math.max(0, (t.kick || 0) - 60 * dt);
         let best = null, bd = R.range;
         for (const e of targets()) { const d = Math.hypot(e.x - t.x, e.y - t.y); if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; } }
         if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
+        t.spin = (t.spin || 0) + dt * (best ? 4 : 1); // ring spins faster while it has a target
         if (best && t.cd <= 0) {
           t.cd = R.every;
           const sx = t.x + Math.cos(t.aim) * 40, sy = t.y + Math.sin(t.aim) * 40;
           fireBullets(sx, sy, [+t.aim.toFixed(4)], R.speed, R.damage, 0.3, R.range, 4 * HEAR_UNIT);
-          t.zap = { x0: sx, y0: sy, x: best.x, y: best.y, life: 0.08 };
+          t.zap = { x0: sx, y0: sy, x: best.x, y: best.y, life: 0.09 };
+          t.kick = 7; // recoil
+          for (let i = 0; i < 4; i++) { // sparks where it hits
+            const an = Math.random() * Math.PI * 2, v = 120 + Math.random() * 220;
+            G.fx.push({ x: best.x, y: best.y, vx: Math.cos(an) * v, vy: Math.sin(an) * v, life: 0.25, max: 0.25, size: 4, color: Math.random() < 0.5 ? '#c7f4ff' : '#48dbfb' });
+          }
         }
         continue;
       }
@@ -1468,25 +1557,7 @@ const Game = (() => {
       }
     }
     for (const t of G.turrets) {
-      if (t.rail) {
-        ctx.fillStyle = '#1e272e'; ctx.strokeStyle = '#48dbfb'; ctx.lineWidth = 4;
-        ctx.beginPath(); ctx.arc(t.x, t.y, 30, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
-        ctx.fillStyle = '#485460'; ctx.fillRect(-8, -9, 56, 6); ctx.fillRect(-8, 3, 56, 6);
-        ctx.fillStyle = '#48dbfb'; ctx.fillRect(4, -3, 44, 6);
-        ctx.restore();
-        ctx.fillStyle = '#c7f4ff'; ctx.beginPath(); ctx.arc(t.x, t.y, 8 + Math.sin(G.time * 25) * 2, 0, Math.PI * 2); ctx.fill();
-        if (t.zap) { // electric bolt
-          const z = t.zap;
-          ctx.strokeStyle = '#c7f4ff'; ctx.lineWidth = 4; ctx.shadowColor = '#48dbfb'; ctx.shadowBlur = 12;
-          ctx.beginPath(); ctx.moveTo(z.x0, z.y0);
-          for (let i = 1; i < 10; i++) { const k = i / 10; ctx.lineTo(z.x0 + (z.x - z.x0) * k + (Math.random() - 0.5) * 26, z.y0 + (z.y - z.y0) * k + (Math.random() - 0.5) * 26); }
-          ctx.lineTo(z.x, z.y); ctx.stroke(); ctx.shadowBlur = 0;
-        }
-        if (t.flash > 0) { t.flash -= 1 / 60; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(t.x, t.y, 30, 0, Math.PI * 2); ctx.fill(); }
-        drawBar(t.x, t.y - 42, 60, 6, t.hp / t.maxHp, false, '#48dbfb');
-        continue;
-      }
+      if (t.rail) { drawRailgun(t); continue; }
       if (t.rocket) {
         ctx.fillStyle = '#3d3d4a'; ctx.strokeStyle = '#e17055'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(t.x, t.y, 26, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
