@@ -692,12 +692,12 @@ const Game = (() => {
   function landGadget(n) {
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
     const main = G.me.guns[0];
-    addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite });
-    if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build });
+    addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite, hp: n.hp, dur: n.dur });
+    if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build, hp: n.hp, dur: n.dur });
   }
   function addGadget(g) {
     const A = ABILITIES[g.kind];
-    Object.assign(g, { age: 0, tick: 0, t: A.duration || A.life || 1, zaps: [] });
+    Object.assign(g, { age: 0, tick: 0, t: g.dur || A.duration || A.life || 1, zaps: [] });
     burst(g.x, g.y, A.color, 18, 260);
     if (g.kind === 'freeze') {
       G.rings.push({ x: g.x, y: g.y, r: A.radius, life: 0.6, max: 0.6, color: '126,214,255' });
@@ -712,7 +712,7 @@ const Game = (() => {
         return { x: g.x + Math.cos(an) * d, y: g.y + Math.sin(an) * d * 0.8, r: R * (0.3 + Math.random() * 0.3), ph: Math.random() * 6 };
       });
     }
-    if (A.hp) g.hp = A.hp;
+    if (A.hp) g.hp = g.maxHp = g.hp || A.hp; // clones bring their own HP
     if (g.kind === 'decoy') Object.assign(g, { r: PLAYER.r, cd: 0.5, kick: 0, aim: g.a });
     if (g.kind === 'barrier') {
       const L = A.len, T = A.thick, vert = Math.abs(Math.cos(g.a)) > Math.abs(Math.sin(g.a));
@@ -911,7 +911,7 @@ const Game = (() => {
         ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * pop, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       } else if (g.kind === 'decoy') {
         drawPlayer({ x: g.x, y: g.y, aim: g.aim ?? g.a, kick: g.kick || 0 }, g.color, g.sprite, g.flash > 0);
-        drawBar(g.x, g.y - PLAYER.r - 14, 54, 7, g.hp / A.hp, false, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
+        drawBar(g.x, g.y - PLAYER.r - 14, 54, 7, g.hp / g.maxHp, false, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
         nameTag(`${g.name}'s buddy`, g.x, g.y - PLAYER.r - 20, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
       } else if (g.kind === 'barrier' && g.rect) {
         const [x, y, w, h] = g.rect;
@@ -1084,7 +1084,7 @@ const Game = (() => {
         const an = me.aim + (i - 1) * 0.9;
         let x = me.x, y = me.y;
         for (let d = 90; d >= 0; d -= 15) { const nx = me.x + Math.cos(an) * d, ny = me.y + Math.sin(an) * d; if (!pointInWall(nx, ny)) { x = nx; y = ny; break; } }
-        landGadget({ kind: 'decoy', x1: x, y1: y, a: an, owner: myOwnerId() });
+        landGadget({ kind: 'decoy', x1: x, y1: y, a: an, owner: myOwnerId(), hp: U.hp, dur: U.duration });
       }
     }
     if (k === 'fountain') { me.hp = me.maxHp; me.fountT = U.duration; me.fountTick = 1; burst(me.x, me.y, '#55efc4', 40, 300); }
@@ -1824,7 +1824,7 @@ const Game = (() => {
   Net.on('gad', m => {
     if (!inMP()) return;
     const sprite = m.k === 'decoy' && m.b ? renderGunSprite('main', m.b) : null;
-    addGadget({ kind: m.k, x: m.x, y: m.y, a: m.a, owner: m.from, id: m.id, color: m.c, name: m.n, sprite });
+    addGadget({ kind: m.k, x: m.x, y: m.y, a: m.a, owner: m.from, id: m.id, color: m.c, name: m.n, sprite, hp: m.hp, dur: m.dur });
   });
   Net.on('gadx', m => {
     if (!inMP()) return;
