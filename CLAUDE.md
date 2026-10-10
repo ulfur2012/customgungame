@@ -2,7 +2,7 @@
 
 Browser game (plain HTML/JS/canvas, no build step). Open `index.html` to play.
 Live: https://ulfur2012.github.io/customgungame/ — repo `ulfur2012/customgungame`, GitHub Pages from `main`.
-Pushing to `main` redeploys in ~1 minute. The user is fine with commit + push after each change.
+Pushing to `main` redeploys in ~1 minute. Bump the `?v=N` on the script/css tags in index.html every change (browser cache). The user is fine with commit + push after each change.
 
 The user gives short, informal requests (often with typos) and wants things built without
 clarifying questions — make a sensible call, then say what was assumed. The user will provide art later.
