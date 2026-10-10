@@ -443,6 +443,10 @@ const Game = (() => {
       if (b.life <= 0) continue;
       const wall = b.ghost ? null : MAP.walls.find(w => segmentHitsRect(x1, y1, b.x, b.y, w));
       const out = b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h;
+      if (wall && G.gadgets.length) { // shooting a Barrier wears it down
+        const bg = G.gadgets.find(g => g.rect === wall && !g.dead);
+        if (bg && bg.hp !== undefined && (G.mode === 'sp' ? b.team === 'e' : b.owner !== bg.owner && (!G.teams || teamOf(b.owner) !== teamOf(bg.owner)))) damageGadget(bg, bulletDamage(b));
+      }
       if (wall || out) {
         if (b.bounce > 0) {
           // bounce: flip the side that crossed into the wall
@@ -774,7 +778,7 @@ const Game = (() => {
         if (mn && !mn.cryo) { upgradeGadget(mn, 'cryo'); comboFx(mn.x, mn.y, '#74b9ff', 'CRYO MINE'); }
       }
     }
-    if (ABILITIES[n.kind].building) ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
+    if (ABILITIES[n.kind].building && !n.noMerge) ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
     const main = G.me.guns[0];
     addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite, hp: n.hp, dur: n.dur, big: n.big });
@@ -783,7 +787,7 @@ const Game = (() => {
       setTimeout(() => { if (G && g && !g.dead) { upgradeGadget(g, 'electric'); comboFx(g.x, g.y, '#feca57', 'ELECTRIC FENCE'); } }, 0);
     }
     if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build, hp: n.hp, dur: n.dur, g: n.big ? 1 : 0 });
-    if (ABILITIES[n.kind].building && !n.big) mergeBuildings(n.kind, n.x1, n.y1);
+    if (ABILITIES[n.kind].building && !n.big && !n.noMerge) mergeBuildings(n.kind, n.x1, n.y1);
   }
 
   // buildings sit in the middle of a floor square (unless that square is a wall)
@@ -839,7 +843,7 @@ const Game = (() => {
     burst(cx, cy, ABILITIES[kind].color, 50, 420);
     G.rings.push({ x: cx, y: cy, r: 160, life: 0.6, max: 0.6, color: '255,215,0' });
     G.banner = { text: `BIG ${ABILITIES[kind].name.toUpperCase()}!`, t: 1.5 };
-    landGadget({ kind, x1: cx, y1: cy, a: 0, owner: myOwnerId(), big: true });
+    landGadget({ kind, x1: cx, y1: cy, a: three[0].a || 0, owner: myOwnerId(), big: true });
     if (kind === 'tesla') checkRailgun();
   }
 
@@ -879,7 +883,7 @@ const Game = (() => {
     if (g.big) { g.hp = g.maxHp = A.hp * MERGE.hp; g.t = (A.duration || g.t) * MERGE.range; }
     if (g.kind === 'decoy') Object.assign(g, { r: PLAYER.r, cd: 0.5, kick: 0, aim: g.a });
     if (g.kind === 'barrier') {
-      const L = A.len, T = A.thick, vert = Math.abs(Math.cos(g.a)) > Math.abs(Math.sin(g.a));
+      const L = A.len * (g.big ? 1.4 : 1), T = A.thick * (g.big ? 1.5 : 1), vert = Math.abs(Math.cos(g.a)) > Math.abs(Math.sin(g.a));
       g.rect = vert ? [g.x - T / 2, g.y - L / 2, T, L] : [g.x - L / 2, g.y - T / 2, L, T];
       MAP.walls.push(g.rect);
       if (!G.me.phaseT) collideWorld(G.me);
@@ -1075,7 +1079,7 @@ const Game = (() => {
         if (hostile && Math.hypot(b.x - g.x, b.y - g.y) < R && Math.hypot(x1 - g.x, y1 - g.y) >= R - 2) { burst(b.x, b.y, '#7ef9ff', 4, 120); return true; }
         continue;
       }
-      if (g.hp === undefined || g.dead) continue;
+      if (g.hp === undefined || g.dead || g.kind === 'barrier') continue;
       const hostile = G.mode === 'sp' ? b.team === 'e'
         : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
       if (!hostile || !segHitsCircle(x1, y1, b.x, b.y, g.x, g.y, g.kind === 'decoy' ? PLAYER.r : 22 * (g.sc || 1))) continue;
@@ -1143,6 +1147,9 @@ const Game = (() => {
         const [x, y, w, h] = g.rect;
         ctx.fillStyle = g.electric ? 'rgba(254,202,87,0.55)' : 'rgba(84,160,255,0.55)'; ctx.strokeStyle = g.electric ? '#fff7d6' : '#c8e1ff'; ctx.lineWidth = 2;
         ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h);
+        if (g.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(x, y, w, h); }
+        if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(x - 3, y - 3, w + 6, h + 6); }
+        if (g.maxHp && g.maxHp !== Infinity && g.dur === undefined) drawBar(x + w / 2, y - 8, 50, 5, g.hp / g.maxHp, false, '#54a0ff');
         if (g.electric) { // crackling sparks running along the fence
           ctx.strokeStyle = '#fff3a0'; ctx.lineWidth = 2;
           for (let i = 0; i < 3; i++) {
@@ -1368,7 +1375,7 @@ const Game = (() => {
     if (k === 'fortress') {
       for (let i = 0; i < U.walls; i++) {
         const an = i * Math.PI * 2 / U.walls;
-        landGadget({ kind: 'barrier', x1: me.x + Math.cos(an) * U.ring, y1: me.y + Math.sin(an) * U.ring, a: an, owner: myOwnerId() });
+        landGadget({ kind: 'barrier', x1: me.x + Math.cos(an) * U.ring, y1: me.y + Math.sin(an) * U.ring, a: an, owner: myOwnerId(), dur: 10, noMerge: true });
       }
       landGadget({ kind: 'bubble', x1: me.x, y1: me.y, a: 0, owner: myOwnerId() });
     }

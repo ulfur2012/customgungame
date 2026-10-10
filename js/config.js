@@ -446,8 +446,8 @@ const ABILITIES = {
                radius: 20, duration: 15, hp: 100, speed: 220,
                desc: 'Throw a buddy on your team. It carries a copy of your main gun and goes out hunting enemies (100 HP, 15s).' },
   barrier:   { name: 'Barrier', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#54a0ff', cooldown: 15, uses: 3,
-               radius: 180, duration: 7, len: 360, thick: 36,
-               desc: 'Throw a wall that pops up where it lands. Blocks bullets and movement for 7s.' },
+               radius: 200, duration: Infinity, len: 400, thick: 40, hp: 150, building: true,
+               desc: 'Throw a wall (5 squares long, 150 HP) that snaps to the grid. Blocks bullets and movement until enemies shoot it down.' },
   mine:      { name: 'Land Mine', type: 'active', thrown: true, gadget: true, color: '#c0392b', cooldown: 6, uses: 3,
                radius: 130, trigger: 60, damage: 80, life: 45, arm: 0.8,
                desc: 'Throw a hidden mine (enemies can\'t see it). Explodes for 80 damage when an enemy walks over it.' },
@@ -514,8 +514,8 @@ const EPIC_CRATE = { chance: 0.08 };
 
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
 const ABILITY_GROUPS = [
-  { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla'] },
-  { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'barrier', 'mine', 'jumppad', 'bubble', 'medic', 'smoke'] },
+  { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier'] },
+  { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'jumppad', 'bubble', 'medic', 'smoke'] },
   { label: '💣 Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
   { label: '🔫 Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
   { label: '🏃 Movement', ids: ['dash', 'blink', 'grapple', 'phase', 'shadowstep', 'recall'] },
@@ -581,7 +581,7 @@ const ABILITY_PERKS = {
   freeze:     [{ id: 'deepfreeze', name: 'Deep Freeze', desc: 'Freeze lasts 4s', add: { time: 1.5 } }],
   decoy:      [{ id: 'tankbuddy', name: 'Tough Buddy', desc: 'Buddy has 200 HP', add: { hp: 100 } },
                { id: 'quickbuddy', name: 'Quick Return', desc: 'Get a buddy back every 15s', add: { respawn: -15 } }],
-  barrier:    [{ id: 'longwall', name: 'Great Wall', desc: '+50% longer wall, lasts 12s', mul: { len: 1.5 }, add: { duration: 5 } }],
+  barrier:    [{ id: 'longwall', name: 'Great Wall', desc: '7 squares long, 250 HP', add: { len: 160, hp: 100 } }],
   mine:       [{ id: 'moremines', name: 'Minefield', desc: '+2 mines', add: { uses: 2 } },
                { id: 'bigmine', name: 'Claymore', desc: '+40 mine damage', add: { damage: 40 } }],
   jumppad:    [{ id: 'highjump', name: 'Super Spring', desc: 'Fly 50% further', mul: { air: 1.5 } }],
