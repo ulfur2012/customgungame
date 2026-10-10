@@ -486,3 +486,5 @@ body.mobile #ability2Btn .ab-key { display: none; }
 body.mobile #ability2Btn .ab-name { font-size: 11px; }
 body.mobile #ability2Btn .ab-state { color: #062b12; font-weight: 800; font-size: 12px; }
 body.mobile:has(#ability2Btn:not(.hidden)) #ultBtn { bottom: calc(205px + var(--safe-b)); }
+.card.combo { border-style: dotted; cursor: default; }
+.card.combo.ready { border: 1px solid var(--good); }

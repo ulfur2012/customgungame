@@ -210,6 +210,21 @@
         wrap.appendChild(card);
       }
     }
+    // combos this ability is part of
+    const combos = COMBOS.filter(c => c.a === current || c.b === current);
+    if (combos.length) {
+      const head = document.createElement('div');
+      head.className = 'perk-head';
+      head.textContent = `🔗 Combos with ${ABILITIES[current].name}`;
+      wrap.appendChild(head);
+      for (const c of combos) {
+        const other = ABILITIES[c.a === current ? c.b : c.a], have = [L.ability, L.ability2].includes(c.a) && [L.ability, L.ability2].includes(c.b);
+        const card = document.createElement('div');
+        card.className = 'card combo' + (have ? ' ready' : '');
+        card.innerHTML = `<div class="card-name">${c.name} <small class="hint">+ ${other.name}${have ? ' ✓' : ''}</small></div><div class="card-desc">${c.how}</div>`;
+        wrap.appendChild(card);
+      }
+    }
     const head2 = document.createElement('div');
     head2.className = 'perk-head';
     head2.textContent = abSlot ? 'Second ability' : 'Abilities';

@@ -512,6 +512,16 @@ const ABILITY_CRATE = { chance: 0.6 };
 // chance = per health pack spawn (every 30s), so about one every 6 minutes.
 const EPIC_CRATE = { chance: 0.08 };
 
+// Ability combos: throw one ability's thing onto another's (needs both, e.g. one in each ability slot).
+const COMBOS = [
+  { a: 'turret', b: 'tesla',   name: 'Railgun',        how: '3 Turrets → Rocket Turret, 3 Teslas → Big Tesla. Line up Big Tesla, Rocket Turret, Big Tesla.' },
+  { a: 'turret', b: 'radar',   name: 'Spotter Turret', how: 'Throw a Radar next to a Turret (or a Turret next to a Radar): the turret shoots through walls from very far away.' },
+  { a: 'turret', b: 'medic',   name: 'Medic Turret',   how: 'Throw a Heal Zone onto a Turret: it keeps shooting and heals you 6 HP/s when you stand near it, forever.' },
+  { a: 'blackhole', b: 'firepit', name: 'Inferno Vortex', how: 'Throw a Fire Pit into your Black Hole: it burns enemies it pulls in (20/s) and lasts 3s longer.' },
+  { a: 'tesla', b: 'freeze',   name: 'Cryo Coil',      how: 'Throw a Freeze Bomb onto a Tesla Coil: its zaps freeze enemies for a moment.' },
+];
+const COMBO = { near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 6, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
+
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.
 // 3 turrets in the same floor square (turretNear) become a ROCKET TURRET.

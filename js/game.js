@@ -756,6 +756,20 @@ const Game = (() => {
   // ---- thrown gadgets: everyone simulates them; damage is worked out by whoever gets hit
   let gadgetSeq = 0;
   function landGadget(n) {
+    if (isMine(n.owner)) {
+      if (n.kind === 'firepit') { // INFERNO VORTEX
+        const bh = myGadget('blackhole', n.x1, n.y1, ABILITIES.blackhole.radius);
+        if (bh && !bh.vortex) { upgradeGadget(bh, 'vortex'); comboFx(bh.x, bh.y, '#ff6b1a', 'INFERNO VORTEX'); return; }
+      }
+      if (n.kind === 'radar') { // SPOTTER TURRET
+        const t = nearTurret(n.x1, n.y1);
+        if (t) { t.spot = true; comboFx(t.x, t.y, '#ff9ff3', 'SPOTTER TURRET'); return; }
+      }
+      if (n.kind === 'freeze') { // CRYO COIL (the freeze still goes off)
+        const tc = myGadget('tesla', n.x1, n.y1, COMBO.near);
+        if (tc && !tc.cryo) { upgradeGadget(tc, 'cryo'); comboFx(tc.x, tc.y, '#74b9ff', 'CRYO COIL'); }
+      }
+    }
     if (ABILITIES[n.kind].building) ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
     const main = G.me.guns[0];
@@ -770,6 +784,21 @@ const Game = (() => {
     return pointInWall(cx, cy) ? { x, y } : { x: cx, y: cy };
   }
   const cellOf = o => [Math.floor(o.x / MAP.grid), Math.floor(o.y / MAP.grid)];
+
+  // ---- ability combos (see COMBOS in config)
+  const comboFx = (x, y, color, text) => {
+    burst(x, y, color, 45, 420);
+    G.rings.push({ x, y, r: 150, life: 0.6, max: 0.6, color: '255,215,0' });
+    G.banner = { text: `COMBO: ${text}!`, t: 1.8 };
+  };
+  const nearTurret = (x, y) => G.turrets.find(t => !t.rocket && !t.rail && !t.spot && !t.medic && t.hp > 0 && Math.hypot(t.x - x, t.y - y) <= COMBO.near);
+  const myGadget = (kind, x, y, r) => G.gadgets.find(g => g.kind === kind && !g.dead && isMine(g.owner) && Math.hypot(g.x - x, g.y - y) <= r);
+  // tell everyone a gadget changed (vortex / cryo)
+  function upgradeGadget(g, what) {
+    g[what] = true;
+    if (what === 'vortex') g.t += COMBO.vortexTime;
+    if (G.mode === 'mp') Net.send({ t: 'gadc', id: g.id, w: what });
+  }
 
   // big tesla | rocket turret | big tesla in a row -> RAILGUN in the middle square
   function checkRailgun() {
@@ -873,6 +902,15 @@ const Game = (() => {
           me.vx += (g.x - me.x) / d * A.pull * dt * 3; me.vy += (g.y - me.y) / d * A.pull * dt * 3;
         });
       }
+      if (g.kind === 'blackhole' && g.vortex && g.tick <= 0) { // inferno vortex burns enemies
+        g.tick = 0.5;
+        areaOf(g, A.radius, e => hurtEnemy(e, COMBO.vortexDps / 2, 0.1, Math.atan2(e.y - g.y, e.x - g.x)),
+          () => hurtMe(COMBO.vortexDps / 2, 0, Math.atan2(me.y - g.y, me.x - g.x), g.owner));
+      }
+      if (g.kind === 'blackhole' && g.vortex && Math.random() < 0.7) {
+        const an = Math.random() * Math.PI * 2, d = A.radius * (0.3 + Math.random() * 0.6);
+        G.fx.push({ x: g.x + Math.cos(an) * d, y: g.y + Math.sin(an) * d, vx: -Math.sin(an) * 200 - Math.cos(an) * 120, vy: Math.cos(an) * 200 - Math.sin(an) * 120, life: 0.5, max: 0.5, size: 7, color: Math.random() < 0.5 ? '#ff6b1a' : '#ffd32a' });
+      }
       if (g.kind === 'firepit' && g.tick <= 0) {
         g.tick = 0.5;
         areaAll(g, A.radius, e => hurtEnemy(e, A.dps / 2, 0.2, Math.atan2(e.y - g.y, e.x - g.x)),
@@ -888,11 +926,12 @@ const Game = (() => {
           for (const e of (G.mode === 'sp' ? [...G.enemies] : targets())) {
             if (Math.hypot(e.x - g.x, e.y - g.y) > A.radius * (g.big ? MERGE.range : 1) || !lineOfSight(g.x, g.y, e.x, e.y)) continue;
             g.zaps.push({ x: e.x, y: e.y, life: 0.15 });
-            if (G.mode === 'sp') hurtEnemy(e, A.damage, 0.5, Math.atan2(e.y - g.y, e.x - g.x));
+            if (G.mode === 'sp') { hurtEnemy(e, A.damage, 0.5, Math.atan2(e.y - g.y, e.x - g.x)); if (g.cryo) e.frozen = Math.max(e.frozen || 0, COMBO.cryoFreeze); }
           }
         } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius * (g.big ? MERGE.range : 1) && lineOfSight(g.x, g.y, me.x, me.y)) {
           g.zaps.push({ x: me.x, y: me.y, life: 0.15 });
           hurtMe(A.damage, 0.5, Math.atan2(me.y - g.y, me.x - g.x), g.owner);
+          if (g.cryo) me.frozenT = Math.max(me.frozenT, COMBO.cryoFreeze * 0.6);
         }
       }
       if (g.kind === 'mine' && g.age > A.arm) {
@@ -980,13 +1019,13 @@ const Game = (() => {
   }
 
   // fire one shot of a gun's stats from somewhere (turret / buddy)
-  function shootFrom(sx, sy, aim, s) {
+  function shootFrom(sx, sy, aim, s, extra = {}) {
     const angles = [];
     for (let i = 0; i < s.pellets; i++) {
       const fan = s.pellets > 1 ? (i / (s.pellets - 1) - 0.5) * s.spread : 0;
       angles.push(+(aim + fan + (Math.random() - 0.5) * s.spread).toFixed(4));
     }
-    fireBullets(sx, sy, angles, s.speed, s.damage, s.knockback, s.range, s.hearRadius, { bounce: s.bounce, pierce: s.pierce, boom: s.boom }, s.falloff);
+    fireBullets(sx, sy, angles, s.speed, s.damage, s.knockback, extra.range || s.range, s.hearRadius, { bounce: s.bounce, pierce: s.pierce, boom: s.boom, ...extra.kind }, s.falloff);
     muzzleFlash(sx, sy, aim);
   }
 
@@ -1043,7 +1082,8 @@ const Game = (() => {
       if (g.kind === 'blackhole') {
         const r = A.radius * pop;
         const grd = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, r);
-        grd.addColorStop(0, 'rgba(0,0,0,0.95)'); grd.addColorStop(0.25, 'rgba(60,20,90,0.7)'); grd.addColorStop(1, 'rgba(142,68,173,0)');
+        if (g.vortex) { grd.addColorStop(0, 'rgba(0,0,0,0.95)'); grd.addColorStop(0.3, 'rgba(200,60,0,0.7)'); grd.addColorStop(1, 'rgba(255,107,26,0)'); }
+        else { grd.addColorStop(0, 'rgba(0,0,0,0.95)'); grd.addColorStop(0.25, 'rgba(60,20,90,0.7)'); grd.addColorStop(1, 'rgba(142,68,173,0)'); }
         ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = 'rgba(200,140,255,0.6)'; ctx.lineWidth = 2;
         for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(g.x, g.y, r * (0.3 + 0.2 * i), G.time * (3 + i) , G.time * (3 + i) + 2); ctx.stroke(); }
@@ -1096,7 +1136,8 @@ const Game = (() => {
         ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc); ctx.translate(-g.x, -g.y);
         if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(g.x - 22, g.y - 22, 44, 44); }
         ctx.fillStyle = g.flash > 0 ? '#fff' : '#2d3436'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
-        ctx.strokeStyle = '#48dbfb'; ctx.lineWidth = 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
+        ctx.strokeStyle = g.cryo ? '#dff6ff' : '#48dbfb'; ctx.lineWidth = g.cryo ? 4 : 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
+        if (g.cryo) { ctx.fillStyle = 'rgba(126,214,255,0.35)'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36); }
         ctx.fillStyle = '#636e72'; ctx.fillRect(g.x - 5, g.y - 14, 10, 18);
         ctx.fillStyle = '#48dbfb'; ctx.beginPath(); ctx.arc(g.x, g.y - 12, 8 + Math.sin(G.time * 20) * 2, 0, Math.PI * 2); ctx.fill();
         drawBar(g.x, g.y - 32, 44, 6, g.hp / g.maxHp, false, '#48dbfb');
@@ -1517,16 +1558,21 @@ const Game = (() => {
         }
         continue;
       }
-      let best = null, bd = t.stats.range; // sees as far as your sidearm shoots
+      if (t.medic) { // medic turret heals you when you're close
+        t.healT -= dt;
+        if (t.healT <= 0) { t.healT = 1; const me = G.me; if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - t.x, me.y - t.y) <= COMBO.medicRadius) heal(COMBO.medicHeal); }
+      }
+      // spotter turrets see through walls from very far away
+      let best = null, bd = t.spot ? COMBO.spotRange : t.stats.range; // otherwise as far as your sidearm shoots
       for (const e of targets()) {
         const d = Math.hypot(e.x - t.x, e.y - t.y);
-        if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; }
+        if (d < bd && (t.spot || lineOfSight(t.x, t.y, e.x, e.y))) { best = e; bd = d; }
       }
       if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
       if (best && t.cd <= 0) {
         const s = t.stats;
         t.cd = Math.max(s.fireDelay, s.reloadTime / s.magSize, 0.15); // reloads built in, never runs dry
-        shootFrom(t.x + Math.cos(t.aim) * 20, t.y + Math.sin(t.aim) * 20, t.aim, s);
+        shootFrom(t.x + Math.cos(t.aim) * 20, t.y + Math.sin(t.aim) * 20, t.aim, s, t.spot ? { kind: { ghost: 1 }, range: COMBO.spotRange } : {});
       }
     }
     G.turrets = G.turrets.filter(t => t.t > 0);
@@ -1569,8 +1615,21 @@ const Game = (() => {
         drawBar(t.x, t.y - 38, 56, 6, t.hp / t.maxHp, false, '#e17055');
         continue;
       }
-      ctx.fillStyle = '#4b4b5a'; ctx.strokeStyle = '#cd84f1'; ctx.lineWidth = 3;
+      if (t.medic) {
+        const k = (G.time % 1.2) / 1.2;
+        ctx.strokeStyle = `rgba(50,255,126,${0.5 * (1 - k)})`; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(t.x, t.y, 20 + k * (COMBO.medicRadius - 20), 0, Math.PI * 2); ctx.stroke();
+        ctx.strokeStyle = 'rgba(50,255,126,0.25)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(t.x, t.y, COMBO.medicRadius, 0, Math.PI * 2); ctx.stroke();
+      }
+      if (t.spot) { // radar dish on the back + scanning sweep
+        ctx.strokeStyle = 'rgba(255,159,243,0.35)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.arc(t.x, t.y, 60, G.time * 4, G.time * 4 + 0.6); ctx.closePath(); ctx.stroke();
+      }
+      ctx.fillStyle = '#4b4b5a'; ctx.strokeStyle = t.spot ? '#ff9ff3' : t.medic ? '#32ff7e' : '#cd84f1'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (t.medic) { ctx.fillStyle = '#32ff7e'; ctx.fillRect(t.x - 3, t.y + 4, 6, 14); ctx.fillRect(t.x - 7, t.y + 8, 14, 6); }
+      if (t.spot) { ctx.fillStyle = '#ff9ff3'; ctx.beginPath(); ctx.arc(t.x - 12, t.y - 12, 6, 0, Math.PI * 2); ctx.fill(); }
       ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
       if (Math.cos(t.aim) < 0) ctx.scale(1, -1);
       const sp = t.sprite, k = 0.6; // your sidearm sitting on top
@@ -1651,7 +1710,12 @@ const Game = (() => {
       n.t += dt;
       if (n.t < G_.flight) continue;
       n.done = true;
-      if (n.kind === 'medic') {
+      if (n.kind === 'medic' && nearTurret(n.x1, n.y1)) { // MEDIC TURRET
+        const t = nearTurret(n.x1, n.y1);
+        t.medic = true; t.healT = 1;
+        comboFx(t.x, t.y, '#32ff7e', 'MEDIC TURRET');
+      }
+      else if (n.kind === 'medic') {
         G.zones.push({ x: n.x1, y: n.y1, t: ABILITIES.medic.duration, tick: 1, age: 0 });
         // landing effect: green splash + sparkles
         burst(n.x1, n.y1, '#32ff7e', 26, 320);
@@ -1662,7 +1726,12 @@ const Game = (() => {
         // the turret gets a copy of your sidearm
         const side = me.guns[1];
         ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
-        setTimeout(() => G && mergeTurrets(n.x1, n.y1), 0);
+        setTimeout(() => {
+          if (!G) return;
+          mergeTurrets(n.x1, n.y1);
+          const rd = myGadget('radar', n.x1, n.y1, COMBO.near), t = nearTurret(n.x1, n.y1);
+          if (rd && t) { removeGadget(rd); if (G.mode === 'mp') Net.send({ t: 'gadx', id: rd.id }); t.spot = true; comboFx(t.x, t.y, '#ff9ff3', 'SPOTTER TURRET'); }
+        }, 0);
         G.turrets.push({ x: n.x1, y: n.y1, t: ABILITIES.turret.duration, hp: ABILITIES.turret.hp, maxHp: ABILITIES.turret.hp, cd: 0.5, aim: 0, stats: side.stats, sprite: side.sprite });
       } else if (n.kind === 'cluster') {
         const C = ABILITIES.cluster, list = [];
@@ -2294,6 +2363,11 @@ const Game = (() => {
     if (!g) return;
     if (g.kind === 'mine') mineBoom(g);
     else { burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300); removeGadget(g); }
+  });
+  Net.on('gadc', m => {
+    if (!inMP()) return;
+    const g = G.gadgets.find(g => g.id === m.id);
+    if (g) { g[m.w] = true; if (m.w === 'vortex') g.t += COMBO.vortexTime; }
   });
   Net.on('gadm', m => {
     if (!inMP()) return;
