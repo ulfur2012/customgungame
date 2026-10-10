@@ -272,7 +272,7 @@
       const card = document.createElement('button');
       card.className = 'card combo-pick' + (on ? ' equipped' : '');
       card.innerHTML = `<div class="combo-icons"><span style="background:${A1.color}">${A1.name[0]}</span>+<span style="background:${A2.color}">${A2.name[0]}</span></div>
-        <div class="card-name">${c.name}${on ? ' ✓' : ''}</div>
+        <div class="card-name">${c.name}${c.passive ? ' <small class="hint">auto</small>' : ''}${on ? ' ✓' : ''}</div>
         <div class="card-desc"><b>${A1.name} + ${A2.name}</b><br>${c.how}</div>`;
       card.onclick = () => {
         if (!on) {

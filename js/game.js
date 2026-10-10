@@ -74,6 +74,18 @@ const Game = (() => {
       for (const k in perk.mul || {}) A[k] *= perk.mul[k];
     }
     me.abUses = (ABILITIES[me.ability] || {}).uses ?? Infinity;
+    // passive combos: both equipped -> their numbers go up
+    me.synergies = [];
+    for (const c of COMBOS) {
+      if (!c.syn || !((me.ability === c.a && me.alt.ability === c.b) || (me.ability === c.b && me.alt.ability === c.a))) continue;
+      me.synergies.push(c.name);
+      for (const ab in c.syn) {
+        const A = ABILITIES[ab], m = c.syn[ab];
+        for (const k in m.add || {}) A[k] = (A[k] || 0) + m.add[k];
+        for (const k in m.mul || {}) A[k] *= m.mul[k];
+      }
+    }
+    me.abUses = (ABILITIES[me.ability] || {}).uses ?? Infinity;
     me.alt.abUses = (ABILITIES[me.alt.ability] || {}).uses ?? Infinity;
   }
 
@@ -148,6 +160,7 @@ const Game = (() => {
 
   function begin() {
     applyBandolier(G.me);
+    if (G.me.synergies.length) G.banner = { text: `COMBO: ${G.me.synergies.join(' + ').toUpperCase()}`, t: 2.5 };
     Input.reset();
     abCache = abCache2 = '';
     updateWeaponBar(true);
@@ -766,10 +779,21 @@ const Game = (() => {
         if (bh && !bh.vortex) { upgradeGadget(bh, 'vortex'); comboFx(bh.x, bh.y, '#ff6b1a', 'INFERNO VORTEX'); return; }
         const tc = myGadget('tesla', n.x1, n.y1, COMBO.near); // PLASMA COIL
         if (tc && !tc.plasma) { upgradeGadget(tc, 'plasma'); comboFx(tc.x, tc.y, '#ff9f43', 'PLASMA COIL'); return; }
+        const t = nearTurret(n.x1, n.y1); // FLAME TURRET
+        if (t && !t.flame) { t.flame = true; comboFx(t.x, t.y, '#ff6b1a', 'FLAME TURRET'); return; }
+        const wall = G.gadgets.find(g => g.kind === 'barrier' && g.rect && !g.dead && !g.fire && isMine(g.owner) &&
+          Math.hypot(n.x1 - clamp(n.x1, g.rect[0], g.rect[0] + g.rect[2]), n.y1 - clamp(n.y1, g.rect[1], g.rect[1] + g.rect[3])) <= 70);
+        if (wall) { upgradeGadget(wall, 'fire'); comboFx(n.x1, n.y1, '#ff6b1a', 'WALL OF FIRE'); return; }
+      }
+      if (n.kind === 'bubble') { // SHIELDED TURRET (the bubble still goes up)
+        const t = G.turrets.find(t => t.hp > 0 && Math.hypot(t.x - n.x1, t.y - n.y1) <= COMBO.near);
+        if (t) { t.shieldT = ABILITIES.bubble.duration; comboFx(t.x, t.y, '#7ef9ff', 'SHIELDED TURRET'); }
       }
       if (n.kind === 'radar') { // SPOTTER TURRET
         const t = nearTurret(n.x1, n.y1);
         if (t) { t.spot = true; comboFx(t.x, t.y, '#ff9ff3', 'SPOTTER TURRET'); return; }
+        const tc = myGadget('tesla', n.x1, n.y1, COMBO.near * 1.5); // SEEKER COIL
+        if (tc && !tc.seeker) { upgradeGadget(tc, 'seeker'); comboFx(tc.x, tc.y, '#ff9ff3', 'SEEKER COIL'); return; }
       }
       if (n.kind === 'freeze') { // CRYO COIL (the freeze still goes off)
         const tc = myGadget('tesla', n.x1, n.y1, COMBO.near);
@@ -936,11 +960,11 @@ const Game = (() => {
         g.tick = A.every;
         if (isMine(g.owner)) {
           for (const e of (G.mode === 'sp' ? [...G.enemies] : targets())) {
-            if (Math.hypot(e.x - g.x, e.y - g.y) > A.radius * (g.big ? MERGE.range : 1) || !lineOfSight(g.x, g.y, e.x, e.y)) continue;
+            if (Math.hypot(e.x - g.x, e.y - g.y) > A.radius * (g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1) || !lineOfSight(g.x, g.y, e.x, e.y)) continue;
             g.zaps.push({ x: e.x, y: e.y, life: 0.15 });
             if (G.mode === 'sp') { hurtEnemy(e, A.damage * (g.plasma ? 2 : 1), 0.5, Math.atan2(e.y - g.y, e.x - g.x)); if (g.cryo) e.frozen = Math.max(e.frozen || 0, COMBO.cryoFreeze); }
           }
-        } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius * (g.big ? MERGE.range : 1) && lineOfSight(g.x, g.y, me.x, me.y)) {
+        } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius * (g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1) && lineOfSight(g.x, g.y, me.x, me.y)) {
           g.zaps.push({ x: me.x, y: me.y, life: 0.15 });
           hurtMe(A.damage * (g.plasma ? 2 : 1), 0.5, Math.atan2(me.y - g.y, me.x - g.x), g.owner);
           if (g.cryo) me.frozenT = Math.max(me.frozenT, COMBO.cryoFreeze * 0.6);
@@ -968,13 +992,18 @@ const Game = (() => {
         g.tick = 1;
         if (me.alive && me.hp < me.maxHp && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius) heal(COMBO.domeHeal);
       }
-      if (g.kind === 'barrier' && g.electric && g.rect && g.tick <= 0) {
+      if (g.kind === 'barrier' && g.fire && g.rect && Math.random() < 0.5) {
+        const [rx, ry, rw, rh] = g.rect;
+        G.fx.push({ x: rx + Math.random() * rw, y: ry + Math.random() * rh, vx: 0, vy: -70, life: 0.5, max: 0.5, size: 7, color: Math.random() < 0.5 ? '#ff6b1a' : '#ffd32a' });
+      }
+      if (g.kind === 'barrier' && (g.electric || g.fire) && g.rect && g.tick <= 0) {
         g.tick = 0.5;
+        const dps = (g.electric ? COMBO.fenceDps : 0) + (g.fire ? COMBO.fireWallDps : 0);
         const [rx, ry, rw, rh] = g.rect;
         const touch = (x, y, r) => Math.hypot(x - clamp(x, rx, rx + rw), y - clamp(y, ry, ry + rh)) <= r + 14;
         if (isMine(g.owner)) {
-          if (G.mode === 'sp') for (const e of [...G.enemies]) if (touch(e.x, e.y, e.r)) { hurtEnemy(e, COMBO.fenceDps / 2, 3, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); }
-        } else if (me.alive && hostileTo(g.owner) && touch(me.x, me.y, me.r)) { hurtMe(COMBO.fenceDps / 2, 3, Math.atan2(me.y - g.y, me.x - g.x), g.owner); g.zaps.push({ x: me.x, y: me.y, life: 0.15 }); }
+          if (G.mode === 'sp') for (const e of [...G.enemies]) if (touch(e.x, e.y, e.r)) { hurtEnemy(e, dps / 2, 3, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); }
+        } else if (me.alive && hostileTo(g.owner) && touch(me.x, me.y, me.r)) { hurtMe(dps / 2, 3, Math.atan2(me.y - g.y, me.x - g.x), g.owner); g.zaps.push({ x: me.x, y: me.y, life: 0.15 }); }
       }
       if (g.kind === 'jumppad' && me.alive && me.padCd === 0 && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius + me.r * 0.5) {
         me.padCd = 0.8;
@@ -1068,6 +1097,7 @@ const Game = (() => {
     const hostileToMe = G.mode === 'sp' ? b.team === 'e' : b.team === 'r' && hostileTo(b.owner);
     if (hostileToMe) for (const t of G.turrets) {
       if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, t.rail ? 30 : t.rocket ? 26 : 18)) continue;
+      if (t.shieldT > 0) { burst(b.x, b.y, '#7ef9ff', 4, 120); return true; } // shielded turret
       t.hp -= bulletDamage(b); t.flash = 0.1;
       if (t.hp <= 0) { t.t = 0; burst(t.x, t.y, '#cd84f1', 24, 300); }
       return true;
@@ -1145,7 +1175,7 @@ const Game = (() => {
         nameTag(`${g.name}'s buddy`, g.x, g.y - PLAYER.r - 20, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
       } else if (g.kind === 'barrier' && g.rect) {
         const [x, y, w, h] = g.rect;
-        ctx.fillStyle = g.electric ? 'rgba(254,202,87,0.55)' : 'rgba(84,160,255,0.55)'; ctx.strokeStyle = g.electric ? '#fff7d6' : '#c8e1ff'; ctx.lineWidth = 2;
+        ctx.fillStyle = g.fire ? 'rgba(255,107,26,0.6)' : g.electric ? 'rgba(254,202,87,0.55)' : 'rgba(84,160,255,0.55)'; ctx.strokeStyle = g.electric ? '#fff7d6' : '#c8e1ff'; ctx.lineWidth = 2;
         ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h);
         if (g.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(x, y, w, h); }
         if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(x - 3, y - 3, w + 6, h + 6); }
@@ -1191,7 +1221,7 @@ const Game = (() => {
         drawBar(g.x, g.y - 32, 44, 6, g.hp / g.maxHp, false, '#ff9ff3');
       } else if (g.kind === 'tesla') {
         ctx.strokeStyle = 'rgba(72,219,251,0.25)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * (g.big ? MERGE.range : 1), 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * (g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1), 0, Math.PI * 2); ctx.stroke();
         ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc); ctx.translate(-g.x, -g.y);
         if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(g.x - 22, g.y - 22, 44, 44); }
         ctx.fillStyle = g.flash > 0 ? '#fff' : '#2d3436'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
@@ -1582,6 +1612,7 @@ const Game = (() => {
     G.zones = G.zones.filter(z => z.t > 0);
     for (const t of G.turrets) {
       t.t -= dt; t.cd -= dt;
+      if (t.shieldT > 0) t.shieldT -= dt;
       if (t.rail) { // RAILGUN: fast, long range bolts of electricity
         const R = MERGE.railgun;
         if (t.zap) { t.zap.life -= dt; if (t.zap.life <= 0) t.zap = null; }
@@ -1631,7 +1662,7 @@ const Game = (() => {
       if (best && t.cd <= 0) {
         const s = t.stats;
         t.cd = Math.max(s.fireDelay, s.reloadTime / s.magSize, 0.15); // reloads built in, never runs dry
-        shootFrom(t.x + Math.cos(t.aim) * 20, t.y + Math.sin(t.aim) * 20, t.aim, s, t.spot ? { kind: { ghost: 1 }, range: COMBO.spotRange } : {});
+        shootFrom(t.x + Math.cos(t.aim) * 20, t.y + Math.sin(t.aim) * 20, t.aim, t.flame ? { ...s, damage: s.damage * COMBO.flameMul } : s, t.spot ? { kind: { ghost: 1 }, range: COMBO.spotRange } : {});
       }
     }
     G.turrets = G.turrets.filter(t => t.t > 0);
@@ -1681,6 +1712,8 @@ const Game = (() => {
         ctx.strokeStyle = 'rgba(50,255,126,0.25)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(t.x, t.y, COMBO.medicRadius, 0, Math.PI * 2); ctx.stroke();
       }
+      if (t.shieldT > 0) { ctx.strokeStyle = `rgba(126,249,255,${0.6 + 0.3 * Math.sin(G.time * 8)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(t.x, t.y, 26, 0, Math.PI * 2); ctx.stroke(); }
+      if (t.flame) { ctx.fillStyle = `rgba(255,107,26,${0.25 + 0.15 * Math.sin(G.time * 12)})`; ctx.beginPath(); ctx.arc(t.x, t.y, 24, 0, Math.PI * 2); ctx.fill(); }
       if (t.spot) { // radar dish on the back + scanning sweep
         ctx.strokeStyle = 'rgba(255,159,243,0.35)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.arc(t.x, t.y, 60, G.time * 4, G.time * 4 + 0.6); ctx.closePath(); ctx.stroke();

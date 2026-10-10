@@ -535,8 +535,23 @@ const COMBOS = [
   { a: 'blackhole', b: 'grenade', name: 'Singularity', how: 'Throw a Grenade into your Black Hole: it collapses into a giant 150 damage explosion.' },
   { a: 'tesla', b: 'firepit',  name: 'Plasma Coil',    how: 'Throw a Fire Pit onto a Tesla Coil: its zaps turn orange and do double damage.' },
   { a: 'mine', b: 'freeze',    name: 'Cryo Mine',      how: 'Throw a Freeze Bomb onto your Land Mine: when it blows up it also freezes everyone around it.' },
+  { a: 'tesla', b: 'radar',    name: 'Seeker Coil',    how: 'Throw a Radar next to a Tesla Coil: the coil zaps 60% further.' },
+  { a: 'turret', b: 'bubble',  name: 'Shielded Turret', how: 'Throw a Bubble Shield onto a Turret: the turret can\'t be hurt while the bubble is up.' },
+  { a: 'barrier', b: 'firepit', name: 'Wall of Fire',  how: 'Throw a Fire Pit onto a Barrier: the wall burns enemies that touch it (20/s).' },
+  { a: 'turret', b: 'firepit', name: 'Flame Turret',   how: 'Throw a Fire Pit onto a Turret: its bullets do 50% more damage.' },
+  // ---- passive combos: just equip both, they power each other up ----
+  { a: 'sprinter', b: 'dash',   name: 'Speedster',      passive: true, how: 'Equip both: +2 dashes and dashes go 50% further.', syn: { dash: { add: { uses: 2 }, mul: { power: 1.5 } } } },
+  { a: 'glass', b: 'overcharge', name: 'Overload',      passive: true, how: 'Equip both: overcharged shots do 3x damage instead of 2x.', syn: { overcharge: { add: { mul: 1 } } } },
+  { a: 'armor', b: 'shield',    name: 'Tank',           passive: true, how: 'Equip both: shield has +150 HP and armor blocks 30% instead of 20%.', syn: { shield: { add: { hp: 150 } }, armor: { add: { takeMul: -0.1 } } } },
+  { a: 'regen', b: 'medic',     name: 'Fast Recovery',  passive: true, how: 'Equip both: regen every 6s and Heal Zones heal +4 HP/s.', syn: { regen: { add: { every: -4 } }, medic: { add: { perSec: 4 } } } },
+  { a: 'hands', b: 'rapid',     name: 'Trigger Happy',  passive: true, how: 'Equip both: Rapid Fire lasts 9s and shoots even faster.', syn: { rapid: { add: { duration: 4 }, mul: { fireMul: 0.8 } } } },
+  { a: 'magnet', b: 'resupply', name: 'Ammo Hoarder',   passive: true, how: 'Equip both: Resupply cooldown 5s and the magnet pulls 50% further.', syn: { resupply: { add: { cooldown: -5 } }, magnet: { mul: { range: 1.5 } } } },
+  { a: 'scavenger', b: 'vampire', name: 'Bloodhound',   passive: true, how: 'Equip both: hits heal 5 HP and kills heal 20 HP.', syn: { vampire: { add: { heal: 2 } }, scavenger: { add: { heal: 10 } } } },
+  { a: 'ninja', b: 'shadowstep', name: 'Assassin',      passive: true, how: 'Equip both: +2 Shadow Steps that reach 40% further.', syn: { shadowstep: { add: { uses: 2 }, mul: { range: 1.4 } } } },
+  { a: 'adrenaline', b: 'stim', name: 'Racing Heart',   passive: true, how: 'Equip both: Stim Shot costs no HP and lasts 12s.', syn: { stim: { add: { cost: -10, duration: 4 } } } },
+  { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
 ];
-const COMBO = { fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 6, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
+const COMBO = { seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 6, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
 
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.
