@@ -639,7 +639,7 @@ const Game = (() => {
     const pressed = Input.take(['abPress', 'ab2Press', 'ab3Press', 'ab4Press'][slot]);
     const held = Input.abilityHeld(slot);
     const ready = me.abCd === 0 && me.abUses > 0 && (me.ability !== 'shield' || me.shieldT === 0 || G.infAbility);
-    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'resupply', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability);
+    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability);
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
     } else {
@@ -717,17 +717,17 @@ const Game = (() => {
       G.banner = { text: 'Stimmed!', t: 1 };
     }
     if (me.ability === 'shadowstep' && !stepBehind(A.range)) { me.abUses++; me.abCd = 0; G.banner = { text: 'No enemy in sight', t: 1 }; }
-    if (me.ability === 'resupply') {
-      for (const g of me.guns) {
-        g.reserve = Math.min(g.stats.maxReserve, g.reserve + g.stats.magSize);
-        g.ammo = g.stats.magSize; g.reload = 0;
-      }
-      G.banner = { text: 'Resupplied!', t: 1 };
-      if ((me.synergies || []).includes('Supply Decoy')) { // SUPPLY DECOY combo
-        const n = G.gadgets.filter(g => g.kind === 'decoy' && g.supply && !g.dead && isMine(g.owner)).length;
-        if (n < COMBO.supplyMax) { landGadget({ kind: 'decoy', x1: me.x + Math.cos(me.aim) * 50, y1: me.y + Math.sin(me.aim) * 50, a: me.aim, owner: myOwnerId(), supply: true }); G.banner = { text: 'Supply Decoy out!', t: 1.2 }; }
-      }
-      updateWeaponBar(true);
+  }
+
+  // the thrown Resupply crate landed: a pickup with a few charges (+ a Supply Decoy with the combo)
+  function landSupply(n) {
+    const pack = { id: Math.random().toString(36).slice(2, 9), x: n.x1, y: n.y1, kind: 'supply', mags: ABILITIES.resupply.charges };
+    addPacks([pack]);
+    if (G.mode === 'mp') Net.send({ t: 'packs', packs: [pack] });
+    burst(n.x1, n.y1, '#fff200', 20, 260);
+    if (isMine(n.owner) && (G.me.synergies || []).includes('Supply Decoy')) { // SUPPLY DECOY combo
+      const k = G.gadgets.filter(g => g.kind === 'decoy' && g.supply && !g.dead && isMine(g.owner)).length;
+      if (k < COMBO.supplyMax) { landGadget({ kind: 'decoy', x1: n.x1, y1: n.y1, a: n.a || 0, owner: n.owner, supply: true }); G.banner = { text: 'Supply Decoy out!', t: 1.2 }; }
     }
   }
 
@@ -1091,7 +1091,7 @@ const Game = (() => {
   function buddyNeed(g) {
     const A = ABILITIES.decoy, near = list => list.reduce((b, o) => (!b || Math.hypot(o.x - g.x, o.y - g.y) < Math.hypot(b.x - g.x, b.y - g.y) ? o : b), null);
     if (g.stats && g.ammo === 0 && g.reserve === 0) {
-      const box = near([...G.packs.filter(p => p.kind === 'ammo'), ...G.gadgets.filter(o => o.supply && !o.dead && isMine(o.owner))]);
+      const box = near([...G.packs.filter(p => p.kind === 'ammo' || p.kind === 'supply'), ...G.gadgets.filter(o => o.supply && !o.dead && isMine(o.owner))]);
       if (box) return { x: box.x, y: box.y, why: 'ammo' };
     }
     // between waves it tops up on any healing in the 8x8 squares around it; during a fight only when it's low
@@ -1124,6 +1124,15 @@ const Game = (() => {
     // pick up ammo boxes / health packs it walks over
     for (const p of G.packs) {
       if (Math.hypot(p.x - g.x, p.y - g.y) > g.r + HEALTH_PACK.r) continue;
+      if (p.kind === 'supply' && g.stats && g.ammo + g.reserve < g.stats.magSize * (1 + A.spareMags)) {
+        g.ammo = g.stats.magSize; g.reserve = g.stats.magSize * A.spareMags;
+        G.texts.push({ x: g.x, y: g.y - 34, text: 'RESUPPLIED', color: '#fff200', life: 0.9 });
+        p.mags--;
+        if (p.mags > 0) { if (G.mode === 'mp') Net.send({ t: 'boxm', id: p.id, mags: p.mags }); break; }
+        removePack(p.id);
+        if (G.mode === 'mp') Net.send({ t: 'took', id: p.id });
+        break;
+      }
       if (p.kind === 'ammo' && g.stats && g.ammo + g.reserve < g.stats.magSize * (1 + A.spareMags)) {
         // take only the mags it needs; the rest stays in the box
         p.mags = p.mags ?? AMMO.box.mags;
@@ -2005,7 +2014,8 @@ const Game = (() => {
           if (rd && t) { removeGadget(rd); if (G.mode === 'mp') Net.send({ t: 'gadx', id: rd.id }); t.spot = true; comboFx(t.x, t.y, '#ff9ff3', 'SPOTTER TURRET'); }
         }, 0);
         G.turrets.push({ x: n.x1, y: n.y1, t: ABILITIES.turret.duration, hp: ABILITIES.turret.hp, maxHp: ABILITIES.turret.hp, cd: 0.5, aim: 0, stats: side.stats, sprite: side.sprite });
-      } else if (n.kind === 'cluster') {
+      } else if (n.kind === 'resupply') landSupply(n);
+      else if (n.kind === 'cluster') {
         const C = ABILITIES.cluster, list = [];
         for (let i = 0; i < C.bombs; i++) {
           const an = i * Math.PI * 2 / C.bombs + Math.random() * 0.5, d = 40 + Math.random() * (C.radius - 40);
@@ -2172,6 +2182,15 @@ const Game = (() => {
           if (G.mode === 'mp') Net.send({ t: 'boxm', id: p.id, mags: p.mags });
           continue;
         }
+      } else if (p.kind === 'supply') {
+        // supply crate: one charge fills both guns all the way up
+        const needs = me.guns.some(gn => gn.ammo < gn.stats.magSize || gn.reserve < gn.stats.maxReserve);
+        if (!needs) continue;
+        for (const gn of me.guns) { gn.reserve = gn.stats.maxReserve; gn.ammo = gn.stats.magSize; gn.reload = 0; } // completely full
+        G.texts.push({ x: me.x, y: me.y - 34, text: 'RESUPPLIED', color: '#fff200', life: 1 });
+        updateWeaponBar(true);
+        p.mags--;
+        if (p.mags > 0) { if (G.mode === 'mp') Net.send({ t: 'boxm', id: p.id, mags: p.mags }); continue; }
       } else if (p.kind === 'epic') {
         if (me.ult) continue; // already holding one
         me.ult = rollUlt(allSlots().map(s => s.ability));
@@ -2220,6 +2239,21 @@ const Game = (() => {
     ctx.fillText('★', p.x, p.y + 1);
   }
 
+  // thrown Resupply crate: yellow box, one light per charge left
+  function drawSupplyCrate(p) {
+    const s = 18;
+    ctx.fillStyle = `rgba(255,242,0,${0.2 + 0.1 * Math.sin(performance.now() / 200)})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.8, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#e1b12c'; ctx.strokeStyle = '#4a3700'; ctx.lineWidth = 3;
+    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2); ctx.strokeRect(p.x - s, p.y - s, s * 2, s * 2);
+    ctx.fillStyle = '#4a3700'; ctx.fillRect(p.x - s, p.y - 2, s * 2, 4);
+    const n = p.mags ?? ABILITIES.resupply.charges;
+    for (let i = 0; i < ABILITIES.resupply.charges; i++) {
+      ctx.fillStyle = i < n ? '#fff200' : '#5c4a00';
+      ctx.fillRect(p.x - s + 4 + i * 8, p.y - s + 4, 5, 6);
+    }
+  }
+
   function drawAbilityCrate(p) {
     const s = 20, glow = 0.25 + 0.15 * Math.sin(performance.now() / 200);
     ctx.fillStyle = `rgba(255,40,40,${glow})`;
@@ -2252,6 +2286,7 @@ const Game = (() => {
       if (p.kind === 'ammo') { drawAmmoBox(p); continue; }
       if (p.kind === 'ability') { drawAbilityCrate(p); continue; }
       if (p.kind === 'epic') { drawEpicCrate(p); continue; }
+      if (p.kind === 'supply') { drawSupplyCrate(p); continue; }
       const pulse = 1 + Math.sin(performance.now() / 250) * 0.08, s = HEALTH_PACK.r * pulse, t = s * 0.38;
       ctx.fillStyle = 'rgba(40,255,110,0.18)';
       ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.4, 0, Math.PI * 2); ctx.fill();

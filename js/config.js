@@ -436,8 +436,8 @@ const ABILITIES = {
               desc: 'Hold to aim, let go to throw a healing circle: +8 HP every second while you stand in it (8s).' },
   turret:   { name: 'Turret', type: 'active', thrown: true, color: '#cd84f1', cooldown: 25, uses: 2, duration: Infinity, hp: 25, delay: 0.35, damage: 7,
               desc: 'Hold to aim, let go to throw a turret. It uses a copy of your sidearm (its damage, fire rate and bullets) and shoots the closest enemy it can see. Stays until it is destroyed (25 HP).' },
-  resupply: { name: 'Resupply', type: 'active', color: '#fff200', cooldown: 10, uses: 2,
-              desc: 'Instantly fills both guns and gives each one an extra spare mag.' },
+  resupply: { name: 'Resupply', type: 'active', thrown: true, color: '#fff200', cooldown: 10, uses: 2, radius: 30, charges: 4,
+              desc: 'Hold to aim, let go to throw a supply crate. Walking over it fills both guns all the way up (one charge). It has 4 charges, and your decoys refill from it too.' },
   vampire:  { name: 'Vampire', type: 'passive', color: '#b33939', heal: 3,
               desc: 'Passive: heal 3 HP every time one of your bullets hits.' },
   laststand:{ name: 'Last Stand', type: 'passive', color: '#ff3f34', hp: 1, inv: 3,
@@ -542,11 +542,11 @@ const ABILITY_ICONS = {
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
 const ABILITY_GROUPS = [
   { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier'] },
-  { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'jumppad', 'bubble', 'medic', 'smoke'] },
+  { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'jumppad', 'bubble', 'medic', 'smoke', 'resupply'] },
   { label: '💣 Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
   { label: '🔫 Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
   { label: '🏃 Movement', ids: ['dash', 'blink', 'grapple', 'phase', 'shadowstep', 'recall'] },
-  { label: '🛡️ Support', ids: ['shield', 'burger', 'energy', 'stim', 'reflect', 'slowmo', 'resupply'] },
+  { label: '🛡️ Support', ids: ['shield', 'burger', 'energy', 'stim', 'reflect', 'slowmo'] },
 ];
 
 // Ability combos: throw one ability's thing onto another's (needs both, e.g. one in each ability slot).
@@ -577,7 +577,7 @@ const COMBOS = [
   { a: 'scavenger', b: 'vampire', name: 'Bloodhound',   passive: true, how: 'Equip both: hits heal 5 HP and kills heal 20 HP.', syn: { vampire: { add: { heal: 2 } }, scavenger: { add: { heal: 10 } } } },
   { a: 'ninja', b: 'shadowstep', name: 'Assassin',      passive: true, how: 'Equip both: +2 Shadow Steps that reach 40% further.', syn: { shadowstep: { add: { uses: 2 }, mul: { range: 1.4 } } } },
   { a: 'adrenaline', b: 'stim', name: 'Racing Heart',   passive: true, how: 'Equip both: Stim Shot costs no HP and lasts 12s.', syn: { stim: { add: { cost: -10, duration: 4 } } } },
-  { a: 'resupply', b: 'decoy', name: 'Supply Decoy',  passive: true, how: 'Equip both: using Resupply also sends out a Supply Decoy (no gun, never attacks). It runs to your decoys that are low on ammo and gives each one 3 mags. Up to 2 at once.', syn: {} },
+  { a: 'resupply', b: 'decoy', name: 'Supply Decoy',  passive: true, how: 'Equip both: your thrown Resupply crate also sends out a Supply Decoy (no gun, never attacks). It runs to your decoys that are low on ammo and gives each one 3 mags. Up to 2 at once.', syn: {} },
   { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
 ];
 const COMBO = { supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 3, healRange: 700,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
