@@ -1001,7 +1001,7 @@ const Game = (() => {
     G.zones = G.zones.filter(z => z.t > 0);
     for (const t of G.turrets) {
       t.t -= dt; t.cd -= dt;
-      let best = null, bd = T.range;
+      let best = null, bd = t.stats.range; // sees as far as your sidearm shoots
       for (const e of targets()) {
         const d = Math.hypot(e.x - t.x, e.y - t.y);
         if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; }
