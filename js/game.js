@@ -760,6 +760,8 @@ const Game = (() => {
       if (n.kind === 'firepit') { // INFERNO VORTEX
         const bh = myGadget('blackhole', n.x1, n.y1, ABILITIES.blackhole.radius);
         if (bh && !bh.vortex) { upgradeGadget(bh, 'vortex'); comboFx(bh.x, bh.y, '#ff6b1a', 'INFERNO VORTEX'); return; }
+        const tc = myGadget('tesla', n.x1, n.y1, COMBO.near); // PLASMA COIL
+        if (tc && !tc.plasma) { upgradeGadget(tc, 'plasma'); comboFx(tc.x, tc.y, '#ff9f43', 'PLASMA COIL'); return; }
       }
       if (n.kind === 'radar') { // SPOTTER TURRET
         const t = nearTurret(n.x1, n.y1);
@@ -768,12 +770,18 @@ const Game = (() => {
       if (n.kind === 'freeze') { // CRYO COIL (the freeze still goes off)
         const tc = myGadget('tesla', n.x1, n.y1, COMBO.near);
         if (tc && !tc.cryo) { upgradeGadget(tc, 'cryo'); comboFx(tc.x, tc.y, '#74b9ff', 'CRYO COIL'); }
+        const mn = myGadget('mine', n.x1, n.y1, COMBO.near); // CRYO MINE
+        if (mn && !mn.cryo) { upgradeGadget(mn, 'cryo'); comboFx(mn.x, mn.y, '#74b9ff', 'CRYO MINE'); }
       }
     }
     if (ABILITIES[n.kind].building) ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
     const main = G.me.guns[0];
     addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite, hp: n.hp, dur: n.dur, big: n.big });
+    if (n.kind === 'barrier' && isMine(n.owner) && myGadget('tesla', n.x1, n.y1, COMBO.fenceNear)) { // ELECTRIC FENCE
+      const g = G.gadgets.find(x => x.id === id);
+      setTimeout(() => { if (G && g && !g.dead) { upgradeGadget(g, 'electric'); comboFx(g.x, g.y, '#feca57', 'ELECTRIC FENCE'); } }, 0);
+    }
     if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build, hp: n.hp, dur: n.dur, g: n.big ? 1 : 0 });
     if (ABILITIES[n.kind].building && !n.big) mergeBuildings(n.kind, n.x1, n.y1);
   }
@@ -926,11 +934,11 @@ const Game = (() => {
           for (const e of (G.mode === 'sp' ? [...G.enemies] : targets())) {
             if (Math.hypot(e.x - g.x, e.y - g.y) > A.radius * (g.big ? MERGE.range : 1) || !lineOfSight(g.x, g.y, e.x, e.y)) continue;
             g.zaps.push({ x: e.x, y: e.y, life: 0.15 });
-            if (G.mode === 'sp') { hurtEnemy(e, A.damage, 0.5, Math.atan2(e.y - g.y, e.x - g.x)); if (g.cryo) e.frozen = Math.max(e.frozen || 0, COMBO.cryoFreeze); }
+            if (G.mode === 'sp') { hurtEnemy(e, A.damage * (g.plasma ? 2 : 1), 0.5, Math.atan2(e.y - g.y, e.x - g.x)); if (g.cryo) e.frozen = Math.max(e.frozen || 0, COMBO.cryoFreeze); }
           }
         } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius * (g.big ? MERGE.range : 1) && lineOfSight(g.x, g.y, me.x, me.y)) {
           g.zaps.push({ x: me.x, y: me.y, life: 0.15 });
-          hurtMe(A.damage, 0.5, Math.atan2(me.y - g.y, me.x - g.x), g.owner);
+          hurtMe(A.damage * (g.plasma ? 2 : 1), 0.5, Math.atan2(me.y - g.y, me.x - g.x), g.owner);
           if (g.cryo) me.frozenT = Math.max(me.frozenT, COMBO.cryoFreeze * 0.6);
         }
       }
@@ -944,6 +952,26 @@ const Game = (() => {
         }
       }
       if (g.kind === 'decoy' && isMine(g.owner)) updateBuddy(g, dt);
+      if (g.kind === 'decoy' && g.medicBuddy && isMine(g.owner)) {
+        g.healT -= dt;
+        if (g.healT <= 0) {
+          g.healT = 1;
+          g.hp = Math.min(g.maxHp, g.hp + COMBO.buddyHeal);
+          if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - g.x, me.y - g.y) <= COMBO.buddyRadius) heal(COMBO.buddyHeal);
+        }
+      }
+      if (g.kind === 'bubble' && g.heal && g.tick <= 0) {
+        g.tick = 1;
+        if (me.alive && me.hp < me.maxHp && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius) heal(COMBO.domeHeal);
+      }
+      if (g.kind === 'barrier' && g.electric && g.rect && g.tick <= 0) {
+        g.tick = 0.5;
+        const [rx, ry, rw, rh] = g.rect;
+        const touch = (x, y, r) => Math.hypot(x - clamp(x, rx, rx + rw), y - clamp(y, ry, ry + rh)) <= r + 14;
+        if (isMine(g.owner)) {
+          if (G.mode === 'sp') for (const e of [...G.enemies]) if (touch(e.x, e.y, e.r)) { hurtEnemy(e, COMBO.fenceDps / 2, 3, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); }
+        } else if (me.alive && hostileTo(g.owner) && touch(me.x, me.y, me.r)) { hurtMe(COMBO.fenceDps / 2, 3, Math.atan2(me.y - g.y, me.x - g.x), g.owner); g.zaps.push({ x: me.x, y: me.y, life: 0.15 }); }
+      }
       if (g.kind === 'jumppad' && me.alive && me.padCd === 0 && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius + me.r * 0.5) {
         me.padCd = 0.8;
         me.airT = A.air; me.airA = g.a; // flying: walls don't stop you until you land
@@ -1072,6 +1100,11 @@ const Game = (() => {
     const A = ABILITIES.mine;
     removeGadget(g);
     explode(g.x, g.y, A.radius, A.damage, g.owner);
+    if (g.cryo) { // cryo mine freezes everyone around it too
+      G.rings.push({ x: g.x, y: g.y, r: A.radius * 1.3, life: 0.6, max: 0.6, color: '126,214,255' });
+      areaAll({ x: g.x, y: g.y, owner: g.owner }, A.radius * 1.3, e => { e.frozen = COMBO.cryoMineFreeze; },
+        () => { if (hostileTo(g.owner)) G.me.frozenT = COMBO.cryoMineFreeze; });
+    }
   }
 
   function drawGadgetList() {
@@ -1089,7 +1122,7 @@ const Game = (() => {
         for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(g.x, g.y, r * (0.3 + 0.2 * i), G.time * (3 + i) , G.time * (3 + i) + 2); ctx.stroke(); }
       } else if (g.kind === 'bubble') {
         const r = A.radius * pop;
-        ctx.fillStyle = 'rgba(126,249,255,0.12)'; ctx.strokeStyle = `rgba(126,249,255,${0.5 + 0.2 * Math.sin(G.time * 6)})`; ctx.lineWidth = 4;
+        ctx.fillStyle = g.heal ? 'rgba(50,255,126,0.16)' : 'rgba(126,249,255,0.12)'; ctx.strokeStyle = g.heal ? `rgba(50,255,126,${0.6 + 0.2 * Math.sin(G.time * 6)})` : `rgba(126,249,255,${0.5 + 0.2 * Math.sin(G.time * 6)})`; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(g.x, g.y, r * 0.8, -2.4, -1.6); ctx.stroke();
@@ -1097,16 +1130,35 @@ const Game = (() => {
         ctx.fillStyle = 'rgba(255,107,26,0.25)'; ctx.strokeStyle = 'rgba(255,160,40,0.7)'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * pop, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       } else if (g.kind === 'decoy') {
+        if (g.medicBuddy) {
+          const k = (G.time % 1.2) / 1.2;
+          ctx.strokeStyle = `rgba(50,255,126,${0.5 * (1 - k)})`; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.arc(g.x, g.y, 24 + k * (COMBO.buddyRadius - 24), 0, Math.PI * 2); ctx.stroke();
+        }
         drawPlayer({ x: g.x, y: g.y, aim: g.aim ?? g.a, kick: g.kick || 0 }, g.color, g.sprite, g.flash > 0);
+        if (g.medicBuddy) { ctx.fillStyle = '#32ff7e'; ctx.fillRect(g.x - 3, g.y - 9, 6, 18); ctx.fillRect(g.x - 9, g.y - 3, 18, 6); }
         drawBar(g.x, g.y - PLAYER.r - 14, 54, 7, g.hp / g.maxHp, false, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
         nameTag(`${g.name}'s buddy`, g.x, g.y - PLAYER.r - 20, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
       } else if (g.kind === 'barrier' && g.rect) {
         const [x, y, w, h] = g.rect;
-        ctx.fillStyle = 'rgba(84,160,255,0.55)'; ctx.strokeStyle = '#c8e1ff'; ctx.lineWidth = 2;
+        ctx.fillStyle = g.electric ? 'rgba(254,202,87,0.55)' : 'rgba(84,160,255,0.55)'; ctx.strokeStyle = g.electric ? '#fff7d6' : '#c8e1ff'; ctx.lineWidth = 2;
         ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h);
+        if (g.electric) { // crackling sparks running along the fence
+          ctx.strokeStyle = '#fff3a0'; ctx.lineWidth = 2;
+          for (let i = 0; i < 3; i++) {
+            ctx.beginPath();
+            for (let k = 0; k <= 8; k++) {
+              const f = k / 8, px = w > h ? x + w * f : x + w / 2 + (Math.random() - 0.5) * 16, py = w > h ? y + h / 2 + (Math.random() - 0.5) * 16 : y + h * f;
+              k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+            }
+            ctx.stroke();
+          }
+          ctx.strokeStyle = '#c7f4ff'; ctx.lineWidth = 3;
+          for (const z of g.zaps) { ctx.beginPath(); ctx.moveTo(clamp(z.x, x, x + w), clamp(z.y, y, y + h)); ctx.lineTo(z.x, z.y); ctx.stroke(); }
+        }
       } else if (g.kind === 'mine') {
         if (!hostileTo(g.owner)) { // enemies can't see your mines
-          ctx.fillStyle = '#3d3d3d'; ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 2;
+          ctx.fillStyle = g.cryo ? '#4a6a80' : '#3d3d3d'; ctx.strokeStyle = g.cryo ? '#7ed6ff' : '#c0392b'; ctx.lineWidth = 2;
           ctx.beginPath(); ctx.arc(g.x, g.y, 12, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
           ctx.fillStyle = g.age > A.arm && Math.sin(G.time * 10) > 0 ? '#ff3030' : '#550000';
           ctx.beginPath(); ctx.arc(g.x, g.y, 4, 0, Math.PI * 2); ctx.fill();
@@ -1136,13 +1188,13 @@ const Game = (() => {
         ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc); ctx.translate(-g.x, -g.y);
         if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(g.x - 22, g.y - 22, 44, 44); }
         ctx.fillStyle = g.flash > 0 ? '#fff' : '#2d3436'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
-        ctx.strokeStyle = g.cryo ? '#dff6ff' : '#48dbfb'; ctx.lineWidth = g.cryo ? 4 : 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
+        ctx.strokeStyle = g.plasma ? '#ff9f43' : g.cryo ? '#dff6ff' : '#48dbfb'; ctx.lineWidth = g.cryo || g.plasma ? 4 : 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
         if (g.cryo) { ctx.fillStyle = 'rgba(126,214,255,0.35)'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36); }
         ctx.fillStyle = '#636e72'; ctx.fillRect(g.x - 5, g.y - 14, 10, 18);
         ctx.fillStyle = '#48dbfb'; ctx.beginPath(); ctx.arc(g.x, g.y - 12, 8 + Math.sin(G.time * 20) * 2, 0, Math.PI * 2); ctx.fill();
         drawBar(g.x, g.y - 32, 44, 6, g.hp / g.maxHp, false, '#48dbfb');
         ctx.restore();
-        ctx.strokeStyle = '#c7f4ff'; ctx.lineWidth = 3;
+        ctx.strokeStyle = g.plasma ? '#ffbe76' : '#c7f4ff'; ctx.lineWidth = g.plasma ? 4 : 3;
         for (const z of g.zaps) { // jagged lightning
           ctx.beginPath(); ctx.moveTo(g.x, g.y - 4);
           for (let i = 1; i < 6; i++) { const k = i / 6; ctx.lineTo(g.x + (z.x - g.x) * k + (Math.random() - 0.5) * 22, g.y - 4 + (z.y - g.y + 4) * k + (Math.random() - 0.5) * 22); }
@@ -1710,7 +1762,11 @@ const Game = (() => {
       n.t += dt;
       if (n.t < G_.flight) continue;
       n.done = true;
-      if (n.kind === 'medic' && nearTurret(n.x1, n.y1)) { // MEDIC TURRET
+      const dome = n.kind === 'medic' && isMine(n.owner) && myGadget('bubble', n.x1, n.y1, ABILITIES.bubble.radius);
+      const bud = n.kind === 'medic' && isMine(n.owner) && myGadget('decoy', n.x1, n.y1, COMBO.near);
+      if (dome && !dome.heal) { upgradeGadget(dome, 'heal'); dome.t += COMBO.domeTime; comboFx(dome.x, dome.y, '#32ff7e', 'HEALING DOME'); }
+      else if (bud && !bud.medicBuddy) { bud.medicBuddy = true; bud.healT = 1; comboFx(bud.x, bud.y, '#32ff7e', 'MEDIC BUDDY'); }
+      else if (n.kind === 'medic' && nearTurret(n.x1, n.y1)) { // MEDIC TURRET
         const t = nearTurret(n.x1, n.y1);
         t.medic = true; t.healT = 1;
         comboFx(t.x, t.y, '#32ff7e', 'MEDIC TURRET');
@@ -1743,7 +1799,18 @@ const Game = (() => {
         for (const s of list) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: n.owner });
         if (G.mode === 'mp') Net.send({ t: 'ult', k: 'cluster', s: list });
       } else if (ABILITIES[n.kind] && ABILITIES[n.kind].gadget) landGadget(n);
-      else explode(n.x1, n.y1, G_.radius, G_.damage, n.owner);
+      else {
+        const bh = isMine(n.owner) && myGadget('blackhole', n.x1, n.y1, ABILITIES.blackhole.radius);
+        if (bh) { // SINGULARITY
+          removeGadget(bh);
+          if (G.mode === 'mp') Net.send({ t: 'gadx', id: bh.id });
+          const s = [Math.round(bh.x), Math.round(bh.y), 0.05, COMBO.singRadius, COMBO.singDamage];
+          G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: n.owner });
+          if (G.mode === 'mp') Net.send({ t: 'ult', k: 'sing', s: [s] });
+          comboFx(bh.x, bh.y, '#8e44ad', 'SINGULARITY');
+          G.shake = 30;
+        } else explode(n.x1, n.y1, G_.radius, G_.damage, n.owner);
+      }
     }
     G.nades = G.nades.filter(n => !n.done);
 

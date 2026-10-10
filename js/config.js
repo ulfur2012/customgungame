@@ -519,8 +519,14 @@ const COMBOS = [
   { a: 'turret', b: 'medic',   name: 'Medic Turret',   how: 'Throw a Heal Zone onto a Turret: it keeps shooting and heals you 6 HP/s when you stand near it, forever.' },
   { a: 'blackhole', b: 'firepit', name: 'Inferno Vortex', how: 'Throw a Fire Pit into your Black Hole: it burns enemies it pulls in (20/s) and lasts 3s longer.' },
   { a: 'tesla', b: 'freeze',   name: 'Cryo Coil',      how: 'Throw a Freeze Bomb onto a Tesla Coil: its zaps freeze enemies for a moment.' },
+  { a: 'barrier', b: 'tesla',  name: 'Electric Fence', how: 'Throw a Barrier next to a Tesla Coil: the wall crackles and shocks enemies that touch it (15/s).' },
+  { a: 'bubble', b: 'medic',   name: 'Healing Dome',   how: 'Throw a Heal Zone into your Bubble Shield: inside heals you 8 HP/s and the dome lasts 6s longer.' },
+  { a: 'decoy', b: 'medic',    name: 'Medic Buddy',    how: 'Throw a Heal Zone onto your Buddy: it heals you 5 HP/s when you are near, and heals itself too.' },
+  { a: 'blackhole', b: 'grenade', name: 'Singularity', how: 'Throw a Grenade into your Black Hole: it collapses into a giant 150 damage explosion.' },
+  { a: 'tesla', b: 'firepit',  name: 'Plasma Coil',    how: 'Throw a Fire Pit onto a Tesla Coil: its zaps turn orange and do double damage.' },
+  { a: 'mine', b: 'freeze',    name: 'Cryo Mine',      how: 'Throw a Freeze Bomb onto your Land Mine: when it blows up it also freezes everyone around it.' },
 ];
-const COMBO = { near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 6, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
+const COMBO = { fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 6, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
 
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.
