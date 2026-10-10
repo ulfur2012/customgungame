@@ -38,6 +38,17 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
 - You can't see enemies/enemy players unless there's line of sight to their middle (`canSee`).
 - Multiplayer damage is worked out by whoever gets hit; gadgets are synced with `gad`/`gadx`/`gadc`/`gadm`.
 - Maps must be identical in every browser (no random-comparator sorts in the generator).
+- SHOP (config `SHOP`, `priceOf` in core.js, `unowned`/`checkout` in ui.js): score from SP runs (not test) is banked
+  in `Account.user.bank`; unlocks in `Account.user.owned` ('ab:id', 'perk:id', 'part:kind:slot:id'). Some abilities
+  + the first part of each slot are free. Only active when the game isn't "All upgrades free" (SP toggle on the
+  single-player screen, host setting `settings.free` in MP). Customize from the main menu is always free; on paid
+  games you can pick anything but pressing Start/Done lists unowned items + total and asks to buy (MP round start
+  strips unowned items if declined).
+- EASY (config): waves 1-10 in SP have fewer/weaker enemies, slower spawns, less damage taken.
+- Decoy AI (`buddyTarget`, config `DECOY_AI`): decoys spread over the nearest unclaimed targets, but team up when
+  a claimed target has >2 enemies near it. Decoys push apart (same owner only).
+- Gun parts are drawn as realistic vector art in core.js `drawPart`/`drawBody` (steel/polymer/wood materials) until
+  the user's PNGs arrive (`assets/parts/<slot>/<id>.png` etc. replace them automatically). The user is making art.
 - Single player Test mode: pause menu has change loadout, spawn ultimate crate, infinite ability.
 
 ## Testing
