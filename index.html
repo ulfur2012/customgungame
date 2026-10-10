@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Custom Gun Game</title>
-  <link rel="stylesheet" href="style.css?v=9">
+  <link rel="stylesheet" href="style.css?v=10">
 </head>
 <body>
   <canvas id="game"></canvas>
@@ -46,7 +46,6 @@
       <h1 class="logo">CUSTOM<br>GUN GAME</h1>
       <p class="welcome">Welcome, <b id="menuName"></b> <span id="menuBest"></span></p>
       <button id="spBtn" class="primary big">Single Player</button>
-      <button id="testBtn">Test Mode <small class="hint">(swap guns mid-game, can't die)</small></button>
       <button id="mpBtn" class="primary big alt">Multiplayer</button>
       <button id="customizeBtn">Customize Guns</button>
       <button id="settingsBtn">Settings</button>
@@ -156,6 +155,19 @@
     </div>
   </div>
 
+  <div id="spScreen" class="overlay hidden">
+    <div class="panel">
+      <h2>Single Player</h2>
+      <label class="toggle">
+        <input id="testToggle" type="checkbox">
+        <span class="switch"></span>
+        <span><b>Test mode</b><br><small>Change guns, ability and loadout from the pause menu mid-game. Score and best wave don't count.</small></span>
+      </label>
+      <button id="spStart" class="primary big">Continue</button>
+      <button id="spCancel" class="ghost">Back</button>
+    </div>
+  </div>
+
   <div id="settingsScreen" class="overlay hidden">
     <div class="panel">
       <h2>Settings</h2>
@@ -171,11 +183,11 @@
   <div id="toast" class="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="js/config.js?v=9"></script>
-  <script src="js/core.js?v=9"></script>
-  <script src="js/input.js?v=9"></script>
-  <script src="js/net.js?v=9"></script>
-  <script src="js/game.js?v=9"></script>
-  <script src="js/ui.js?v=9"></script>
+  <script src="js/config.js?v=10"></script>
+  <script src="js/core.js?v=10"></script>
+  <script src="js/input.js?v=10"></script>
+  <script src="js/net.js?v=10"></script>
+  <script src="js/game.js?v=10"></script>
+  <script src="js/ui.js?v=10"></script>
 </body>
 </html>

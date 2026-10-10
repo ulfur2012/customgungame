@@ -63,9 +63,12 @@
     show('menu');
   }
 
-  const spLoadout = () => openLoadout('Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); Game.startSP(); }, goMenu);
-  el('spBtn').onclick = spLoadout;
-  el('testBtn').onclick = () => openLoadout('Start test', () => { show(null); buildMap('medium', MAP.seed, 'medium'); Game.startSP(true); }, goMenu);
+  let testMode = false;
+  const spLoadout = () => openLoadout(testMode ? 'Start test' : 'Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); Game.startSP(testMode); }, goMenu);
+  // Single Player first asks: test mode on or off?
+  el('spBtn').onclick = () => { el('testToggle').checked = testMode; overlay('spScreen', true); };
+  el('spStart').onclick = () => { testMode = el('testToggle').checked; overlay('spScreen', false); spLoadout(); };
+  el('spCancel').onclick = () => overlay('spScreen', false);
   // test mode: change loadout from the pause menu, then jump straight back in
   el('testLoadoutBtn').onclick = () => {
     overlay('pauseScreen', false);
@@ -274,10 +277,9 @@
   });
 
   Game.on('spOver', r => {
-    Account.user.best = Math.max(Account.user.best || 0, r.wave);
-    Account.save();
+    if (!r.test) { Account.user.best = Math.max(Account.user.best || 0, r.wave); Account.save(); }
     Game.stop();
-    showResult('You died', `Wave ${r.wave} · ${r.kills} kills · score ${r.score}`, [
+    showResult('You died', `Wave ${r.wave} · ${r.kills} kills · score ${r.score}${r.test ? ' (test mode — not counted)' : ''}`, [
       { label: 'Play again', fn: spLoadout },
       { label: 'Main menu', fn: goMenu },
     ]);

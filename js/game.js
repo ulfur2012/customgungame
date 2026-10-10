@@ -56,7 +56,7 @@ const Game = (() => {
     }
   }
 
-  // test = test mode: you can't die and can change guns/ability/loadout from the pause menu
+  // test = test mode: change guns/ability/loadout from the pause menu; score doesn't count
   function startSP(test = false) {
     resize();
     G = newState('sp', [MAP.w / 2, MAP.h / 2], PLAYER_COLORS[0]);
@@ -336,12 +336,11 @@ const Game = (() => {
       me.invT = ABILITIES.laststand.inv;
       G.banner = { text: 'LAST STAND!', t: 1.5 };
     }
-    if (me.hp <= 0 && G.test) { me.hp = me.maxHp; G.banner = { text: 'Test mode: you would have died', t: 1.5 }; }
     if (me.hp > 0) return;
     me.alive = false;
     burst(me.x, me.y, me.color, 20, 280);
     if (G.mode === 'sp') {
-      setTimeout(() => G && hooks.spOver({ wave: G.wave, score: G.score, kills: G.kills }), 900);
+      setTimeout(() => G && hooks.spOver({ wave: G.wave, score: G.score, kills: G.kills, test: G.test }), 900);
     } else {
       G.banner = { text: 'You were eliminated', t: 3 };
       Net.send({ t: 'dead', by });
