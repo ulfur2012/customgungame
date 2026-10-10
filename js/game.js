@@ -484,13 +484,13 @@ const Game = (() => {
     const pressed = Input.take('abPress');
     const held = Input.abilityHeld();
     const ready = me.abCd === 0 && me.abUses > 0 && me.shieldT === 0;
-    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'medic', 'turret', 'resupply'].includes(me.ability);
+    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'resupply'].includes(me.ability);
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
     } else {
       if (held && ready) me.abAiming = true;
       if (!held && me.abWasHeld && me.abAiming && ready) {
-        if (me.ability === 'grenade') throwGrenade(); else fireRocket();
+        if (me.ability === 'rpg') fireRocket(); else throwGrenade();
       }
       if (!held || !ready) me.abAiming = false;
     }
@@ -520,11 +520,13 @@ const Game = (() => {
       burst(me.x, me.y, A.color, 8, 160);
     }
     if (me.ability === 'blink') {
+      // goes through walls: land at full range, or the furthest free spot before it
+      const free = (x, y) => !pointInWall(x, y) && !pointInWall(x - me.r, y) && !pointInWall(x + me.r, y)
+        && !pointInWall(x, y - me.r) && !pointInWall(x, y + me.r);
       let tx = me.x, ty = me.y;
-      for (let d = 10; d <= A.range; d += 10) {
+      for (let d = A.range; d > 0; d -= 10) {
         const nx = me.x + Math.cos(me.aim) * d, ny = me.y + Math.sin(me.aim) * d;
-        if (pointInWall(nx, ny)) break;
-        tx = nx; ty = ny;
+        if (free(nx, ny)) { tx = nx; ty = ny; break; }
       }
       burst(me.x, me.y, A.color, 12, 200);
       me.x = tx; me.y = ty; collideWorld(me);
@@ -536,8 +538,6 @@ const Game = (() => {
       G.shake = Math.min(12, G.shake + 5);
     }
     if (me.ability === 'slowmo') { me.slowT = A.duration; G.banner = { text: 'Bullet time!', t: 1 }; }
-    if (me.ability === 'medic') G.zones.push({ x: me.x, y: me.y, t: A.duration, tick: 1 });
-    if (me.ability === 'turret') G.turrets.push({ x: me.x, y: me.y, t: A.duration, cd: 0.5, aim: me.aim });
     if (me.ability === 'resupply') {
       for (const g of me.guns) {
         g.reserve = Math.min(g.stats.maxReserve, g.reserve + g.stats.magSize);
@@ -556,10 +556,10 @@ const Game = (() => {
   }
 
   // bullets that don't come from your gun (nova, turret); other players see them too
-  function fireBullets(x, y, angles, speed, dmg, kb, range, loud) {
-    for (const a of angles) addBullet(x, y, a, speed, dmg, kb, 'me', G.myId, range);
+  function fireBullets(x, y, angles, speed, dmg, kb, range, loud, kind = {}, falloff = 0) {
+    for (const a of angles) addBullet(x, y, a, speed, dmg, kb, 'me', G.myId, range, falloff, false, kind);
     G.lastCombat = G.time;
-    if (G.mode === 'mp') Net.send({ t: 'shot', x: Math.round(x), y: Math.round(y), as: angles, sp: speed, fl: 0, bt: {}, rng: range, fo: 0, dmg, kb, loud });
+    if (G.mode === 'mp') Net.send({ t: 'shot', x: Math.round(x), y: Math.round(y), as: angles, sp: speed, fl: 0, bt: kind, rng: range, fo: falloff, dmg, kb, loud });
   }
 
   // heal zones and turrets
@@ -582,9 +582,15 @@ const Game = (() => {
       }
       if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
       if (best && t.cd <= 0) {
-        t.cd = T.delay;
+        const s = t.stats;
+        t.cd = Math.max(s.fireDelay, s.reloadTime / s.magSize, 0.15); // reloads built in, never runs dry
         const sx = t.x + Math.cos(t.aim) * 20, sy = t.y + Math.sin(t.aim) * 20;
-        fireBullets(sx, sy, [+t.aim.toFixed(4)], 1300, T.damage, 0.8, T.range, 4 * HEAR_UNIT);
+        const angles = [];
+        for (let i = 0; i < s.pellets; i++) {
+          const fan = s.pellets > 1 ? (i / (s.pellets - 1) - 0.5) * s.spread : 0;
+          angles.push(+(t.aim + fan + (Math.random() - 0.5) * s.spread).toFixed(4));
+        }
+        fireBullets(sx, sy, angles, s.speed, s.damage, s.knockback, s.range, s.hearRadius, { bounce: s.bounce, pierce: s.pierce, boom: s.boom }, s.falloff);
         muzzleFlash(sx, sy, t.aim);
       }
     }
@@ -604,7 +610,9 @@ const Game = (() => {
       ctx.fillStyle = '#4b4b5a'; ctx.strokeStyle = '#cd84f1'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
-      ctx.fillStyle = '#cd84f1'; ctx.fillRect(0, -4, 24, 8);
+      if (Math.cos(t.aim) < 0) ctx.scale(1, -1);
+      const sp = t.sprite, k = 0.6; // your sidearm sitting on top
+      ctx.drawImage(sp.canvas, sp.minX * k, sp.minY * k - 6, sp.w * k, sp.h * k);
       ctx.restore();
     }
     const me = G.me;
@@ -632,9 +640,11 @@ const Game = (() => {
 
   function throwGrenade() {
     const me = G.me, t = grenadeTarget();
-    G.nades.push({ x0: me.x, y0: me.y, x1: t.x, y1: t.y, t: 0, owner: myOwnerId() });
-    me.abCd = ABILITIES.grenade.cooldown;
+    const kind = me.ability;
+    G.nades.push({ x0: me.x, y0: me.y, x1: t.x, y1: t.y, t: 0, owner: myOwnerId(), kind });
+    me.abCd = ABILITIES[kind].cooldown;
     me.abUses--;
+    if (kind !== 'grenade') return; // heal zone / turret: only yours, nothing to tell others
     G.lastCombat = G.time;
     if (G.mode === 'mp') Net.send({ t: 'nade', x0: Math.round(me.x), y0: Math.round(me.y), x1: Math.round(t.x), y1: Math.round(t.y) });
   }
@@ -675,7 +685,14 @@ const Game = (() => {
     const G_ = ABILITIES.grenade, R = ABILITIES.rpg, me = G.me;
     for (const n of G.nades) {
       n.t += dt;
-      if (n.t >= G_.flight) { n.done = true; explode(n.x1, n.y1, G_.radius, G_.damage, n.owner); }
+      if (n.t < G_.flight) continue;
+      n.done = true;
+      if (n.kind === 'medic') G.zones.push({ x: n.x1, y: n.y1, t: ABILITIES.medic.duration, tick: 1 });
+      else if (n.kind === 'turret') {
+        // the turret gets a copy of your sidearm
+        const side = me.guns[1];
+        G.turrets.push({ x: n.x1, y: n.y1, t: ABILITIES.turret.duration, cd: 0.5, aim: 0, stats: side.stats, sprite: side.sprite });
+      } else explode(n.x1, n.y1, G_.radius, G_.damage, n.owner);
     }
     G.nades = G.nades.filter(n => !n.done);
 
@@ -715,16 +732,19 @@ const Game = (() => {
   function drawProjectiles() {
     const A = ABILITIES.grenade;
     for (const n of G.nades) {
+      const look = n.kind === 'medic' ? ['#32ff7e', '#0b5a2a', 'rgba(50,255,126,', ABILITIES.medic.radius]
+                 : n.kind === 'turret' ? ['#cd84f1', '#4b2a5a', 'rgba(205,132,241,', 22]
+                 : ['#4b7b2f', '#1d3311', 'rgba(255,80,60,', A.radius];
       const k = Math.min(1, n.t / A.flight), x = n.x0 + (n.x1 - n.x0) * k, y = n.y0 + (n.y1 - n.y0) * k;
       const h = 4 * 110 * k * (1 - k); // height of the arc
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.beginPath(); ctx.ellipse(x, y, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#4b7b2f'; ctx.strokeStyle = '#1d3311'; ctx.lineWidth = 2;
+      ctx.fillStyle = look[0]; ctx.strokeStyle = look[1]; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y - h, 8 + h / 40, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       // landing warning
-      ctx.strokeStyle = `rgba(255,80,60,${0.25 + 0.5 * k})`;
+      ctx.strokeStyle = `${look[2]}${0.25 + 0.5 * k})`;
       ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(n.x1, n.y1, A.radius, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(n.x1, n.y1, look[3], 0, Math.PI * 2); ctx.stroke();
     }
     for (const r of G.rockets) {
       ctx.save();
@@ -742,7 +762,7 @@ const Game = (() => {
     ctx.strokeStyle = 'rgba(255,255,255,0.9)';
     ctx.lineWidth = 3;
     ctx.setLineDash([12, 10]);
-    if (me.ability === 'grenade') {
+    if (me.ability !== 'rpg') { // thrown: grenade, heal zone, turret
       const t = grenadeTarget(), mx = (me.x + t.x) / 2, my = (me.y + t.y) / 2, d = Math.hypot(t.x - me.x, t.y - me.y);
       // bend the line sideways so it reads as an arc over walls
       const nx = -(t.y - me.y) / (d || 1), ny = (t.x - me.x) / (d || 1), bend = d * 0.25 * (Math.cos(me.aim) < 0 ? 1 : -1);
@@ -751,7 +771,8 @@ const Game = (() => {
       ctx.quadraticCurveTo(mx + nx * bend, my + ny * bend, t.x, t.y);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.beginPath(); ctx.arc(t.x, t.y, ABILITIES.grenade.radius, 0, Math.PI * 2); ctx.stroke();
+      const rad = me.ability === 'medic' ? ABILITIES.medic.radius : me.ability === 'turret' ? 22 : ABILITIES.grenade.radius;
+      ctx.beginPath(); ctx.arc(t.x, t.y, rad, 0, Math.PI * 2); ctx.stroke();
     } else {
       // rocket: straight line until the first wall
       let len = 1400;
