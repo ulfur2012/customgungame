@@ -11,7 +11,7 @@ const Input = (() => {
     const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy);
     if (d > STICK_R) { s.x = s.ox + dx / d * STICK_R; s.y = s.oy + dy / d * STICK_R; }
   }
-  const flags = { reload: false, swap: false, select: -1, tap: false, abPress: false };
+  const flags = { reload: false, swap: false, select: -1, tap: false, abPress: false, ultPress: false };
 
   addEventListener('keydown', e => {
     if (e.repeat) return;
@@ -19,6 +19,7 @@ const Input = (() => {
     if (e.code === 'KeyR') flags.reload = true;
     if (e.code === 'KeyQ') flags.swap = true;
     if (e.code === 'KeyE') flags.abPress = true;
+    if (e.code === 'KeyF') flags.ultPress = true;
     if (e.code === 'Digit1') flags.select = 0;
     if (e.code === 'Digit2') flags.select = 1;
   });
@@ -76,7 +77,7 @@ const Input = (() => {
     mouse.down = false;
     abilityTouch = false;
     sticks.move = sticks.aim = null;
-    Object.assign(flags, { reload: false, swap: false, select: -1, tap: false, abPress: false });
+    Object.assign(flags, { reload: false, swap: false, select: -1, tap: false, abPress: false, ultPress: false });
   }
 
   // {x, y}, length <= 1
@@ -120,6 +121,7 @@ const Input = (() => {
     try { abBtn.setPointerCapture(e.pointerId); } catch (err) {}
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) abBtn.addEventListener(ev, () => { abilityTouch = false; });
+  document.getElementById('ultBtn').addEventListener('pointerdown', e => { e.preventDefault(); flags.ultPress = true; });
   const abilityHeld = () => keys.has('KeyE') || abilityTouch;
 
   function take(name) { const v = flags[name]; flags[name] = name === 'select' ? -1 : false; return v; }

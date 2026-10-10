@@ -35,6 +35,7 @@ const Game = (() => {
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
+        ult: null, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
@@ -42,7 +43,7 @@ const Game = (() => {
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
-      turrets: [], zones: [], gadgets: [], rings: [],
+      turrets: [], zones: [], gadgets: [], rings: [], strikes: [], lasers: [],
       sendT: 0, packs: [], packT: 0, nades: [], rockets: [], time: 0, lastCombat: 0, pingT: PING.every, ping: 0,
     };
   }
@@ -153,6 +154,7 @@ const Game = (() => {
     updateProjectiles(dt);
     updateGadgets(dt);
     updateGadgetList(dt);
+    updateUlt(dt);
     updatePacks(dt);
     G.time += dt;
     if (G.mode === 'mp') {
@@ -183,7 +185,7 @@ const Game = (() => {
     const me = G.me;
     const mv = Input.move();
     const speed = PLAYER.speed * (me.speedT > 0 ? ABILITIES.energy.speed : 1) * (me.ability === 'sprinter' ? ABILITIES.sprinter.speed : 1)
-      * (adrenalineOn() ? ABILITIES.adrenaline.speed : 1) * (me.frozenT > 0 ? 0.2 : 1);
+      * (adrenalineOn() ? ABILITIES.adrenaline.speed : 1) * (me.frozenT > 0 ? 0.2 : 1) * (me.godT > 0 ? ULTIMATES.god.speed : 1);
     me.x += (mv.x * speed + me.vx) * dt;
     me.y += (mv.y * speed + me.vy) * dt;
     me.vx *= Math.exp(-10 * dt); me.vy *= Math.exp(-10 * dt);
@@ -228,9 +230,12 @@ const Game = (() => {
       gun.reload = reloadTimeOf(s);
     }
     gun.cd = Math.max(0, gun.cd - dt);
+    if (me.miniT > 0 || me.rocketT > 0) { gun.reload = 0; gun.ammo = Math.max(gun.ammo, 1); }
     if (fire && gun.reload === 0 && gun.ammo > 0 && gun.cd === 0) {
       shoot(gun);
       gun.cd = s.fireDelay * (me.rapidT > 0 ? ABILITIES.rapid.fireMul : 1) * (adrenalineOn() ? ABILITIES.adrenaline.fire : 1);
+      if (me.miniT > 0) gun.cd = ULTIMATES.minigun.delay;
+      if (me.rocketT > 0) gun.cd = Math.max(gun.cd, ULTIMATES.rockets.delay);
     }
     if (gun.ammo === 0 && gun.reload === 0 && gun.reserve > 0) gun.reload = reloadTimeOf(s);
   }
@@ -283,18 +288,26 @@ const Game = (() => {
   function shoot(gun) {
     const me = G.me, s = gun.stats;
     const m = gunToWorld(me, gun.sprite.muzzle);
+    if (me.rocketT > 0) { // Rocket Rounds ultimate: every shot is an RPG
+      addRocket(m.x, m.y, me.aim, myOwnerId());
+      if (G.mode === 'mp') Net.send({ t: 'rpg', x: Math.round(m.x), y: Math.round(m.y), a: +me.aim.toFixed(4) });
+      G.lastCombat = G.time; G.shake = Math.min(12, G.shake + 4); muzzleFlash(m.x, m.y, me.aim);
+      return;
+    }
     const angles = [];
     for (let i = 0; i < s.pellets; i++) {
       const fan = s.pellets > 1 ? (i / (s.pellets - 1) - 0.5) * s.spread : 0;
       angles.push(+(me.aim + fan + (Math.random() - 0.5) * (s.pellets > 1 ? 0.08 : s.spread)).toFixed(4));
     }
     const kind = { bounce: s.bounce, pierce: s.pierce, boom: s.boom };
+    if (me.aimShots > 0) { me.aimShots--; kind.homing = 1; }
+    if (me.wallT > 0) kind.ghost = 1;
     let dmg = s.damage * (me.ability === 'glass' ? ABILITIES.glass.mul : 1);
     if (me.overShots > 0) { me.overShots--; dmg *= ABILITIES.overcharge.mul; }
     for (const a of angles) addBullet(m.x, m.y, a, s.speed, dmg, s.knockback, 'me', G.myId, s.range, s.falloff, s.flare, kind);
     const a = me.aim;
     G.lastCombat = G.time;
-    gun.ammo--;
+    if (me.miniT <= 0) gun.ammo--;
     me.kick = Math.min(10 * s.recoil, (3 + s.knockback * 2) * s.recoil);
     me.vx -= Math.cos(me.aim) * s.knockback * 12 * s.recoil;
     me.vy -= Math.sin(me.aim) * s.knockback * 12 * s.recoil;
@@ -307,7 +320,7 @@ const Game = (() => {
 
   function addBullet(x, y, a, speed, dmg, kb, team, owner, range = BULLET_RANGE, falloff = 0, flare = false, kind = {}) {
     G.bullets.push({ x, y, ox: x, oy: y, range, falloff, flare,
-      bounce: kind.bounce || 0, pierce: !!kind.pierce, boom: kind.boom || null, hit: new Set(), vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
+      bounce: kind.bounce || 0, pierce: !!kind.pierce, homing: !!kind.homing, ghost: !!kind.ghost, boom: kind.boom || null, hit: new Set(), vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
   }
   // damage after falloff (shotguns hit hardest up close)
   const bulletDamage = b => b.dmg * (1 - b.falloff * Math.min(1, Math.hypot(b.x - b.ox, b.y - b.oy) / b.range));
@@ -331,7 +344,7 @@ const Game = (() => {
 
   function hurtMe(dmg, kb, angle, by) {
     const me = G.me;
-    if (!me.alive || me.invT > 0) return;
+    if (!me.alive || me.invT > 0 || me.godT > 0) return;
     if (me.ability === 'armor') dmg *= ABILITIES.armor.takeMul;
     const soaked = Math.min(me.shield, dmg);
     me.shield -= soaked;
@@ -380,9 +393,10 @@ const Game = (() => {
     const slow = me.slowT > 0 ? ABILITIES.slowmo.factor : 1;
     for (const b of G.bullets) {
       const x1 = b.x, y1 = b.y, bdt = b.team === 'me' ? dt : dt * slow;
+      if (b.homing) steerBullet(b, bdt);
       b.x += b.vx * bdt; b.y += b.vy * bdt; b.life -= bdt;
       if (b.life <= 0) continue;
-      const wall = MAP.walls.find(w => segmentHitsRect(x1, y1, b.x, b.y, w));
+      const wall = b.ghost ? null : MAP.walls.find(w => segmentHitsRect(x1, y1, b.x, b.y, w));
       const out = b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h;
       if (wall || out) {
         if (b.bounce > 0) {
@@ -952,6 +966,21 @@ const Game = (() => {
     if (me.grapple) { ctx.strokeStyle = '#e1b12c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(me.grapple.x, me.grapple.y); ctx.stroke(); }
   }
 
+  // arrow around you pointing at the nearest enemy (radar tower, tracker ultimate)
+  function drawEnemyArrow(color) {
+    const me = G.me;
+    let best = null, bd = Infinity;
+    for (const t of targets()) { const d = Math.hypot(t.x - me.x, t.y - me.y); if (d < bd) { best = t; bd = d; } }
+    if (!best) return;
+    const an = Math.atan2(best.y - me.y, best.x - me.x), ax = me.x + Math.cos(an) * 75, ay = me.y + Math.sin(an) * 75;
+    ctx.save(); ctx.translate(ax, ay); ctx.rotate(an);
+    ctx.fillStyle = color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, -11); ctx.lineTo(-4, 0); ctx.lineTo(-10, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round(bd / MAP.grid)}m`, ax, ay + 26);
+  }
+
   // drawn on top of the darkness: smoke hides everything, radar shows enemies through walls
   function drawGadgetsTop() {
     const me = G.me;
@@ -985,6 +1014,121 @@ const Game = (() => {
           ctx.fillStyle = 'rgba(255,77,77,0.35)'; ctx.fill();
         }
       }
+    }
+  }
+
+  // ---- ULTIMATES (from the epic crate)
+  function steerBullet(b, dt) {
+    // aimbot bullets turn toward the closest enemy of whoever shot them
+    let best = null, bd = 900;
+    const cands = b.team === 'me' ? targets()
+      : [...(G.me.alive && hostileTo(b.owner) ? [G.me] : []), ...[...G.remotes.values()].filter(r => r.alive && r.id !== b.owner && (!G.teams || r.team !== teamOf(b.owner)))];
+    for (const t of cands) { const d = Math.hypot(t.x - b.x, t.y - b.y); if (d < bd && lineOfSight(b.x, b.y, t.x, t.y)) { best = t; bd = d; } }
+    if (!best) return;
+    const sp = Math.hypot(b.vx, b.vy), cur = Math.atan2(b.vy, b.vx), want = Math.atan2(best.y - b.y, best.x - b.x);
+    const diff = Math.atan2(Math.sin(want - cur), Math.cos(want - cur)), turn = ULTIMATES.aimbot.turn * dt;
+    const na = cur + clamp(diff, -turn, turn);
+    b.vx = Math.cos(na) * sp; b.vy = Math.sin(na) * sp;
+    b.life = Math.max(b.life, 0.3);
+  }
+
+  function useUlt() {
+    const me = G.me, k = me.ult, U = ULTIMATES[k];
+    me.ult = null;
+    G.banner = { text: `${U.name.toUpperCase()}!`, t: 1.5 };
+    G.lastCombat = G.time;
+    const strikes = [];
+    if (k === 'airstrike') {
+      for (let i = 0; i < U.bombs; i++) {
+        const d = 150 + i * U.spacing;
+        strikes.push([Math.round(clamp(me.x + Math.cos(me.aim) * d, 0, MAP.w)), Math.round(clamp(me.y + Math.sin(me.aim) * d, 0, MAP.h)), +(U.delay + i * U.gap).toFixed(2), U.radius, U.damage]);
+      }
+    }
+    if (k === 'nuke') strikes.push([Math.round(clamp(me.x + Math.cos(me.aim) * U.dist, 0, MAP.w)), Math.round(clamp(me.y + Math.sin(me.aim) * U.dist, 0, MAP.h)), U.delay, U.radius, U.damage]);
+    for (const s of strikes) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: myOwnerId() });
+    if (strikes.length && G.mode === 'mp') Net.send({ t: 'ult', k, s: strikes });
+    if (k === 'laser') {
+      const x = Math.round(me.x + Math.cos(me.aim) * 200), y = Math.round(me.y + Math.sin(me.aim) * 200), a = +me.aim.toFixed(3);
+      G.lasers.push({ x, y, a, t: U.duration, tick: 0, owner: myOwnerId() });
+      if (G.mode === 'mp') Net.send({ t: 'ult', k, x, y, a });
+    }
+    if (k === 'minigun') me.miniT = U.duration;
+    if (k === 'god') me.godT = U.duration;
+    if (k === 'bullethell') { me.hellT = U.duration; me.hellCd = 0; }
+    if (k === 'aimbot') me.aimShots = U.shots;
+    if (k === 'wallhack') me.wallT = U.duration;
+    if (k === 'rockets') me.rocketT = U.duration;
+    if (k === 'tracker') { me.trackT = U.duration; if (G.mode === 'mp') Net.send({ t: 'ult', k }); }
+  }
+
+  function updateUlt(dt) {
+    const me = G.me;
+    if (Input.take('ultPress') && me.ult && me.alive) useUlt();
+    me.miniT = Math.max(0, me.miniT - dt);
+    me.godT = Math.max(0, me.godT - dt);
+    for (const k of ['wallT', 'rocketT', 'trackT']) me[k] = Math.max(0, me[k] - dt);
+    if (me.hellT > 0) {
+      const U = ULTIMATES.bullethell;
+      me.hellT -= dt; me.hellCd -= dt;
+      if (me.hellCd <= 0) {
+        me.hellCd = U.every;
+        const off = G.time * 2;
+        fireBullets(me.x, me.y, Array.from({ length: U.count }, (_, i) => +(off + i * Math.PI * 2 / U.count).toFixed(4)), 1000, U.damage, 1, 700, 6 * HEAR_UNIT);
+      }
+    }
+    for (const s of G.strikes) {
+      s.t -= dt;
+      if (s.t <= 0) {
+        s.done = true;
+        explode(s.x, s.y, s.r, s.dmg, s.owner);
+        if (s.r > 300) { G.shake = 30; burst(s.x, s.y, '#ffffff', 60, 900); G.rings.push({ x: s.x, y: s.y, r: s.r * 1.3, life: 1, max: 1, color: '255,221,0' }); }
+      }
+    }
+    G.strikes = G.strikes.filter(s => !s.done);
+    const L = ULTIMATES.laser;
+    for (const l of G.lasers) {
+      l.t -= dt; l.tick -= dt;
+      l.x = clamp(l.x + Math.cos(l.a) * L.speed * dt, 0, MAP.w); l.y = clamp(l.y + Math.sin(l.a) * L.speed * dt, 0, MAP.h);
+      if (Math.random() < 0.8) burst(l.x + (Math.random() - 0.5) * L.radius, l.y + (Math.random() - 0.5) * L.radius, '#ff3df5', 1, 200);
+      if (l.tick <= 0) {
+        l.tick = 0.25;
+        areaOf(l, L.radius, e => hurtEnemy(e, L.dps / 4, 0.3, Math.atan2(e.y - l.y, e.x - l.x)),
+          () => hurtMe(L.dps / 4, 0.3, Math.atan2(me.y - l.y, me.x - l.x), l.owner));
+      }
+    }
+    G.lasers = G.lasers.filter(l => l.t > 0);
+  }
+
+  function drawUlt() {
+    const me = G.me;
+    if (me.trackT > 0 && me.alive) drawEnemyArrow('#ff4d4d');
+    for (const s of G.strikes) {
+      const k = 1 - s.t / s.max;
+      ctx.strokeStyle = `rgba(255,${s.r > 300 ? 221 : 60},0,${0.4 + 0.5 * k})`; ctx.lineWidth = s.r > 300 ? 6 : 3;
+      ctx.setLineDash([14, 10]);
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = `rgba(255,${s.r > 300 ? 200 : 40},0,${0.08 + 0.2 * k})`;
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r * k, 0, Math.PI * 2); ctx.fill();
+      if (s.r > 300) { // nuke countdown
+        ctx.fillStyle = '#ffdd00'; ctx.font = '900 40px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('☢ ' + Math.ceil(s.t), s.x, s.y);
+      }
+    }
+    const L = ULTIMATES.laser;
+    for (const l of G.lasers) {
+      const w = L.radius * (0.85 + 0.15 * Math.sin(G.time * 30));
+      const grd = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, w);
+      grd.addColorStop(0, 'rgba(255,255,255,0.95)'); grd.addColorStop(0.35, 'rgba(255,61,245,0.8)'); grd.addColorStop(1, 'rgba(255,61,245,0)');
+      ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(l.x, l.y, w, 0, Math.PI * 2); ctx.fill();
+    }
+    if (me.godT > 0) {
+      ctx.strokeStyle = `rgba(246,229,141,${0.6 + 0.3 * Math.sin(G.time * 12)})`; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(me.x, me.y, me.r + 12, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (me.miniT > 0 || me.aimShots > 0) {
+      ctx.strokeStyle = me.aimShots > 0 ? 'rgba(0,255,208,0.8)' : 'rgba(255,159,26,0.8)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(me.x, me.y, me.r + 16, 0, Math.PI * 2); ctx.stroke();
     }
   }
 
@@ -1242,6 +1386,7 @@ const Game = (() => {
         for (let i = 0; i < HEALTH_PACK.count && G.packs.length + fresh.length < HEALTH_PACK.max; i++) fresh.push(randomFloorSpot());
         for (let i = 0; i < AMMO.box.count; i++) fresh.push({ ...randomFloorSpot(), kind: 'ammo' });
         if (Math.random() < ABILITY_CRATE.chance) fresh.push({ ...randomFloorSpot(), kind: 'ability' });
+        if (Math.random() < EPIC_CRATE.chance) fresh.push({ ...randomFloorSpot(), kind: 'epic' });
         addPacks(fresh);
         if (G.mode === 'mp') Net.send({ t: 'packs', packs: fresh });
       }
@@ -1262,6 +1407,12 @@ const Game = (() => {
         for (const gn of needs) gn.reserve += Math.min(room(gn), gn.stats.boxRefill);
         G.texts.push({ x: me.x, y: me.y - 34, text: '+AMMO', color: '#ffd23f', life: 0.9 });
         updateWeaponBar(true);
+      } else if (p.kind === 'epic') {
+        if (me.ult) continue; // already holding one
+        const keys = Object.keys(ULTIMATES);
+        me.ult = keys[Math.floor(Math.random() * keys.length)];
+        G.banner = { text: `ULTIMATE: ${ULTIMATES[me.ult].name}! (${Settings.mobile ? 'gold button' : 'press F'})`, t: 3 };
+        burst(me.x, me.y, '#ffd700', 40, 400);
       } else if (p.kind === 'ability') {
         // rare red crate: all ability uses back and no cooldown
         const A = ABILITIES[me.ability];
@@ -1293,6 +1444,28 @@ const Game = (() => {
   function addPacks(list) { G.packs.push(...list); }
   function removePack(id) { G.packs = G.packs.filter(p => p.id !== id); }
 
+  function drawEpicCrate(p) {
+    const s = 24, t = performance.now() / 1000;
+    ctx.save();
+    // golden rays
+    ctx.translate(p.x, p.y);
+    ctx.rotate(t * 0.8);
+    ctx.fillStyle = 'rgba(255,215,0,0.25)';
+    for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(70, -10); ctx.lineTo(70, 10); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = `rgba(255,215,0,${0.3 + 0.2 * Math.sin(t * 5)})`;
+    ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.9, 0, Math.PI * 2); ctx.fill();
+    const grd = ctx.createLinearGradient(p.x - s, p.y - s, p.x + s, p.y + s);
+    grd.addColorStop(0, '#fff3a0'); grd.addColorStop(0.5, '#ffc300'); grd.addColorStop(1, '#b8860b');
+    ctx.fillStyle = grd; ctx.strokeStyle = '#5c3b00'; ctx.lineWidth = 3;
+    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2); ctx.strokeRect(p.x - s, p.y - s, s * 2, s * 2);
+    ctx.fillStyle = '#7a00ff'; ctx.fillRect(p.x - s, p.y - 4, s * 2, 8); ctx.fillRect(p.x - 4, p.y - s, 8, s * 2);
+    ctx.fillStyle = '#fff'; ctx.font = '900 20px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('★', p.x, p.y + 1);
+    ctx.font = '900 11px system-ui, sans-serif'; ctx.fillStyle = '#ffd700';
+    ctx.fillText('EPIC', p.x, p.y - s - 12);
+  }
+
   function drawAbilityCrate(p) {
     const s = 20, glow = 0.25 + 0.15 * Math.sin(performance.now() / 200);
     ctx.fillStyle = `rgba(255,40,40,${glow})`;
@@ -1323,6 +1496,7 @@ const Game = (() => {
     for (const p of G.packs) {
       if (p.kind === 'ammo') { drawAmmoBox(p); continue; }
       if (p.kind === 'ability') { drawAbilityCrate(p); continue; }
+      if (p.kind === 'epic') { drawEpicCrate(p); continue; }
       const pulse = 1 + Math.sin(performance.now() / 250) * 0.08, s = HEALTH_PACK.r * pulse, t = s * 0.38;
       ctx.fillStyle = 'rgba(40,255,110,0.18)';
       ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.4, 0, Math.PI * 2); ctx.fill();
@@ -1608,6 +1782,12 @@ const Game = (() => {
     const g = G.gadgets.find(g => g.id === m.id);
     if (g) { g.x = m.x; g.y = m.y; g.aim = m.a; g.hp = m.hp; }
   });
+  Net.on('ult', m => {
+    if (!inMP()) return;
+    if (m.k === 'tracker') { if (!hostileTo(m.from)) { G.me.trackT = ULTIMATES.tracker.duration; G.banner = { text: 'Teammate used Tracker!', t: 1.5 }; } }
+    else if (m.k === 'laser') G.lasers.push({ x: m.x, y: m.y, a: m.a, t: ULTIMATES.laser.duration, tick: 0, owner: m.from });
+    else for (const s of m.s) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: m.from });
+  });
   Net.on('aoe', m => { if (inMP()) slam(m.x, m.y, m.r, m.dmg, m.kb, m.from); });
   Net.on('nade', m => { if (inMP()) G.nades.push({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, t: 0, owner: m.from }); });
   Net.on('rpg', m => { if (inMP()) addRocket(m.x, m.y, m.a, m.from); });
@@ -1654,6 +1834,7 @@ const Game = (() => {
 
     drawPacks();
     drawGadgetList();
+    drawUlt();
     drawGadgets();
     drawProjectiles();
     ctx.lineCap = 'round';
@@ -2037,6 +2218,10 @@ const Game = (() => {
   }
   let abCache = '';
   function updateAbilityBtn() {
+    const ub = el('ultBtn'), U = G.me.ult && ULTIMATES[G.me.ult];
+    ub.classList.toggle('hidden', !U);
+    if (U && ub.dataset.k !== G.me.ult) { ub.dataset.k = G.me.ult; ub.querySelector('.ult-name').textContent = U.name; }
+    if (!U) ub.dataset.k = '';
     const me = G.me, A = ABILITIES[me.ability], btn = el('abilityBtn');
     if (!A) { btn.classList.add('hidden'); return; }
     const state = A.type === 'passive' ? 'Passive'

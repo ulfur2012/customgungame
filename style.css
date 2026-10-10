@@ -420,3 +420,24 @@ body.mobile #reloadBtn { right: calc(24px + var(--safe-r)); bottom: calc(205px +
 
   .ws-footer { padding: 8px 10px calc(8px + var(--safe-b)); border-top: 1px solid var(--line); }
 }
+
+/* ULTIMATE button (from the gold epic crate) */
+#ultBtn {
+  position: fixed; z-index: 5;
+  right: calc(16px + var(--safe-r)); bottom: calc(66px + var(--safe-b));
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 12px; font-weight: 900;
+  background: linear-gradient(135deg, #ffd700, #ff8c00); color: #2a1600;
+  border: 2px solid #fff6c0; box-shadow: 0 0 18px rgba(255, 200, 0, 0.7);
+  animation: ultPulse 1s ease-in-out infinite alternate;
+  touch-action: none;
+}
+#ultBtn .ab-key { background: #2a1600; color: #ffd700; }
+#ultBtn.hidden { display: none; }
+@keyframes ultPulse { to { box-shadow: 0 0 30px rgba(255, 200, 0, 1); } }
+body.mobile #ultBtn {
+  right: calc(200px + var(--safe-r)); bottom: calc(205px + var(--safe-b));
+  width: 74px; height: 74px; padding: 0; border-radius: 50%;
+  flex-direction: column; justify-content: center; gap: 0; font-size: 11px; text-align: center;
+}
+body.mobile #ultBtn .ab-key { display: none; }

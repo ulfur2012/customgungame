@@ -460,3 +460,29 @@ const LOADOUT_PRESETS = 3; // saved loadouts you can switch between
 
 // Rare red crate: restores all your ability uses. Chance that one shows up each time packs spawn.
 const ABILITY_CRATE = { chance: 0.6 };
+
+// EPIC crate (gold, very rare): gives you one random ULTIMATE. F on PC / the gold button on mobile.
+// chance = per health pack spawn (every 30s), so about one every 6 minutes.
+const EPIC_CRATE = { chance: 0.08 };
+const ULTIMATES = {
+  airstrike: { name: 'Airstrike', color: '#ff4757', bombs: 8, gap: 0.18, spacing: 120, radius: 120, damage: 60, delay: 0.8,
+               desc: '8 bombs rain down in a line where you aim.' },
+  nuke:      { name: 'Nuke', color: '#ffdd00', dist: 600, delay: 3, radius: 450, damage: 150,
+               desc: 'A nuke lands where you aim after 3 seconds. HUGE blast — get away!' },
+  minigun:   { name: 'Minigun', color: '#ff9f1a', duration: 8, delay: 0.045,
+               desc: 'For 8 seconds your gun fires crazy fast and never runs out of ammo.' },
+  god:       { name: 'God Mode', color: '#f6e58d', duration: 6, speed: 1.6,
+               desc: 'For 6 seconds nothing can hurt you and you run 60% faster.' },
+  laser:     { name: 'Orbital Laser', color: '#ff3df5', duration: 5, speed: 160, radius: 90, dps: 45,
+               desc: 'A giant laser beam from space burns a path forward from where you aim.' },
+  bullethell:{ name: 'Bullet Hell', color: '#7bed9f', duration: 4, every: 0.22, count: 20, damage: 12,
+               desc: 'Rings of bullets spray out of you for 4 seconds.' },
+  aimbot:    { name: 'Aimbot', color: '#00ffd0', shots: 5, turn: 9,
+               desc: 'Your next 5 shots home in on enemies.' },
+  wallhack:  { name: 'Wallhack', color: '#a29bfe', duration: 6,
+               desc: 'For 6 seconds your bullets fly straight through walls.' },
+  rockets:   { name: 'Rocket Rounds', color: '#e17055', duration: 5, delay: 0.3,
+               desc: 'For 5 seconds every shot is an RPG rocket.' },
+  tracker:   { name: 'Tracker', color: '#ff4d4d', duration: 10,
+               desc: 'For 10 seconds you and your teammates get an arrow pointing at the nearest enemy.' },
+};
