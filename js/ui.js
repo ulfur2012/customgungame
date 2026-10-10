@@ -63,7 +63,7 @@
     show('menu');
   }
 
-  const spLoadout = () => openLoadout('Start', () => { show(null); buildMap('medium'); Game.startSP(); }, goMenu);
+  const spLoadout = () => openLoadout('Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); Game.startSP(); }, goMenu);
   el('spBtn').onclick = spLoadout;
   el('mpBtn').onclick = () => { el('mpStatus').textContent = ''; show('mp'); };
   el('customizeBtn').onclick = () => openLoadout('Save', goMenu, goMenu);
@@ -276,12 +276,12 @@
   });
 
   // ---------------------------------------------------------------- multiplayer
-  const lobby = { players: [], inRound: false, alive: new Set(), round: [], settings: { mode: 'ffa', layout: 'medium', banned: [] } };
+  const lobby = { players: [], inRound: false, alive: new Set(), round: [], settings: { mode: 'ffa', layout: 'medium', size: 'medium', banned: [] } };
 
   function applyRules() { Rules.banned = new Set(lobby.settings.banned); }
   function rulesText() {
     const s = lobby.settings;
-    return `${s.mode === 'teams' ? 'Teams (random)' : 'Free for all'} · ${MAP.layouts[s.layout].label}` +
+    return `${s.mode === 'teams' ? 'Teams (random)' : 'Free for all'} · ${MAP.layouts[s.layout].label} · ${MAP.sizes[s.size || 'medium'].label} map` +
       (s.banned.length ? ` · ${s.banned.length} upgrade${s.banned.length === 1 ? '' : 's'} removed` : '');
   }
 
@@ -308,6 +308,14 @@
       b.className = key === editing.layout ? 'active' : '';
       b.onclick = () => { editing.layout = key; renderHostSetup(); };
       el('layoutPick').appendChild(b);
+    }
+    el('sizePick').innerHTML = '';
+    for (const key in MAP.sizes) {
+      const b = document.createElement('button');
+      b.textContent = MAP.sizes[key].label;
+      b.className = key === (editing.size || 'medium') ? 'active' : '';
+      b.onclick = () => { editing.size = key; renderHostSetup(); };
+      el('sizePick').appendChild(b);
     }
     el('banList').innerHTML = '';
     for (const s of SLOTS) {
@@ -416,7 +424,7 @@
     lobby.round = players;
     lobby.settings = settings;
     applyRules();
-    buildMap(settings.layout, seed);
+    buildMap(settings.layout, seed, settings.size);
     Game.startMP(players, Net.state.myId, settings.mode === 'teams');
   }
 

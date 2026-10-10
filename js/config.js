@@ -176,7 +176,13 @@ const MAP = {
   },
   openAreas: [2, 4], openSize: 8,             // 2-4 empty 8x8 grid areas with no walls
   walls: [],      // filled in below
-  spawns: [[200, 200], [3800, 3800], [3800, 200], [200, 3800], [2000, 200], [2000, 3800], [200, 2000], [3800, 2000]],
+  spawns: [],     // filled in by buildMap (corners + edge middles)
+  // map sizes the host can pick (single player uses medium). Walls/houses scale with the area.
+  sizes: {
+    small:  { label: 'Small',  size: 2800 },
+    medium: { label: 'Medium', size: 4000 },
+    large:  { label: 'Large',  size: 5600 },
+  },
 };
 
 // ---- fill in defaults (no need to edit below) ----
@@ -198,8 +204,14 @@ for (const id in ENEMIES) ENEMIES[id].img = ENEMIES[id].img || `assets/character
 
 // ---- build the map: straight walls, L walls and houses, all on the grid ----
 // Every structure keeps at least one free grid square around it so you can always walk between them.
-function buildMap(layout = 'medium', seed = MAP.seed) {
-  const D = MAP.layouts[layout] || MAP.layouts.medium;
+function buildMap(layout = 'medium', seed = MAP.seed, size = 'medium') {
+  const S = (MAP.sizes[size] || MAP.sizes.medium).size, k = (S / 4000) ** 2;
+  MAP.w = MAP.h = S;
+  const e = S - 200, c = S / 2;
+  MAP.spawns = [[200, 200], [e, e], [e, 200], [200, e], [c, 200], [c, e], [200, c], [e, c]];
+  const base = MAP.layouts[layout] || MAP.layouts.medium;
+  const D = { ...base };
+  for (const key of ['houses', 'lWalls', 'straightWalls']) if (D[key]) D[key] = Math.round(D[key] * k);
   const C = MAP.grid, cols = MAP.w / C, rows = MAP.h / C;
   let s = seed | 0;
   const rand = () => ((s = Math.imul(s ^ (s >>> 15), 2246822507) + 0x6d2b79f5 | 0) >>> 0) / 4294967296;
@@ -217,7 +229,7 @@ function buildMap(layout = 'medium', seed = MAP.seed) {
   }
 
   // empty open areas
-  const areas = MAP.openAreas[0] + Math.floor(rand() * (MAP.openAreas[1] - MAP.openAreas[0] + 1));
+  const areas = Math.max(1, Math.round((MAP.openAreas[0] + Math.floor(rand() * (MAP.openAreas[1] - MAP.openAreas[0] + 1))) * k));
   for (let n = 0; n < areas; n++) {
     const S = MAP.openSize, ax = ri(1, cols - S - 1), ay = ri(1, rows - S - 1);
     for (let y = ay; y < ay + S; y++) for (let x = ax; x < ax + S; x++) owner[idx(x, y)] = -2;

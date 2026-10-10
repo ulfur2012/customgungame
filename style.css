@@ -381,3 +381,26 @@ body.mobile #reloadBtn { bottom: calc(290px + var(--safe-b)); }
 .preset-tabs button.active { background: var(--accent-2); color: #00142a; border-color: var(--accent-2); }
 @media (max-width: 560px) { .ws-header { flex-wrap: wrap; } .gun-tabs { order: 3; width: 100%; } }
 body.mobile #reloadBtn { right: calc(24px + var(--safe-r)); bottom: calc(205px + var(--safe-b)); }
+
+/* ------------------------------------------------------------ easier phone navigation */
+@media (max-width: 700px), (pointer: coarse) {
+  .panel button { padding: 15px; font-size: 17px; }
+  .panel .big { padding: 18px !important; font-size: 19px; }
+  #menu .panel { gap: 12px; }
+  .ws-header { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+  #loadoutBack { padding: 12px 14px !important; font-size: 16px; color: var(--text); background: var(--panel) !important; border: 1px solid var(--line); border-radius: 10px; }
+  .gun-tab { flex: 1; padding: 12px 8px; font-size: 15px; }
+  .preset-tabs button { width: 40px; height: 40px; }
+  /* every upgrade slot visible at once, no hidden sideways scrolling */
+  .tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: visible; }
+  .tab { min-width: 0; padding: 9px 8px; }
+  .tab-value { font-size: 12px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .parts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .card { padding: 12px; }
+  .ws-footer { padding: 10px 16px calc(10px + var(--safe-b)); background: var(--bg); border-top: 1px solid var(--line); }
+  .seg button { padding: 13px 6px !important; }
+  .chip { padding: 10px 12px !important; font-size: 14px; }
+}
+@media (max-width: 700px) and (orientation: portrait) {
+  .preview-wrap { height: 20dvh; min-height: 100px; }
+}
