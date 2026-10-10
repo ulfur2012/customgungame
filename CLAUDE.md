@@ -3,8 +3,8 @@
 Browser game (plain HTML/JS/canvas, no build step). Open `index.html` to play.
 Live: https://ulfur2012.github.io/customgungame/ — repo `ulfur2012/customgungame`, GitHub Pages from `main`.
 Pushing to `main` redeploys in ~1 minute. Bump the `?v=N` on the script/css tags in index.html every change
-(browser cache). The user is fine with commit + push after each change, and usually wants the live page
-opened afterwards (wait until the new `?v=N` is live, then `Start-Process` the URL with `?v=N`).
+(browser cache). The user is fine with commit + push after each change. Do NOT open the live page
+after an update — only open it when the user asks (then `Start-Process` the URL with the current `?v=N`).
 
 The user gives short, informal requests (often with typos, sometimes several in a row while you work)
 and wants things built without clarifying questions — make a sensible call, then say what was assumed.
