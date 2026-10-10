@@ -268,7 +268,20 @@ const Account = {
     } else if (all[key].hash !== hash) {
       return { error: 'Wrong password for that name.' };
     }
-    this.user = all[key];
+    this.use(all[key]);
+    Store.set('cgg.lastName', name);
+    Store.set('cgg.session', key); // stay logged in after a refresh
+    return { ok: true, created };
+  },
+  // log back in to the account that was signed in last time (no password needed on this device)
+  restore() {
+    const key = Store.get('cgg.session', null), all = Store.get('cgg.accounts', {});
+    if (!key || !all[key]) return false;
+    this.use(all[key]);
+    return true;
+  },
+  use(user) {
+    this.user = user;
     // saved loadouts: the old single loadout becomes preset 1
     const u = this.user;
     if (!Array.isArray(u.presets)) u.presets = [u.loadout];
@@ -281,8 +294,6 @@ const Account = {
       for (const s of SLOTS) if (b[s.key] && !partsFor(kind, s.key).some(p => p.id === b[s.key])) b[s.key] = null;
       L[kind] = b;
     }
-    Store.set('cgg.lastName', name);
-    return { ok: true, created };
   },
   usePreset(i) {
     this.user.active = i;
@@ -296,5 +307,5 @@ const Account = {
     all[this.user.name.toLowerCase()] = this.user;
     Store.set('cgg.accounts', all);
   },
-  logout() { this.user = null; },
+  logout() { this.user = null; Store.set('cgg.session', null); },
 };

@@ -494,5 +494,5 @@
 
   // ---------------------------------------------------------------- go
   loadArt();
-  show('login');
+  if (Account.restore()) goMenu(); else show('login');
 })();
