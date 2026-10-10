@@ -559,7 +559,7 @@ const COMBOS = [
   { a: 'tesla', b: 'freeze',   name: 'Cryo Coil',      how: 'Throw a Freeze Bomb onto a Tesla Coil: its zaps freeze enemies for a moment.' },
   { a: 'barrier', b: 'tesla',  name: 'Electric Fence', how: 'Throw a Barrier next to a Tesla Coil: the wall crackles and shocks enemies that touch it (15/s).' },
   { a: 'bubble', b: 'medic',   name: 'Healing Dome',   how: 'Throw a Heal Zone into your Bubble Shield: inside heals you 8 HP/s and the dome lasts 6s longer.' },
-  { a: 'decoy', b: 'medic',    name: 'Medic Buddy',    how: 'Throw a Heal Zone onto your Buddy: it heals you 5 HP/s when you are near, and heals itself too.' },
+  { a: 'decoy', b: 'medic',    name: 'Medic Buddy',    how: 'Throw a Heal Zone onto your Buddy: it heals you and your other decoys 5 HP/s when near, heals itself too, and stays with your other decoys (the most hurt one first).' },
   { a: 'blackhole', b: 'grenade', name: 'Singularity', how: 'Throw a Grenade into your Black Hole: it collapses into a giant 150 damage explosion.' },
   { a: 'tesla', b: 'firepit',  name: 'Plasma Coil',    how: 'Throw a Fire Pit onto a Tesla Coil: its zaps turn orange and do double damage.' },
   { a: 'mine', b: 'freeze',    name: 'Cryo Mine',      how: 'Throw a Freeze Bomb onto your Land Mine: when it blows up it also freezes everyone around it.' },
@@ -577,7 +577,7 @@ const COMBOS = [
   { a: 'scavenger', b: 'vampire', name: 'Bloodhound',   passive: true, how: 'Equip both: hits heal 5 HP and kills heal 20 HP.', syn: { vampire: { add: { heal: 2 } }, scavenger: { add: { heal: 10 } } } },
   { a: 'ninja', b: 'shadowstep', name: 'Assassin',      passive: true, how: 'Equip both: +2 Shadow Steps that reach 40% further.', syn: { shadowstep: { add: { uses: 2 }, mul: { range: 1.4 } } } },
   { a: 'adrenaline', b: 'stim', name: 'Racing Heart',   passive: true, how: 'Equip both: Stim Shot costs no HP and lasts 12s.', syn: { stim: { add: { cost: -10, duration: 4 } } } },
-  { a: 'resupply', b: 'decoy', name: 'Supply Decoy',  how: 'Throw a Decoy onto your Resupply crate: the crate is used up and becomes a Supply Decoy (no gun, never attacks). It goes to every decoy you place, one after another, and gives each 3 mags, then comes back to any that run low. When no decoy needs ammo it only comes to you if you need ammo, and hands you 3 mags.' },
+  { a: 'resupply', b: 'decoy', name: 'Supply Decoy',  how: 'Throw a Decoy onto your Resupply crate: the crate is used up and becomes a Supply Decoy (no gun, never attacks). It goes to every decoy you place, one after another, and gives each 3 mags, then comes back to any that run low. When no decoy needs ammo it only comes to you if you need ammo, and hands you 3 mags. Otherwise it tags along with the nearest decoy.' },
   { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
 ];
 const COMBO = { supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 3, healRange: 700,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };

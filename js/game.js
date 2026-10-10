@@ -1073,6 +1073,17 @@ const Game = (() => {
     }
   }
 
+  // another of your decoys to stay near: the most hurt one (hurtFirst) or simply the closest
+  function mateFor(g, hurtFirst) {
+    let pick = null, score = Infinity;
+    for (const b of G.gadgets) {
+      if (b === g || b.kind !== 'decoy' || b.dead || b.supply || b.medicBuddy || !isMine(b.owner)) continue;
+      const d = Math.hypot(b.x - g.x, b.y - g.y), sc = hurtFirst ? (b.hp / b.maxHp) * 10000 + d : d;
+      if (sc < score) { pick = b; score = sc; }
+    }
+    return pick;
+  }
+
   // SUPPLY DECOY: no gun, never attacks. Goes round your decoys (new ones and low ones) giving each 3 mags.
   function updateSupply(g, dt) {
     // visits every new decoy once (then the next one), and comes back to any that run low again
@@ -1094,6 +1105,8 @@ const Game = (() => {
       const gun = me.guns.find(gn => room(gn) > 0 && gn.stats.boxRefill > 0);
       const d = Math.hypot(me.x - g.x, me.y - g.y);
       g.giveCd = Math.max(0, (g.giveCd || 0) - dt);
+      const mate = !gun || !me.alive ? mateFor(g, false) : null;
+      if (mate && Math.hypot(mate.x - g.x, mate.y - g.y) > 70) ({ x: mx, y: my } = buddyPath(g, mate.x, mate.y, dt)); // nothing to do: tag along with the nearest decoy
       if (gun && me.alive) {
         if (d > 55) ({ x: mx, y: my } = buddyPath(g, me.x, me.y, dt));
         else if (g.giveCd === 0) {
@@ -1181,6 +1194,11 @@ const Game = (() => {
       g.roam = null;
       ({ x: mx, y: my } = buddyPath(g, need.x, need.y, dt));
       if (Math.hypot(need.x - g.x, need.y - g.y) < 30) mx = my = 0; // sitting in a heal zone
+      g.aim = sees ? Math.atan2(best.y - g.y, best.x - g.x) : (mx || my ? Math.atan2(my, mx) : g.aim);
+    } else if (g.medicBuddy && (g.mate = mateFor(g, true))) {
+      // MEDIC BUDDY: hangs around your other decoys (the most hurt one first) and shoots what it can see
+      g.roam = null;
+      if (Math.hypot(g.mate.x - g.x, g.mate.y - g.y) > 80) ({ x: mx, y: my } = buddyPath(g, g.mate.x, g.mate.y, dt));
       g.aim = sees ? Math.atan2(best.y - g.y, best.x - g.x) : (mx || my ? Math.atan2(my, mx) : g.aim);
     } else if (best) {
       g.roam = null;
