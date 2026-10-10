@@ -371,6 +371,14 @@ const ABILITIES = {
              desc: 'Heals 10 HP and makes you 1.7x faster for 6 seconds.' },
   burger:  { name: 'Burger', type: 'active', color: '#cd6133', cooldown: 5, uses: 2, heal: 100,
              desc: 'Eat it to heal 100 HP.' },
+  dash:    { name: 'Dash', type: 'active', color: '#00d2d3', cooldown: 4, uses: 4, power: 1800,
+             desc: '4 quick dashes per round in the way you are walking (or aiming if standing still).' },
+  rapid:   { name: 'Rapid Fire', type: 'active', color: '#ff4d6d', cooldown: 20, uses: 2, duration: 5, fireMul: 0.5,
+             desc: 'Your guns shoot twice as fast for 5 seconds.' },
+  armor:   { name: 'Body Armor', type: 'passive', color: '#95a5a6', takeMul: 0.8,
+             desc: 'Passive: you take 20% less damage.' },
+  hands:   { name: 'Quick Hands', type: 'passive', color: '#a55eea', reloadMul: 0.65,
+             desc: 'Passive: reload 35% faster.' },
 };
 const LOADOUT_PRESETS = 3; // saved loadouts you can switch between
 

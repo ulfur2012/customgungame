@@ -34,7 +34,7 @@ const Game = (() => {
         x: spawn[0], y: spawn[1], r: PLAYER.r, hp: PLAYER.hp, maxHp: PLAYER.hp, aim: 0, vx: 0, vy: 0,
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
-        abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0,
+        abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
       bullets: [], fx: [], texts: [], hears: [], feed: [],
@@ -185,14 +185,19 @@ const Game = (() => {
         gun.reserve -= got;
       }
     } else if (Input.take('reload') && gun.ammo < s.magSize && gun.reserve > 0) {
-      gun.reload = s.reloadTime;
+      gun.reload = reloadTimeOf(s);
     }
     gun.cd = Math.max(0, gun.cd - dt);
     if (fire && gun.reload === 0 && gun.ammo > 0 && gun.cd === 0) {
       shoot(gun);
-      gun.cd = s.fireDelay;
+      gun.cd = s.fireDelay * (me.rapidT > 0 ? ABILITIES.rapid.fireMul : 1);
     }
-    if (gun.ammo === 0 && gun.reload === 0 && gun.reserve > 0) gun.reload = s.reloadTime;
+    if (gun.ammo === 0 && gun.reload === 0 && gun.reserve > 0) gun.reload = reloadTimeOf(s);
+  }
+
+  // Quick Hands passive shortens every reload
+  function reloadTimeOf(s) {
+    return s.reloadTime * (G.me.ability === 'hands' ? ABILITIES.hands.reloadMul : 1);
   }
 
   function switchGun(i) {
@@ -285,6 +290,7 @@ const Game = (() => {
   function hurtMe(dmg, kb, angle, by) {
     const me = G.me;
     if (!me.alive) return;
+    if (me.ability === 'armor') dmg *= ABILITIES.armor.takeMul;
     const soaked = Math.min(me.shield, dmg);
     me.shield -= soaked;
     me.hp = Math.max(0, me.hp - (dmg - soaked));
@@ -418,10 +424,12 @@ const Game = (() => {
     if (!A) return;
     me.abCd = Math.max(0, me.abCd - dt);
     me.speedT = Math.max(0, me.speedT - dt);
+    me.rapidT = Math.max(0, me.rapidT - dt);
     if (me.shieldT > 0) {
       me.shieldT -= dt;
       if (me.shieldT <= 0) { me.shieldT = 0; me.shield = 0; }
     }
+    if (A.type === 'passive' && me.ability !== 'regen') return; // armor / quick hands work elsewhere
     if (A.type === 'passive') {
       // regen: +10 HP for every 10 seconds out of combat
       const calm = G.time - G.lastCombat, ticks = Math.floor(calm / A.every);
@@ -438,7 +446,7 @@ const Game = (() => {
     const pressed = Input.take('abPress');
     const held = Input.abilityHeld();
     const ready = me.abCd === 0 && me.abUses > 0 && me.shieldT === 0;
-    const instant = ['shield', 'energy', 'burger'].includes(me.ability);
+    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid'].includes(me.ability);
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
     } else {
@@ -465,6 +473,14 @@ const Game = (() => {
     if (me.ability === 'shield') { me.shield = A.hp; me.shieldT = A.duration; G.banner = { text: 'Shield up!', t: 1 }; }
     if (me.ability === 'energy') { heal(A.heal); me.speedT = A.duration; G.banner = { text: 'Speed boost!', t: 1 }; }
     if (me.ability === 'burger') heal(A.heal);
+    if (me.ability === 'rapid') { me.rapidT = A.duration; G.banner = { text: 'Rapid fire!', t: 1 }; }
+    if (me.ability === 'dash') {
+      const mv = Input.move(), moving = Math.hypot(mv.x, mv.y) > 0.2;
+      const a = moving ? Math.atan2(mv.y, mv.x) : me.aim;
+      me.vx += Math.cos(a) * A.power;
+      me.vy += Math.sin(a) * A.power;
+      burst(me.x, me.y, A.color, 8, 160);
+    }
   }
 
   // where the grenade will land: the mouse on PC, a fixed distance along your aim on mobile
@@ -1404,6 +1420,7 @@ const Game = (() => {
     const state = A.type === 'passive' ? 'Passive'
       : me.abUses <= 0 ? 'Used'
       : me.shieldT > 0 ? `${Math.ceil(me.shieldT)}s`
+      : me.rapidT > 0 ? `${Math.ceil(me.rapidT)}s`
       : me.abCd > 0 ? `${Math.ceil(me.abCd)}s`
       : me.abUses === Infinity ? 'Ready' : `Ready ×${me.abUses}`;
     const key = A.name + state;
