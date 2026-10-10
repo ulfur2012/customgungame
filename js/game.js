@@ -1756,6 +1756,10 @@ const Game = (() => {
   function throwGrenade() {
     const me = G.me, t = grenadeTarget();
     const kind = me.ability;
+    if (kind === 'decoy') { // max 5 decoys out at once (clones from Clone Army don't count)
+      const out = G.gadgets.filter(g => g.kind === 'decoy' && !g.dead && !g.dur && isMine(g.owner)).length + G.nades.filter(n => n.kind === 'decoy').length;
+      if (out >= ABILITIES.decoy.max) { G.banner = { text: `Max ${ABILITIES.decoy.max} decoys`, t: 1.2 }; return; }
+    }
     G.nades.push({ x0: me.x, y0: me.y, x1: t.x, y1: t.y, t: 0, owner: myOwnerId(), kind, a: me.aim });
     me.abCd = ABILITIES[kind].cooldown;
     me.abUses--;
