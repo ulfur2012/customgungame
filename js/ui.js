@@ -196,7 +196,7 @@
       : id_cd(A);
     el('stats').innerHTML = `<p class="stat-note" style="font-size:14px">${A.desc}</p><p class="stat-note">${extra}</p>`;
   }
-  const id_cd = A => `${A.uses} use${A.uses === 1 ? '' : 's'} per round · cooldown ${A.cooldown || 0}s. E on PC, the green button on mobile${['grenade', 'rpg', 'medic', 'turret'].includes(Object.keys(ABILITIES).find(k => ABILITIES[k] === A)) ? ' (hold to aim, let go to fire)' : ''}.`;
+  const id_cd = A => `${A.uses} use${A.uses === 1 ? '' : 's'} per round · cooldown ${A.cooldown || 0}s. E on PC, the green button on mobile${A.thrown || A === ABILITIES.rpg ? ' (hold to aim, let go to fire)' : ''}.`;
 
   function fitCanvas(canvas) {
     const dpr = Math.min(devicePixelRatio || 1, 2);
