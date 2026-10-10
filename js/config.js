@@ -84,6 +84,15 @@ const PARTS = {
     { id: 'revolver', name: 'Revolver', gun: 'secondary', w: 52, h: 28, color: '#a4b0be', shape: [[0, 2, 52, 12], [16, 0, 16, 18], [7, 14, 11, 14]],
       fixed: { magSize: 6 }, add: { damage: 6, knockback: 1 },
       note: '6 shots · reloadable' },
+    { id: 'machinepistol', name: 'Machine Pistol', gun: 'secondary', w: 52, h: 28, color: '#576574', shape: [[0, 2, 52, 12], [7, 12, 11, 16], [26, 12, 8, 12]],
+      assist: 1.4, add: { knockback: -2.3 }, mul: { damage: 0.5, magSize: 2.25 },
+      note: 'Sprays fast · 18 shots · low damage' },
+    { id: 'handcannon', name: 'Hand Cannon', gun: 'secondary', w: 58, h: 30, color: '#b33939', shape: [[0, 0, 58, 16], [8, 14, 12, 16]],
+      range: 1300, speed: 1900, recoil: 3, assist: 0.7, add: { damage: 26, knockback: 3 }, mul: { magSize: 0.5 },
+      note: 'Huge damage · 4 shots · big kick' },
+    { id: 'sawedoff', name: 'Sawed-Off', gun: 'secondary', w: 50, h: 28, color: '#6d4c41', shape: [[0, 1, 50, 8], [0, 9, 50, 8], [6, 15, 12, 13]],
+      pellets: 5, spread: 0.45, range: 330, falloff: 0.7, assist: 1.6, fixed: { magSize: 2 }, add: { knockback: 1 }, mul: { damage: 0.6 },
+      note: '2 shots · 5 pellets each · deadly up close' },
   ],
   barrel: [
     { id: 'short',    name: 'Short Barrel',    w: 20, h: 8,  color: '#e74c3c', add: { damage: -3, knockback: -0.4 } },
@@ -100,6 +109,8 @@ const PARTS = {
     { id: 'drum',       name: 'Drum Mag',           w: 30, h: 30, color: '#e67e22', add: { reloadTime: 1.5 },  mul: { magSize: 2.5 } },
     { id: 'smallquick', name: 'Small Quick Mag',    w: 10, h: 12, color: '#fff200', gun: 'secondary', add: { reloadTime: -0.4 }, mul: { magSize: 0.75 } },
     { id: 'smallext',   name: 'Small Extended Mag', w: 10, h: 20, color: '#55efc4', gun: 'secondary', add: { reloadTime: 0.3 },  mul: { magSize: 1.5 } },
+    { id: 'smalldrum',  name: 'Small Drum',         w: 18, h: 18, color: '#e1b12c', gun: 'secondary', add: { reloadTime: 0.8 },  mul: { magSize: 2 } },
+    { id: 'speedload',  name: 'Speed Loader',       w: 12, h: 12, color: '#00d2d3', gun: 'secondary', add: { reloadTime: -0.6, damage: -2 } },
   ],
   handle: [
     { id: 'grip',   name: 'Grip Handle',   w: 14, h: 22, color: '#1abc9c', gun: 'both', add: { knockback: -0.3 } },
@@ -107,6 +118,8 @@ const PARTS = {
     { id: 'pistol', name: 'Pistol Handle', w: 13, h: 22, color: '#636e72', add: { damage: 2, knockback: -0.1 } },
     { id: 'heavy',  name: 'Heavy Handle',  w: 18, h: 24, color: '#d35400', add: { damage: 3, reloadTime: 0.2 } },
     { id: 'quick',  name: 'Quick Handle',  w: 12, h: 20, color: '#ff79c6', gun: 'both', add: { reloadTime: -0.3 } },
+    { id: 'wrapped', name: 'Wrapped Grip', w: 12, h: 18, color: '#b2bec3', gun: 'secondary', add: { knockback: -0.2, reloadTime: -0.1 } },
+    { id: 'pearl',   name: 'Pearl Grip',   w: 12, h: 18, color: '#f5f6fa', gun: 'secondary', add: { damage: 3, reloadTime: 0.1 } },
   ],
   stock: [
     { id: 'light',    name: 'Light Stock',    w: 32, h: 10, color: '#c0392b', add: { knockback: -0.2 } },
@@ -115,6 +128,7 @@ const PARTS = {
     { id: 'padded',   name: 'Padded Stock',   w: 40, h: 16, color: '#6c5ce7', add: { knockback: -0.4 } },
     { id: 'heavy',    name: 'Heavy Stock',    w: 46, h: 18, color: '#a0522d', add: { knockback: -0.6, reloadTime: 0.3 } },
     { id: 'folding',  name: 'Folding Stock',  w: 22, h: 8,  color: '#fab1a0', gun: 'secondary', add: { knockback: -0.3 } },
+    { id: 'brace',    name: 'Pistol Brace',   w: 26, h: 12, color: '#636e72', gun: 'secondary', add: { knockback: -0.6, reloadTime: 0.2 } },
   ],
   // Bullet types (both guns). None = normal bullets; the special ones do 20% less damage.
   bullets: [
@@ -135,6 +149,8 @@ const PARTS = {
       note: 'Much tighter bullet spread' },
     { id: 'trigger', name: 'Hair Trigger', mount: 'trigger',  w: 10, h: 10, color: '#00cec9', gun: 'both', add: { knockback: -0.5, damage: -2 },
       note: 'Shoots faster' },
+    { id: 'reddot',  name: 'Red Dot', mount: 'top', w: 14, h: 8, color: '#eb3b5a', gun: 'secondary', rangeMul: 1.25, spreadMul: 0.7,
+      note: '+25% range · a bit more accurate' },
     { id: 'hollow',  name: 'Hollow Points', mount: 'side', w: 12, h: 8,  color: '#e17055', gun: 'both', mul: { damage: 1.25, magSize: 0.8 },
       note: 'Hit harder, fewer bullets per mag' },
   ],
@@ -144,6 +160,7 @@ const PARTS = {
     { id: 'blue',   name: 'Blue Silencer',   w: 34, h: 12, color: '#3742fa', gun: 'both', mul: { loudness: 0.2 }, add: { reloadTime: 0.5 } },
     { id: 'yellow', name: 'Yellow Silencer', w: 34, h: 12, color: '#ffa502', gun: 'both', mul: { loudness: 0.2 }, add: { knockback: 0.5 } },
     { id: 'green',  name: 'Green Silencer',  w: 34, h: 12, color: '#2ed573', mul: { loudness: 0.2, magSize: 0.75 } },
+    { id: 'tiny',   name: 'Tiny Suppressor', w: 18, h: 9,  color: '#a4b0be', gun: 'secondary', mul: { loudness: 0.4 }, add: { damage: -2 } },
     { id: 'black',  name: 'Black Silencer',  w: 40, h: 13, color: '#2d3436', mul: { loudness: 0.1 }, add: { damage: -6 } },
   ],
 };
