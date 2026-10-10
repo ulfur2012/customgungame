@@ -117,22 +117,37 @@
     show('loadout');
     renderLoadout();
   }
-  el('loadoutDone').onclick = () => onDone && onDone();
+  el('loadoutDone').onclick = () => onDone && checkout() && onDone();
   el('loadoutBack').onclick = () => onBack && onBack();
 
   // ---- shop: locked cards show a price, tapping one buys it with banked score
   const priceTag = cost => cost ? ` <small class="price">⭐ ${cost}</small>` : '';
-  function buy(key, name) {
-    const u = Account.user, cost = priceOf(key);
-    if ((u.bank || 0) < cost) { toast(`${name} costs ${cost} score — you have ${u.bank || 0}`); return false; }
-    if (!confirm(`Unlock ${name} for ${cost} score? (you have ${u.bank})`)) return false;
-    u.bank -= cost; u.owned.push(key); Account.save();
-    toast(`Unlocked ${name}! ${u.bank} score left`);
+  // everything can be picked for free while customizing; locking in the loadout asks you to buy what you don't own
+  function unowned() {
+    const L = Account.user.loadout, list = [];
+    for (const k of ['ability', 'ability2', 'ability3', 'ability4']) if (L[k]) list.push(['ab:' + L[k], ABILITIES[L[k]].name]);
+    for (const [k, a] of [['perk', 'ability'], ['perk2', 'ability2'], ['perk3', 'ability3'], ['perk4', 'ability4']]) {
+      const p = L[k] && (ABILITY_PERKS[L[a]] || []).find(x => x.id === L[k]);
+      if (p) list.push(['perk:' + p.id, p.name]);
+    }
+    for (const kind of ['main', 'secondary']) for (const sl in L[kind]) if (L[kind][sl]) list.push([`part:${kind}:${sl}:${L[kind][sl]}`, findPart(sl, L[kind][sl]).name]);
+    return list.map(([key, name]) => ({ key, name, cost: priceOf(key) })).filter(x => x.cost);
+  }
+  function checkout() {
+    const u = Account.user, list = unowned();
+    if (!list.length) return true;
+    const total = list.reduce((n, x) => n + x.cost, 0);
+    const lines = list.map(x => `• ${x.name} — ${x.cost}`).join('\n');
+    if ((u.bank || 0) < total) { alert(`This loadout costs ${total} score:\n${lines}\n\nYou have ${u.bank || 0}. Swap something out or earn more score.`); return false; }
+    if (!confirm(`This loadout costs ${total} score:\n${lines}\n\nYou have ${u.bank}. Buy it?`)) return false;
+    u.bank -= total; u.owned.push(...list.map(x => x.key)); Account.save();
+    toast(`Bought! ${u.bank} score left`);
     return true;
   }
 
   function renderLoadout() {
-    el('bankLine').textContent = `⭐ ${Account.user.bank || 0} score to spend`;
+    const owe = unowned().reduce((n, x) => n + x.cost, 0);
+    el('bankLine').textContent = `⭐ ${Account.user.bank || 0} score` + (owe ? ` · loadout costs ${owe}` : '');
     el('presetTabs').innerHTML = '<span>Loadout</span>';
     for (let i = 0; i < LOADOUT_PRESETS; i++) {
       const b = document.createElement('button');
@@ -181,8 +196,7 @@
       card.appendChild(info);
       card.dataset.part = part ? part.id : 'none';
       card.onclick = () => {
-        if (cost && !buy(key, part.name)) return;
-        build[slot] = part ? part.id : null;
+                build[slot] = part ? part.id : null;
         Account.save();
         keepInPlace(`[data-part="${part ? part.id : 'none'}"]`, renderLoadout);
       };
@@ -235,7 +249,7 @@
         card.className = 'card perk' + ((L[perkKey] || null) === (p ? p.id : null) ? ' equipped' : '') + (cost ? ' locked' : '');
         card.innerHTML = `<div class="card-name">${p ? p.name : 'No boost'}${priceTag(cost)}</div><div class="card-desc">${p ? p.desc : 'Plain ability'}</div>`;
         card.dataset.perk = p ? p.id : 'none';
-        card.onclick = () => { if (cost && !buy(pk, p.name)) return; L[perkKey] = p ? p.id : null; Account.save(); keepInPlace(`[data-perk="${p ? p.id : 'none'}"]`, renderLoadout); };
+        card.onclick = () => { L[perkKey] = p ? p.id : null; Account.save(); keepInPlace(`[data-perk="${p ? p.id : 'none'}"]`, renderLoadout); };
         wrap.appendChild(card);
       }
     }
@@ -305,8 +319,6 @@
         <div class="card-name">${c.name}${c.passive ? ' <small class="hint">auto</small>' : ''}${on ? ' ✓' : ''}</div>
         <div class="card-desc"><b>${A1.name} + ${A2.name}</b><br>${c.how}</div>`;
       card.onclick = () => {
-        const need = [c.a, c.b].filter(id => priceOf('ab:' + id));
-        if (need.length) return toast(`Unlock ${need.map(id => ABILITIES[id].name).join(' and ')} first`);
         if (!on) {
           if (L.ability !== c.a) L.perk = null;
           if (L.ability2 !== c.b) L.perk2 = null;
@@ -327,7 +339,7 @@
         <div class="card-name">${A.name}${priceTag(cost)}${KEYS.some((k, i) => i !== abSlot && L[k] === id) ? ' <small class="hint">other slot</small>' : ''}</div>
         <div class="card-desc">${A.desc}</div>`;
       card.dataset.ab = id;
-      card.onclick = () => { if (cost && !buy('ab:' + id, A.name)) return; pick(id); };
+      card.onclick = () => pick(id);
       wrap.appendChild(card);
     }
     if (!current) {
