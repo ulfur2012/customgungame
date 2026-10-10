@@ -441,3 +441,4 @@ body.mobile #ultBtn {
   flex-direction: column; justify-content: center; gap: 0; font-size: 11px; text-align: center;
 }
 body.mobile #ultBtn .ab-key { display: none; }
+.panel .epic-btn { background: linear-gradient(135deg, #ffd700, #ff8c00); color: #2a1600; font-weight: 900; }

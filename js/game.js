@@ -69,6 +69,18 @@ const Game = (() => {
   }
 
   // test mode: rebuild your guns and ability from the current loadout, keeping where you are
+  // test mode: drop an epic (ultimate) crate a little in front of you
+  function spawnEpic() {
+    if (!G) return;
+    const me = G.me;
+    let x = me.x, y = me.y;
+    for (let d = 140; d >= 40; d -= 20) {
+      const nx = me.x + Math.cos(me.aim) * d, ny = me.y + Math.sin(me.aim) * d;
+      if (!pointInWall(nx, ny) && nx > 30 && ny > 30 && nx < MAP.w - 30 && ny < MAP.h - 30) { x = nx; y = ny; break; }
+    }
+    G.packs.push({ id: Math.random().toString(36).slice(2, 9), x, y, kind: 'epic' });
+  }
+
   function applyLoadout() {
     if (!G) return;
     const me = G.me, L = Account.user.loadout;
@@ -2251,7 +2263,7 @@ const Game = (() => {
   function resume() { if (G) { G.paused = false; last = performance.now(); } }
 
   return {
-    startSP, startMP, stop, pause, resume, applyLoadout,
+    startSP, startMP, stop, pause, resume, applyLoadout, spawnEpic,
     get test() { return !!(G && G.test); },
     get running() { return !!G; },
     get mode() { return G && G.mode; },
