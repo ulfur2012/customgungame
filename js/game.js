@@ -1996,7 +1996,7 @@ const Game = (() => {
   // colours for the arena in dark / light mode
   const THEMES = {
     dark:  { bg: '#0e1014', floor: '#1a1e25', grid: '#222732', wall: '#323946', wallTop: '#3e4757', wallLine: '#151920', border: '#3d4555', shadow: 'rgba(5,7,10,0.72)' },
-    light: { bg: '#dfe4ec', floor: '#eef1f6', grid: '#dde2ea', wall: '#7b8494', wallTop: '#959eae', wallLine: '#4b5261', border: '#8a93a3', shadow: 'rgba(120,130,150,0.55)' },
+    light: { bg: '#b4bac4', floor: '#c9ced6', grid: '#bcc2cb', wall: '#6d7585', wallTop: '#858d9c', wallLine: '#424856', border: '#7a8291', shadow: 'rgba(90,98,112,0.55)' },
   };
   const theme = () => THEMES[Settings.light ? 'light' : 'dark'];
 

@@ -85,7 +85,7 @@
   function applySettings() {
     document.body.classList.toggle('mobile', Settings.mobile);
     document.body.classList.toggle('light', Settings.light);
-    document.querySelector('meta[name="theme-color"]').content = Settings.light ? '#eef1f6' : '#0e1014';
+    document.querySelector('meta[name="theme-color"]').content = Settings.light ? '#c9ced6' : '#0e1014';
     for (const b of el('themePick').children) {
       b.classList.toggle('active', (b.dataset.v === 'light') === Settings.light);
       b.onclick = () => { Settings.light = b.dataset.v === 'light'; Settings.save(); applySettings(); };

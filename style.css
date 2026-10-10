@@ -445,20 +445,20 @@ body.mobile #ultBtn .ab-key { display: none; }
 
 /* ------------------------------------------------------------ light mode */
 body.light {
-  --bg: #eef1f6;
-  --panel: #ffffff;
-  --panel-2: #e8ecf2;
-  --line: #cfd5df;
+  --bg: #c9ced6;
+  --panel: #d8dce3;
+  --panel-2: #c3c8d1;
+  --line: #aeb4bf;
   --text: #1b1f27;
-  --muted: #5d6676;
+  --muted: #4c5463;
   --accent: #e8930c;
   --accent-2: #1f7ae0;
   --good: #1f9d55;
   --bad: #d63c3c;
 }
-body.light .screen { background: radial-gradient(circle at 50% 0%, #ffffff, var(--bg) 70%); }
+body.light .screen { background: radial-gradient(circle at 50% 0%, #dfe2e8, var(--bg) 70%); }
 body.light .logo { text-shadow: 0 3px 0 #f3c77a; }
-body.light .overlay { background: rgba(200, 208, 220, 0.7); }
+body.light .overlay { background: rgba(150, 156, 168, 0.6); }
 body.light .toast { background: #1b1f27e0; color: #fff; }
 body.light .switch::after { box-shadow: 0 1px 2px #0003; }
 body.light .preview-wrap { background-blend-mode: normal; }
