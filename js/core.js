@@ -155,6 +155,11 @@ function computeStats(kind, build) {
   s.falloff = body.falloff || 0;
   s.assist = body.assist || 1;
   s.recoil = body.recoil || 1; // extra kick (sniper)
+  const extra = findPart('extra', build.extra) || {};
+  s.range *= extra.rangeMul || 1;
+  s.speed *= extra.speedMul || 1;
+  s.spread *= extra.spreadMul || 1;
+  s.assist *= extra.assist || 1;
   const ammoType = findPart('bullets', build.bullets) || {};
   s.bounce = ammoType.bounce || 0;
   s.pierce = !!ammoType.pierce;
@@ -227,7 +232,7 @@ function hashString(str) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-const emptyBuild = () => ({ body: null, barrel: null, mag: null, handle: null, stock: null, silencer: null, bullets: null });
+const emptyBuild = () => ({ body: null, barrel: null, mag: null, handle: null, stock: null, silencer: null, bullets: null, extra: null });
 
 const Account = {
   user: null,

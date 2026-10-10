@@ -36,6 +36,7 @@ const SLOTS = [
   { key: 'stock',    label: 'Stock' },
   { key: 'silencer', label: 'Silencer' },
   { key: 'bullets',  label: 'Bullets' },
+  { key: 'extra',    label: 'Extra' },
 ];
 
 // The two guns you build before every round.
@@ -123,6 +124,19 @@ const PARTS = {
       note: 'Go through enemies' },
     { id: 'boom',     name: 'Boom Bullets',     gun: 'both', w: 14, h: 8, color: '#ff7675', boom: { radius: 60, damage: 5 }, mul: { damage: 0.8 },
       note: 'Small 5 damage explosion when they hit a wall' },
+  ],
+  // Extra gadgets. rangeMul = how far bullets fly, speedMul = bullet speed, spreadMul = accuracy (lower = tighter)
+  extra: [
+    { id: 'scope',   name: 'Scope',         w: 26, h: 10, color: '#74b9ff', rangeMul: 1.5, assist: 0.85,
+      note: '+50% range · slightly thinner auto-shoot area' },
+    { id: 'muzzle',  name: 'Muzzle Boost',  w: 14, h: 10, color: '#fdcb6e', gun: 'both', speedMul: 1.6, add: { loudness: 1 },
+      note: 'Bullets fly 60% faster' },
+    { id: 'laser',   name: 'Laser Sight',   w: 18, h: 6,  color: '#ff3838', gun: 'both', spreadMul: 0.4,
+      note: 'Much tighter bullet spread' },
+    { id: 'trigger', name: 'Hair Trigger',  w: 10, h: 10, color: '#00cec9', gun: 'both', add: { knockback: -0.5, damage: -2 },
+      note: 'Shoots faster' },
+    { id: 'hollow',  name: 'Hollow Points', w: 12, h: 8,  color: '#e17055', gun: 'both', mul: { damage: 1.25, magSize: 0.8 },
+      note: 'Hit harder, fewer bullets per mag' },
   ],
   // Silencers make you much quieter but each one makes one stat worse.
   silencer: [
