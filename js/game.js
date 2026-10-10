@@ -50,9 +50,9 @@ const Game = (() => {
 
   // Bandolier passive: extra spare mags (and room for them)
   // ability boosts: change this ability's numbers (for you) while it's equipped
-  const ABILITY_BASE = JSON.parse(JSON.stringify(ABILITIES));
+  const ABILITY_BASE = structuredClone(ABILITIES); // (structuredClone keeps Infinity)
   function applyPerk(me) {
-    for (const k in ABILITIES) Object.assign(ABILITIES[k], JSON.parse(JSON.stringify(ABILITY_BASE[k])));
+    for (const k in ABILITIES) Object.assign(ABILITIES[k], structuredClone(ABILITY_BASE[k]));
     const perk = (ABILITY_PERKS[me.ability] || []).find(p => p.id === Account.user.loadout.perk);
     const A = ABILITIES[me.ability];
     if (perk && A) {
@@ -450,7 +450,7 @@ const Game = (() => {
         continue;
       }
       const a = Math.atan2(b.vy, b.vx);
-      if (G.gadgets.length && bulletHitsGadget(b, x1, y1)) { b.life = 0; continue; }
+      if ((G.gadgets.length || G.turrets.length) && bulletHitsGadget(b, x1, y1)) { b.life = 0; continue; }
       if (b.team === 'me') {
         if (G.mode === 'sp') {
           for (const e of G.enemies) {
@@ -907,6 +907,14 @@ const Game = (() => {
   // buildings and your buddy can be shot. Returns true if the bullet was stopped.
   // The owner keeps track of the HP and tells everyone when it breaks.
   function bulletHitsGadget(b, x1, y1) {
+    // your turrets (only on your screen)
+    const hostileToMe = G.mode === 'sp' ? b.team === 'e' : b.team === 'r' && hostileTo(b.owner);
+    if (hostileToMe) for (const t of G.turrets) {
+      if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, 18)) continue;
+      t.hp -= bulletDamage(b); t.flash = 0.1;
+      if (t.hp <= 0) { t.t = 0; burst(t.x, t.y, '#cd84f1', 24, 300); }
+      return true;
+    }
     for (const g of G.gadgets) {
       if (g.kind === 'bubble') {
         const R = ABILITIES.bubble.radius * Math.min(1, g.age / 0.25);
@@ -1187,7 +1195,7 @@ const Game = (() => {
       for (let i = 0; i < U.count; i++) {
         const an = me.aim + i * Math.PI * 2 / U.count, c = { x: me.x + Math.cos(an) * U.ring, y: me.y + Math.sin(an) * U.ring, r: 16 };
         collideWorld(c);
-        G.turrets.push({ x: c.x, y: c.y, t: ABILITIES.turret.duration, cd: 0.3 + i * 0.1, aim: an, stats: side.stats, sprite: side.sprite });
+        G.turrets.push({ x: c.x, y: c.y, t: ABILITIES.turret.duration, hp: ABILITIES.turret.hp, maxHp: ABILITIES.turret.hp, cd: 0.3 + i * 0.1, aim: an, stats: side.stats, sprite: side.sprite });
         burst(c.x, c.y, U.color, 12, 200);
       }
     }
@@ -1348,6 +1356,8 @@ const Game = (() => {
       const sp = t.sprite, k = 0.6; // your sidearm sitting on top
       ctx.drawImage(sp.canvas, sp.minX * k, sp.minY * k - 6, sp.w * k, sp.h * k);
       ctx.restore();
+      if (t.flash > 0) { t.flash -= 1 / 60; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill(); }
+      drawBar(t.x, t.y - 28, 40, 5, t.hp / t.maxHp, false, '#cd84f1');
     }
     const me = G.me;
     if (me.invT > 0) {
@@ -1431,7 +1441,7 @@ const Game = (() => {
       else if (n.kind === 'turret') {
         // the turret gets a copy of your sidearm
         const side = me.guns[1];
-        G.turrets.push({ x: n.x1, y: n.y1, t: ABILITIES.turret.duration, cd: 0.5, aim: 0, stats: side.stats, sprite: side.sprite });
+        G.turrets.push({ x: n.x1, y: n.y1, t: ABILITIES.turret.duration, hp: ABILITIES.turret.hp, maxHp: ABILITIES.turret.hp, cd: 0.5, aim: 0, stats: side.stats, sprite: side.sprite });
       } else if (n.kind === 'cluster') {
         const C = ABILITIES.cluster, list = [];
         for (let i = 0; i < C.bombs; i++) {
@@ -1889,10 +1899,19 @@ const Game = (() => {
     const me = G.me, list = G.enemies;
     updateFlow(dt);
     const decoy = myDecoy();
+    // your buddies, towers and turrets can be attacked too
+    const allies = [...G.gadgets.filter(g => g.hp !== undefined && !g.dead && isMine(g.owner)), ...G.turrets];
     for (const e of list) {
       if (e.frozen > 0) { e.flash = 0; continue; } // frozen solid
-      // go for whoever is closer: you or your buddy
-      const tgt = decoy && Math.hypot(decoy.x - e.x, decoy.y - e.y) < Math.hypot(me.x - e.x, me.y - e.y) ? decoy : me;
+      // you come first: if they can see you, they go for you. Otherwise the closest buddy/building they can see
+      let tgt = me;
+      if (!(me.alive && lineOfSight(e.x, e.y, me.x, me.y) && !smokeBlocks(e.x, e.y, me.x, me.y))) {
+        let bd = BULLET_RANGE * 0.8;
+        for (const a of allies) {
+          const d = Math.hypot(a.x - e.x, a.y - e.y);
+          if (d < bd && lineOfSight(e.x, e.y, a.x, a.y) && !smokeBlocks(e.x, e.y, a.x, a.y)) { tgt = a; bd = d; }
+        }
+      }
       if (decoy && (e.botCd = Math.max(0, (e.botCd || 0) - dt)) === 0 && Math.hypot(decoy.x - e.x, decoy.y - e.y) < e.r + PLAYER.r) { damageGadget(decoy, e.def.melee); e.botCd = 0.6; }
       const dx = tgt.x - e.x, dy = tgt.y - e.y, d = Math.hypot(dx, dy) || 1;
       const sees = lineOfSight(e.x, e.y, tgt.x, tgt.y) && !smokeBlocks(e.x, e.y, tgt.x, tgt.y);
