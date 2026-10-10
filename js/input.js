@@ -11,7 +11,7 @@ const Input = (() => {
     const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy);
     if (d > STICK_R) { s.x = s.ox + dx / d * STICK_R; s.y = s.oy + dy / d * STICK_R; }
   }
-  const flags = { reload: false, swap: false, select: -1, tap: false, abPress: false, ab2Press: false, ab3Press: false, ultPress: false };
+  const flags = { reload: false, swap: false, select: -1, tap: false, abPress: false, ab2Press: false, ab3Press: false, ab4Press: false, ultPress: false };
 
   addEventListener('keydown', e => {
     if (e.repeat) return;
@@ -22,6 +22,7 @@ const Input = (() => {
     if (e.code === 'KeyF') flags.ultPress = true;
     if (e.code === 'KeyC') flags.ab2Press = true;
     if (e.code === 'KeyV') flags.ab3Press = true;
+    if (e.code === 'KeyB') flags.ab4Press = true;
     if (e.code === 'Digit1') flags.select = 0;
     if (e.code === 'Digit2') flags.select = 1;
   });
@@ -79,7 +80,7 @@ const Input = (() => {
     mouse.down = false;
     abilityTouch = false;
     sticks.move = sticks.aim = null;
-    Object.assign(flags, { reload: false, swap: false, select: -1, tap: false, abPress: false, ab2Press: false, ab3Press: false, ultPress: false });
+    Object.assign(flags, { reload: false, swap: false, select: -1, tap: false, abPress: false, ab2Press: false, ab3Press: false, ab4Press: false, ultPress: false });
   }
 
   // {x, y}, length <= 1
@@ -144,7 +145,16 @@ const Input = (() => {
     try { ab3Btn.setPointerCapture(e.pointerId); } catch (err) {}
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) ab3Btn.addEventListener(ev, () => { ability3Touch = false; });
-  const abilityHeld = slot => slot === 2 ? keys.has('KeyV') || ability3Touch : slot ? keys.has('KeyC') || ability2Touch : keys.has('KeyE') || abilityTouch;
+  let ability4Touch = false;
+  const ab4Btn = document.getElementById('ability4Btn');
+  ab4Btn.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    ability4Touch = true;
+    flags.ab4Press = true;
+    try { ab4Btn.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) ab4Btn.addEventListener(ev, () => { ability4Touch = false; });
+  const abilityHeld = slot => slot === 3 ? keys.has('KeyB') || ability4Touch : slot === 2 ? keys.has('KeyV') || ability3Touch : slot ? keys.has('KeyC') || ability2Touch : keys.has('KeyE') || abilityTouch;
 
   function take(name) { const v = flags[name]; flags[name] = name === 'select' ? -1 : false; return v; }
 

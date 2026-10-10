@@ -31,15 +31,16 @@ const Game = (() => {
   function newSlot(ability) {
     return { ability: ABILITIES[ability] ? ability : null, abCd: 0, abUses: (ABILITIES[ability] || {}).uses ?? Infinity, abWasHeld: false, abAiming: false, refillT: undefined };
   }
-  // slot = 'alt' (2nd ability) or 'alt3' (3rd ability, unlocks at wave 50)
+  // slot = 'alt' (2nd ability), 'alt3' (3rd, wave 20) or 'alt4' (4th, wave 30)
   function swapAlt(slot = 'alt') {
     const me = G.me;
     for (const k of SLOT_KEYS) { const v = me[k]; me[k] = me[slot][k]; me[slot][k] = v; }
   }
   // is this ability equipped in any slot? (passives work from all of them)
-  const hasAb = id => G.me.ability === id || G.me.alt.ability === id || G.me.alt3.ability === id;
+  const hasAb = id => G.me.ability === id || G.me.alt.ability === id || G.me.alt3.ability === id || G.me.alt4.ability === id;
   const slot3Open = () => G.mode === 'sp' && (G.test || G.wave >= SLOT3_WAVE);
-  const allSlots = () => [G.me, G.me.alt, G.me.alt3];
+  const slot4Open = () => G.mode === 'sp' && (G.test || G.wave >= SLOT4_WAVE);
+  const allSlots = () => [G.me, G.me.alt, G.me.alt3, G.me.alt4];
 
   function newState(mode, spawn, color) {
     const L = Account.user.loadout;
@@ -49,7 +50,7 @@ const Game = (() => {
         x: spawn[0], y: spawn[1], r: PLAYER.r, hp: PLAYER.hp, maxHp: PLAYER.hp, aim: 0, vx: 0, vy: 0,
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
-        alt: newSlot(L.ability2), alt3: newSlot(null),
+        alt: newSlot(L.ability2), alt3: newSlot(null), alt4: newSlot(null),
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
         ult: null, stimT: 0, frenzyT: 0, stormN: 0, stormT: 0, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
@@ -70,7 +71,7 @@ const Game = (() => {
   function applyPerk(me) {
     for (const k in ABILITIES) Object.assign(ABILITIES[k], structuredClone(ABILITY_BASE[k]));
     const L = Account.user.loadout;
-    for (const [ab, pid] of [[me.ability, L.perk], [me.alt.ability, L.perk2], [me.alt3.ability, L.perk3]]) {
+    for (const [ab, pid] of [[me.ability, L.perk], [me.alt.ability, L.perk2], [me.alt3.ability, L.perk3], [me.alt4.ability, L.perk4]]) {
       const perk = (ABILITY_PERKS[ab] || []).find(p => p.id === pid), A = ABILITIES[ab];
       if (!perk || !A) continue;
       for (const k in perk.add || {}) A[k] = (A[k] || 0) + perk.add[k];
@@ -91,6 +92,7 @@ const Game = (() => {
     me.abUses = (ABILITIES[me.ability] || {}).uses ?? Infinity;
     me.alt.abUses = (ABILITIES[me.alt.ability] || {}).uses ?? Infinity;
     me.alt3.abUses = (ABILITIES[me.alt3.ability] || {}).uses ?? Infinity;
+    me.alt4.abUses = (ABILITIES[me.alt4.ability] || {}).uses ?? Infinity;
   }
 
   function applyBandolier(me) {
@@ -134,8 +136,9 @@ const Game = (() => {
     me.ability = L.ability; me.abCd = 0; me.abWasHeld = me.abAiming = false;
     me.alt = newSlot(L.ability2);
     me.alt3 = newSlot(slot3Open() ? L.ability3 : null);
+    me.alt4 = newSlot(slot4Open() ? L.ability4 : null);
     applyBandolier(me);
-    abCache = abCache2 = abCache3 = '';
+    abCache = abCache2 = abCache3 = abCache4 = '';
     updateWeaponBar(true);
   }
 
@@ -148,6 +151,7 @@ const Game = (() => {
     me.abCd = 0; me.abUses = (ABILITIES[L.ability] || {}).uses ?? Infinity;
     me.alt = newSlot(L.ability2); abCache2 = '';
     me.alt3 = newSlot(slot3Open() ? L.ability3 : null); abCache3 = '';
+    me.alt4 = newSlot(slot4Open() ? L.ability4 : null); abCache4 = '';
     me.shield = 0; me.shieldT = 0; me.speedT = 0; me.rapidT = 0; me.slowT = 0; me.lastStand = false;
     applyBandolier(me);
     abCache = '';
@@ -178,10 +182,11 @@ const Game = (() => {
 
   function begin() {
     if (slot3Open()) G.me.alt3 = newSlot(Account.user.loadout.ability3);
+    if (slot4Open()) G.me.alt4 = newSlot(Account.user.loadout.ability4);
     applyBandolier(G.me);
     if (G.me.synergies.length) G.banner = { text: `COMBO: ${G.me.synergies.join(' + ').toUpperCase()}`, t: 2.5 };
     Input.reset();
-    abCache = abCache2 = abCache3 = '';
+    abCache = abCache2 = abCache3 = abCache4 = '';
     updateWeaponBar(true);
     document.body.classList.add('in-game');
     last = performance.now();
@@ -283,7 +288,7 @@ const Game = (() => {
     const aim = Input.aim(scr.x, scr.y);
     if (aim.angle !== null) me.aim = aim.angle;
     updateAbility(dt);
-    const abAim = me.abAiming || me.alt.abAiming || me.alt3.abAiming;
+    const abAim = me.abAiming || me.alt.abAiming || me.alt3.abAiming || me.alt4.abAiming;
     let fire = aim.fire && !abAim;
     if (Settings.mobile) {
       // Brawl Stars style: hold the aim stick and it fires by itself when an enemy is in your sights
@@ -604,6 +609,7 @@ const Game = (() => {
     updateSlot(dt, 0);
     swapAlt(); updateSlot(dt, 1); swapAlt();
     if (me.alt3.ability) { swapAlt('alt3'); updateSlot(dt, 2); swapAlt('alt3'); }
+    if (me.alt4.ability) { swapAlt('alt4'); updateSlot(dt, 3); swapAlt('alt4'); }
   }
 
   // one ability slot (slot 1's state is swapped into `me` while this runs)
@@ -630,7 +636,7 @@ const Game = (() => {
       }
       return;
     }
-    const pressed = Input.take(['abPress', 'ab2Press', 'ab3Press'][slot]);
+    const pressed = Input.take(['abPress', 'ab2Press', 'ab3Press', 'ab4Press'][slot]);
     const held = Input.abilityHeld(slot);
     const ready = me.abCd === 0 && me.abUses > 0 && (me.ability !== 'shield' || me.shieldT === 0 || G.infAbility);
     const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'resupply', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability);
@@ -1095,7 +1101,19 @@ const Game = (() => {
     // pick up ammo boxes / health packs it walks over
     for (const p of G.packs) {
       if (Math.hypot(p.x - g.x, p.y - g.y) > g.r + HEALTH_PACK.r) continue;
-      if (p.kind === 'ammo' && g.stats && g.ammo + g.reserve < g.stats.magSize * (1 + A.spareMags)) { g.ammo = g.stats.magSize; g.reserve = g.stats.magSize * A.spareMags; }
+      if (p.kind === 'ammo' && g.stats && g.ammo + g.reserve < g.stats.magSize * (1 + A.spareMags)) {
+        // take only the mags it needs; the rest stays in the box
+        p.mags = p.mags ?? AMMO.box.mags;
+        const ms = g.stats.magSize, missing = ms * (1 + A.spareMags) - g.ammo - g.reserve, take = Math.min(Math.ceil(missing / ms), p.mags);
+        g.reserve += Math.min(missing, take * ms);
+        if (g.ammo === 0) { const n = Math.min(ms, g.reserve); g.ammo = n; g.reserve -= n; }
+        p.mags -= take;
+        G.texts.push({ x: g.x, y: g.y - 34, text: `+${take} MAG${take > 1 ? 'S' : ''}`, color: '#ffd23f', life: 0.9 });
+        if (p.mags > 0) { if (G.mode === 'mp') Net.send({ t: 'boxm', id: p.id, mags: p.mags }); break; }
+        removePack(p.id);
+        if (G.mode === 'mp') Net.send({ t: 'took', id: p.id });
+        break;
+      }
       else if (!p.kind && g.hp < g.maxHp) g.hp = Math.min(g.maxHp, g.hp + HEALTH_PACK.heal);
       else continue;
       G.texts.push({ x: g.x, y: g.y - 34, text: p.kind === 'ammo' ? '+AMMO' : `+${HEALTH_PACK.heal}`, color: p.kind === 'ammo' ? '#ffd23f' : '#4cff7a', life: 0.9 });
@@ -2112,9 +2130,20 @@ const Game = (() => {
         if (wants(main)) needs.push(main);
         if (wants(side) && !(side.stats.flare && needs.length)) needs.push(side);
         if (!needs.length) continue;
-        for (const gn of needs) gn.reserve += Math.min(room(gn), gn.stats.boxRefill);
+        // the box holds 3 mags: each gun takes the mags it needs (main gun first) until it's empty
+        p.mags = p.mags ?? AMMO.box.mags;
+        for (const gn of needs) {
+          const per = gn.stats.boxRefill, want = Math.ceil(room(gn) / per), take = Math.min(want, p.mags);
+          gn.reserve += Math.min(room(gn), take * per);
+          p.mags -= take;
+          if (p.mags <= 0) break;
+        }
         G.texts.push({ x: me.x, y: me.y - 34, text: '+AMMO', color: '#ffd23f', life: 0.9 });
         updateWeaponBar(true);
+        if (p.mags > 0) { // some left for someone else
+          if (G.mode === 'mp') Net.send({ t: 'boxm', id: p.id, mags: p.mags });
+          continue;
+        }
       } else if (p.kind === 'epic') {
         if (me.ult) continue; // already holding one
         me.ult = rollUlt(allSlots().map(s => s.ability));
@@ -2186,7 +2215,8 @@ const Game = (() => {
     ctx.strokeRect(p.x - s, p.y - s * 0.7, s * 2, s * 1.4);
     ctx.fillRect(p.x - s, p.y - s * 0.7, s * 2, s * 1.4);
     ctx.fillStyle = '#ffe27a';
-    for (let i = -1; i <= 1; i++) ctx.fillRect(p.x + i * s * 0.55 - 2.5, p.y - s * 0.45, 5, s * 0.9);
+    const left = p.mags ?? AMMO.box.mags;
+    for (let i = -1; i <= 1; i++) if (i + 1 < left) ctx.fillRect(p.x + i * s * 0.55 - 2.5, p.y - s * 0.45, 5, s * 0.9);
   }
 
   function drawPacks() {
@@ -2218,6 +2248,9 @@ const Game = (() => {
       G.wave++;
       if (G.mode === 'sp' && G.wave === SLOT3_WAVE && !G.me.alt3.ability && Account.user.loadout.ability3) {
         G.me.alt3 = newSlot(Account.user.loadout.ability3); applyPerk(G.me); abCache3 = '';
+      }
+      if (G.mode === 'sp' && G.wave === SLOT4_WAVE && !G.me.alt4.ability && Account.user.loadout.ability4) {
+        G.me.alt4 = newSlot(Account.user.loadout.ability4); applyPerk(G.me); abCache4 = '';
       }
       G.phase = 'fight';
       G.spawnT = 0;
@@ -2577,7 +2610,7 @@ const Game = (() => {
         if (A && A.type !== 'passive') { s.abUses = A.uses ?? Infinity; s.abCd = 0; }
       }
       G.banner = { text: `${e.name || 'Boss'} defeated! Ability restored`, t: 2.5 };
-      if (G.mode === 'sp') setTimeout(() => G && hooks.bossDown({ unlocked3: G.wave >= SLOT3_WAVE && G.wave - BOSS_EVERY < SLOT3_WAVE }), 1200);
+      if (G.mode === 'sp') setTimeout(() => G && hooks.bossDown({ unlocked3: G.wave >= SLOT3_WAVE && G.wave - BOSS_EVERY < SLOT3_WAVE, unlocked4: G.wave >= SLOT4_WAVE && G.wave - BOSS_EVERY < SLOT4_WAVE }), 1200);
       updateWeaponBar(true);
     }
   }
@@ -2668,6 +2701,7 @@ const Game = (() => {
   Net.on('rpg', m => { if (inMP()) addRocket(m.x, m.y, m.a, m.from); });
   Net.on('packs', m => { if (inMP()) addPacks(m.packs); });
   Net.on('took', m => { if (inMP()) removePack(m.id); });
+  Net.on('boxm', m => { if (!inMP()) return; const p = G.packs.find(p => p.id === m.id); if (p) p.mags = m.mags; });
   Net.on('leave', m => {
     if (!inMP() || !G.remotes.has(m.from)) return;
     G.feed.push({ text: `${G.remotes.get(m.from).name} left`, t: 5 });
@@ -2759,6 +2793,7 @@ const Game = (() => {
       if (me.abAiming) drawAbilityAim(me);
       else if (me.alt.abAiming) { swapAlt(); drawAbilityAim(me); swapAlt(); }
       else if (me.alt3.abAiming) { swapAlt('alt3'); drawAbilityAim(me); swapAlt('alt3'); }
+      else if (me.alt4.abAiming) { swapAlt('alt4'); drawAbilityAim(me); swapAlt('alt4'); }
       else if (Settings.mobile ? Input.sticks.aim : Input.mouse.active) drawAimLine(me);
       drawPlayer(me, me.color, gun.sprite, false, me.meleeInv > 0 && Math.floor(me.meleeInv * 20) % 2);
       // health bar right above you — the middle of the screen
@@ -3122,7 +3157,7 @@ const Game = (() => {
         : g.ammo === 0 && g.reserve === 0 ? 'OUT OF AMMO' : `${g.ammo} | ${g.reserve}`;
     });
   }
-  let abCache = '', abCache2 = '', abCache3 = '';
+  let abCache = '', abCache2 = '', abCache3 = '', abCache4 = '';
   // which timer a running ability shows on its button
   const RUNNING = { shield: 'shieldT', rapid: 'rapidT', slowmo: 'slowT', phase: 'phaseT', reflect: 'reflectT', stim: 'stimT' };
   function updateAbilityBtn() {
@@ -3133,6 +3168,7 @@ const Game = (() => {
     abCache = paintAbilityBtn(el('abilityBtn'), abCache);
     swapAlt(); abCache2 = paintAbilityBtn(el('ability2Btn'), abCache2); swapAlt();
     swapAlt('alt3'); abCache3 = paintAbilityBtn(el('ability3Btn'), abCache3); swapAlt('alt3');
+    swapAlt('alt4'); abCache4 = paintAbilityBtn(el('ability4Btn'), abCache4); swapAlt('alt4');
   }
   function paintAbilityBtn(btn, cache) {
     const me = G.me, A = ABILITIES[me.ability];

@@ -189,7 +189,8 @@ const ENEMIES = {
              gun: { damage: 12, delay: 1.6, loudness: 12, speed: 600 } },
 };
 const BOSS_EVERY = 10; // a boss shows up every 10th wave
-const SLOT3_WAVE = 50;  // single player: a 3rd ability slot (V) unlocks on this wave
+const SLOT3_WAVE = 20;  // single player: a 3rd ability slot (V) unlocks on this wave
+const SLOT4_WAVE = 30;  // ...and a 4th (B) on this one
 
 // Bosses in order: wave 10, 20, 30 ... 90, then wave 100 is the CREATOR. After that they cycle again.
 //   hp = multiplier on the normal boss HP
@@ -399,7 +400,7 @@ const PING = { every: 180, calm: 10, show: 3 };
 // Limited ammo: every gun starts with this many spare mags (plus the one loaded).
 // Ammo boxes (yellow) spawn with health packs. Each gives 1 mag to the main gun and/or sidearm,
 // whichever needs it (both if both do). The flare gun only gets 1 shot, and only when the main gun is full.
-const AMMO = { spareMags: 3, box: { count: 2, refillMags: 1, r: 16 } };
+const AMMO = { spareMags: 3, box: { count: 2, refillMags: 1, mags: 3, r: 16 } }; // a box holds 3 mags, everyone takes only what they need
 
 // Abilities: pick one before each round. respawn = weak ones get a use back every 30s. Active ones use E on PC / the green button on mobile.
 // uses = how many times per round (2 for everything except the RPG, which gets one shot).

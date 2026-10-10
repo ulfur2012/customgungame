@@ -346,7 +346,7 @@ body.mobile .gun-btn { min-width: 0; padding: 6px 10px; }
 .rules { font-size: 13px; font-weight: 700; color: var(--accent) !important; }
 
 /* ability button: bar next to the guns on PC, green round button above the shoot stick on mobile */
-#abilityBtn, #ability2Btn, #ability3Btn {
+#abilityBtn, #ability2Btn, #ability3Btn, #ability4Btn {
   position: fixed; z-index: 5;
   right: calc(16px + var(--safe-r)); bottom: calc(14px + var(--safe-b));
   display: flex; align-items: center; gap: 8px;
@@ -522,3 +522,20 @@ body.mobile #ability3Btn .ab-name { font-size: 11px; }
 body.mobile #ability3Btn .ab-state { color: #062b12; font-weight: 800; font-size: 12px; }
 #loadout.abilities-only .gun-tab:not(.ability-tab), #loadout.abilities-only .preset-tabs { display: none; }
 .boss-pick { grid-column: 1 / -1; background: linear-gradient(90deg, #6c5ce7, #a29bfe); color: #fff; padding: 10px 12px; border-radius: 10px; font-weight: 800; }
+
+/* fourth ability button (wave 30+) */
+#ability4Btn { bottom: calc(170px + var(--safe-b)); }
+#ability4Btn.hidden { display: none; }
+#ability4Btn.cooling { border-color: rgba(255, 255, 255, 0.2); opacity: 0.7; }
+#ability4Btn.passive { border-color: rgba(43, 217, 107, 0.4); }
+body:has(#ability4Btn:not(.hidden)) #ultBtn { bottom: calc(222px + var(--safe-b)); }
+body.mobile #ability4Btn {
+  right: calc(200px + var(--safe-r)); bottom: calc(370px + var(--safe-b));
+  width: 74px; height: 74px; padding: 0; border-radius: 50%;
+  flex-direction: column; justify-content: center; gap: 0;
+  background: rgba(43, 217, 107, 0.85); border: 3px solid #b8ffd0; color: #062b12;
+}
+body.mobile #ability4Btn.cooling { background: rgba(43, 217, 107, 0.3); }
+body.mobile #ability4Btn .ab-key { display: none; }
+body.mobile #ability4Btn .ab-name { font-size: 11px; }
+body.mobile #ability4Btn .ab-state { color: #062b12; font-weight: 800; font-size: 12px; }

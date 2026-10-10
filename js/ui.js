@@ -192,12 +192,12 @@
   let abSlot = 0; // which ability slot the Ability tab is editing (0 = E, 1 = C)
   function renderAbilities() {
     const L = Account.user.loadout;
-    const KEYS = ['ability', 'ability2', 'ability3'], PERKS = ['perk', 'perk2', 'perk3'];
+    const KEYS = ['ability', 'ability2', 'ability3', 'ability4'], PERKS = ['perk', 'perk2', 'perk3', 'perk4'];
     const key = KEYS[abSlot], perkKey = PERKS[abSlot];
     const current = L[key];
     // two slot tabs, like the upgrade slots
     el('slotTabs').innerHTML = '';
-    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2'], [`Ability 3 (V) · wave ${SLOT3_WAVE}+`, 'ability3']].forEach(([label, k], i) => {
+    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2'], [`Ability 3 (V) · wave ${SLOT3_WAVE}+`, 'ability3'], [`Ability 4 (B) · wave ${SLOT4_WAVE}+`, 'ability4']].forEach(([label, k], i) => {
       const b = document.createElement('button'), A = ABILITIES[L[k]];
       b.className = 'tab' + (i === abSlot ? ' active' : '');
       b.innerHTML = `<span class="tab-label">${label}</span><span class="tab-value">${A ? A.name : 'None'}</span>`;
@@ -241,7 +241,7 @@
     }
     const head2 = document.createElement('div');
     head2.className = 'perk-head';
-    head2.textContent = ['Abilities', 'Second ability', 'Third ability'][abSlot];
+    head2.textContent = ['Abilities', 'Second ability', 'Third ability', 'Fourth ability'][abSlot];
     wrap.appendChild(head2);
     // picking the ability that's in the other slot swaps the two
     const pick = id => {
@@ -424,11 +424,12 @@
     Game.pause();
     for (const o of ['pauseScreen', 'resultScreen', 'settingsScreen']) overlay(o, false);
     if (r.unlocked3) abSlot = 2;
+    if (r.unlocked4) abSlot = 3;
     openLoadout('Back to game', () => { show(null); Game.applyAbilities(); Game.resume(); },
       () => { show(null); Game.applyAbilities(); Game.resume(); }, true);
     const note = document.createElement('div');
     note.className = 'boss-pick';
-    note.textContent = r.unlocked3 ? `Boss down! 3rd ability slot unlocked — press V to use it.` : 'Boss down! You can switch your abilities now.';
+    note.textContent = r.unlocked4 ? 'Boss down! 4th ability slot unlocked — press B to use it.' : r.unlocked3 ? 'Boss down! 3rd ability slot unlocked — press V to use it.' : 'Boss down! You can switch your abilities now.';
     el('parts').prepend(note);
   });
   Game.on('spOver', r => {
