@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Custom Gun Game</title>
-  <link rel="stylesheet" href="style.css?v=18">
+  <link rel="stylesheet" href="style.css?v=19">
 </head>
 <body>
   <canvas id="game"></canvas>
@@ -178,6 +178,13 @@
         <span class="switch"></span>
         <span><b>Mobile version</b><br><small>Two joysticks: left moves, right aims and fires by itself when an enemy is in your sights. Tap the right side to auto-aim at the closest enemy.</small></span>
       </label>
+      <div class="setting">
+        <span class="setting-label">Theme</span>
+        <div id="themePick" class="seg">
+          <button data-v="dark">🌙 Dark</button>
+          <button data-v="light">☀️ Light</button>
+        </div>
+      </div>
       <button id="settingsClose" class="primary">Done</button>
     </div>
   </div>
@@ -185,11 +192,11 @@
   <div id="toast" class="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="js/config.js?v=18"></script>
-  <script src="js/core.js?v=18"></script>
-  <script src="js/input.js?v=18"></script>
-  <script src="js/net.js?v=18"></script>
-  <script src="js/game.js?v=18"></script>
-  <script src="js/ui.js?v=18"></script>
+  <script src="js/config.js?v=19"></script>
+  <script src="js/core.js?v=19"></script>
+  <script src="js/input.js?v=19"></script>
+  <script src="js/net.js?v=19"></script>
+  <script src="js/game.js?v=19"></script>
+  <script src="js/ui.js?v=19"></script>
 </body>
 </html>

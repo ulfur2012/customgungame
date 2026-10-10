@@ -1825,7 +1825,7 @@ const Game = (() => {
   // ---------------------------------------------------------------- render
   function render() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    ctx.fillStyle = '#0e1014';
+    ctx.fillStyle = theme().bg;
     ctx.fillRect(0, 0, W, H);
     if (!G) return;
 
@@ -1908,7 +1908,7 @@ const Game = (() => {
     ctx.beginPath();
     ctx.rect(G.cam.x - W / zoom, G.cam.y - H / zoom, W * 2 / zoom, H * 2 / zoom);
     tracePoly(sight);
-    ctx.fillStyle = 'rgba(5,7,10,0.72)';
+    ctx.fillStyle = theme().shadow;
     ctx.fill('evenodd');
     drawGadgetsTop();
     ctx.restore();
@@ -1993,13 +1993,21 @@ const Game = (() => {
     }
   }
 
+  // colours for the arena in dark / light mode
+  const THEMES = {
+    dark:  { bg: '#0e1014', floor: '#1a1e25', grid: '#222732', wall: '#323946', wallTop: '#3e4757', wallLine: '#151920', border: '#3d4555', shadow: 'rgba(5,7,10,0.72)' },
+    light: { bg: '#dfe4ec', floor: '#eef1f6', grid: '#dde2ea', wall: '#7b8494', wallTop: '#959eae', wallLine: '#4b5261', border: '#8a93a3', shadow: 'rgba(120,130,150,0.55)' },
+  };
+  const theme = () => THEMES[Settings.light ? 'light' : 'dark'];
+
   function drawFloor() {
+    const T = theme();
     const hw = W / 2 / zoom + 20, hh = H / 2 / zoom + 20;
     const x0 = Math.max(0, G.cam.x - hw), x1 = Math.min(MAP.w, G.cam.x + hw);
     const y0 = Math.max(0, G.cam.y - hh), y1 = Math.min(MAP.h, G.cam.y + hh);
-    ctx.fillStyle = '#1a1e25';
+    ctx.fillStyle = T.floor;
     ctx.fillRect(0, 0, MAP.w, MAP.h);
-    ctx.strokeStyle = '#222732';
+    ctx.strokeStyle = T.grid;
     ctx.lineWidth = 2;
     ctx.beginPath();
     const S = MAP.grid;
@@ -2007,15 +2015,15 @@ const Game = (() => {
     for (let y = Math.ceil(y0 / S) * S; y <= y1; y += S) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
     ctx.stroke();
     for (const [x, y, w, h] of MAP.walls) {
-      ctx.fillStyle = '#323946';
+      ctx.fillStyle = T.wall;
       ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = '#3e4757';
+      ctx.fillStyle = T.wallTop;
       ctx.fillRect(x, y, w, 8);
-      ctx.strokeStyle = '#151920';
+      ctx.strokeStyle = T.wallLine;
       ctx.lineWidth = 3;
       ctx.strokeRect(x, y, w, h);
     }
-    ctx.strokeStyle = '#3d4555';
+    ctx.strokeStyle = T.border;
     ctx.lineWidth = 10;
     ctx.strokeRect(-5, -5, MAP.w + 10, MAP.h + 10);
   }
@@ -2116,6 +2124,13 @@ const Game = (() => {
   }
 
   function drawHud() {
+    // light mode: give white HUD text a dark glow so it stays readable
+    ctx.save();
+    if (Settings.light) { ctx.shadowColor = 'rgba(0,0,0,0.85)'; ctx.shadowBlur = 4; }
+    drawHudInner();
+    ctx.restore();
+  }
+  function drawHudInner() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     const pad = 14;
     ctx.textAlign = 'left';

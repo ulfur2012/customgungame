@@ -231,7 +231,8 @@ const Store = {
 // Device settings (not per account).
 const Settings = {
   mobile: Store.get('cgg.settings', {}).mobile ?? matchMedia('(pointer: coarse)').matches,
-  save() { Store.set('cgg.settings', { mobile: this.mobile }); },
+  light: Store.get('cgg.settings', {}).light ?? false, // light mode (default dark)
+  save() { Store.set('cgg.settings', { mobile: this.mobile, light: this.light }); },
 };
 
 // Simple string hash (cyrb53). Accounts are stored on this device only.

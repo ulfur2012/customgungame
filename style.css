@@ -442,3 +442,24 @@ body.mobile #ultBtn {
 }
 body.mobile #ultBtn .ab-key { display: none; }
 .panel .epic-btn { background: linear-gradient(135deg, #ffd700, #ff8c00); color: #2a1600; font-weight: 900; }
+
+/* ------------------------------------------------------------ light mode */
+body.light {
+  --bg: #eef1f6;
+  --panel: #ffffff;
+  --panel-2: #e8ecf2;
+  --line: #cfd5df;
+  --text: #1b1f27;
+  --muted: #5d6676;
+  --accent: #e8930c;
+  --accent-2: #1f7ae0;
+  --good: #1f9d55;
+  --bad: #d63c3c;
+}
+body.light .screen { background: radial-gradient(circle at 50% 0%, #ffffff, var(--bg) 70%); }
+body.light .logo { text-shadow: 0 3px 0 #f3c77a; }
+body.light .overlay { background: rgba(200, 208, 220, 0.7); }
+body.light .toast { background: #1b1f27e0; color: #fff; }
+body.light .switch::after { box-shadow: 0 1px 2px #0003; }
+body.light .preview-wrap { background-blend-mode: normal; }
+body.light .gun-btn, body.light #abilityBtn:not(.passive) { color: #fff; }
