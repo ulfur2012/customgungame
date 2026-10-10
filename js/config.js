@@ -175,7 +175,22 @@ const ENEMIES = {
   boss:    { size: 110, r: 46, color: '#9b59b6', hp: 1200, speed: 55, melee: 30, score: 200,
              gun: { damage: 12, delay: 1.6, loudness: 12, speed: 600 } },
 };
-const BOSS_EVERY = 5; // a boss shows up every 5th wave
+const BOSS_EVERY = 10; // a boss shows up every 10th wave
+
+// Bosses in order: wave 10, 20, 30 ... 90, then wave 100 is the CREATOR. After that they cycle again.
+//   hp = multiplier on the normal boss HP
+const BOSSES = [
+  { id: 'juggernaut', name: 'JUGGERNAUT', color: '#9b59b6', hp: 1,   desc: 'Big, slow and tough.' },
+  { id: 'tp',         name: 'TP',         color: '#00cec9', hp: 0.8, every: 3.5, desc: 'Teleports around the map.' },
+  { id: 'gamemaster', name: 'GAMEMASTER', color: '#fd79a8', hp: 1,   desc: 'Pulls you into his wall-less arena for a bullet hell.' },
+  { id: 'summoner',   name: 'SUMMONER',   color: '#6c5ce7', hp: 0.9, every: 5, desc: 'Keeps calling in minions.' },
+  { id: 'hydra',      name: 'HYDRA',      color: '#00b894', hp: 1,   desc: 'Splits into 3 when killed.' },
+  { id: 'phantom',    name: 'PHANTOM',    color: '#dfe6e9', hp: 0.8, desc: 'Nearly invisible and fast. Only shows up when it shoots.' },
+  { id: 'inferno',    name: 'INFERNO',    color: '#e17055', hp: 1,   every: 0.9, desc: 'Leaves a trail of fire.' },
+  { id: 'frost',      name: 'FROST KING', color: '#74b9ff', hp: 1,   every: 5, desc: 'Throws freeze bombs at you.' },
+  { id: 'warlord',    name: 'WARLORD',    color: '#636e72', hp: 1.1, every: 2.5, desc: 'Fires rockets.' },
+];
+const CREATOR = { id: 'creator', name: 'CREATOR', color: '#ffd700', hp: 3, every: 3.5, desc: 'Can use any ultimate.' };
 
 const PLAYER = { size: 46, r: 18, hp: 100, speed: 250 };
 const PLAYER_COLORS = ['#4aa3ff', '#ff5d5d', '#5dff8a', '#ffd35d', '#c45dff', '#5dfff0', '#ff9f5d', '#ffffff'];
@@ -372,7 +387,7 @@ const PING = { every: 180, calm: 10, show: 3 };
 // whichever needs it (both if both do). The flare gun only gets 1 shot, and only when the main gun is full.
 const AMMO = { spareMags: 3, box: { count: 2, refillMags: 1, r: 16 } };
 
-// Abilities: pick one before each round. Active ones use E on PC / the green button on mobile.
+// Abilities: pick one before each round. respawn = weak ones get a use back every 30s. Active ones use E on PC / the green button on mobile.
 // uses = how many times per round (2 for everything except the RPG, which gets one shot).
 const ABILITIES = {
   grenade: { name: 'Grenade', type: 'active', thrown: true, color: '#6ab04c', cooldown: 15, uses: 2,
@@ -384,11 +399,11 @@ const ABILITIES = {
              desc: 'Passive: +10 HP for every 10 seconds you are out of combat.' },
   rpg:     { name: 'RPG', type: 'active', color: '#e17055', uses: 1, damage: 70, direct: 100, radius: 120, speed: 750,
              desc: 'ONE rocket per round. 100 damage on a direct hit, 70 in the blast. Explodes on walls.' },
-  energy:  { name: 'Energy Drink', type: 'active', color: '#f9ca24', cooldown: 5, uses: 2, heal: 10, speed: 1.7, duration: 6,
+  energy:  { name: 'Energy Drink', type: 'active', respawn: 30, color: '#f9ca24', cooldown: 5, uses: 2, heal: 10, speed: 1.7, duration: 6,
              desc: 'Heals 10 HP and makes you 1.7x faster for 6 seconds.' },
-  burger:  { name: 'Burger', type: 'active', color: '#cd6133', cooldown: 5, uses: 2, heal: 100,
+  burger:  { name: 'Burger', type: 'active', respawn: 30, color: '#cd6133', cooldown: 5, uses: 2, heal: 100,
              desc: 'Eat it to heal 100 HP.' },
-  dash:    { name: 'Dash', type: 'active', color: '#00d2d3', cooldown: 4, uses: 4, power: 1800,
+  dash:    { name: 'Dash', type: 'active', respawn: 30, color: '#00d2d3', cooldown: 4, uses: 4, power: 1800,
              desc: '4 quick dashes per round in the way you are walking (or aiming if standing still).' },
   rapid:   { name: 'Rapid Fire', type: 'active', color: '#ff4d6d', cooldown: 20, uses: 2, duration: 5, fireMul: 0.5,
              desc: 'Your guns shoot twice as fast for 5 seconds.' },
@@ -427,25 +442,25 @@ const ABILITIES = {
   freeze:    { name: 'Freeze Bomb', type: 'active', thrown: true, gadget: true, color: '#7ed6ff', cooldown: 18, uses: 2,
                radius: 170, time: 2.5,
                desc: 'Throw an ice bomb. Everyone it hits is frozen solid for 2.5s, you too!' },
-  decoy:     { name: 'Decoy', type: 'active', thrown: true, gadget: true, color: '#dfe6e9', cooldown: 20, uses: 2,
+  decoy:     { name: 'Decoy', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#dfe6e9', cooldown: 20, uses: 2,
                radius: 20, duration: 15, hp: 100, speed: 220,
                desc: 'Throw a buddy on your team. It carries a copy of your main gun and goes out hunting enemies (100 HP, 15s).' },
-  barrier:   { name: 'Barrier', type: 'active', thrown: true, gadget: true, color: '#54a0ff', cooldown: 15, uses: 3,
+  barrier:   { name: 'Barrier', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#54a0ff', cooldown: 15, uses: 3,
                radius: 180, duration: 7, len: 360, thick: 36,
                desc: 'Throw a wall that pops up where it lands. Blocks bullets and movement for 7s.' },
   mine:      { name: 'Land Mine', type: 'active', thrown: true, gadget: true, color: '#c0392b', cooldown: 6, uses: 3,
                radius: 130, trigger: 60, damage: 80, life: 45, arm: 0.8,
                desc: 'Throw a hidden mine (enemies can\'t see it). Explodes for 80 damage when an enemy walks over it.' },
-  jumppad:   { name: 'Jump Pad', type: 'active', thrown: true, gadget: true, color: '#1dd1a1', cooldown: 12, uses: 2,
+  jumppad:   { name: 'Jump Pad', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#1dd1a1', cooldown: 12, uses: 2,
                radius: 40, duration: 15, speed: 1400, air: 0.45,
                desc: 'Throw a launch pad. Step on it to get flung over walls in the direction you threw it (you and teammates).' },
-  radar:     { name: 'Radar', type: 'active', thrown: true, gadget: true, color: '#ff9ff3', cooldown: 25, uses: 2,
+  radar:     { name: 'Radar', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#ff9ff3', cooldown: 25, uses: 2,
                radius: 1100, duration: 10, hp: 30, building: true,
                desc: 'Throw a radar tower (30 HP, 10s). You and your teammates get an arrow to the nearest enemy, and see enemies near it through walls.' },
   tesla:     { name: 'Tesla Coil', type: 'active', thrown: true, gadget: true, color: '#48dbfb', cooldown: 25, uses: 2,
                radius: 230, duration: 10, every: 0.6, damage: 10, hp: 100, building: true,
                desc: 'Throw a tesla tower (100 HP, 10s) that zaps every enemy close to it with lightning (10 damage).' },
-  smoke:     { name: 'Smoke Bomb', type: 'active', thrown: true, gadget: true, color: '#a4b0be', cooldown: 18, uses: 2,
+  smoke:     { name: 'Smoke Bomb', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#a4b0be', cooldown: 18, uses: 2,
                radius: 300, duration: 7,
                desc: 'Throw a big thick smoke cloud nobody can see through for 7s. Enemies can\'t shoot you through it.' },
 

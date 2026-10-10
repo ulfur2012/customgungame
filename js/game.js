@@ -511,6 +511,10 @@ const Game = (() => {
     if (!A) return;
     me.invT = Math.max(0, me.invT - dt);
     me.abCd = Math.max(0, me.abCd - dt);
+    if (A.respawn && me.abUses < A.uses) { // weak abilities come back by themselves
+      me.refillT = (me.refillT ?? A.respawn) - dt;
+      if (me.refillT <= 0) { me.abUses++; me.refillT = A.respawn; G.texts.push({ x: me.x, y: me.y - 34, text: `+1 ${A.name}`, color: '#2bd96b', life: 1 }); }
+    } else me.refillT = A.respawn;
     me.speedT = Math.max(0, me.speedT - dt);
     me.rapidT = Math.max(0, me.rapidT - dt);
     me.slowT = Math.max(0, me.slowT - dt);
@@ -1578,8 +1582,9 @@ const Game = (() => {
       G.phase = 'fight';
       G.spawnT = 0;
       if (G.wave % BOSS_EVERY === 0) {
-        G.queue = ['boss', ...Array(G.wave).fill('grunt')];
-        G.banner = { text: `Wave ${G.wave} — BOSS!`, t: 2.5 };
+        const B = bossFor(G.wave);
+        G.queue = ['boss', ...(B.id === 'gamemaster' ? [] : Array(G.wave).fill('grunt'))];
+        G.banner = { text: `Wave ${G.wave} — ${B.name}!`, t: 3 };
       } else {
         G.queue = Array.from({ length: 3 + G.wave * 2 }, () => {
           const r = Math.random();
@@ -1598,6 +1603,12 @@ const Game = (() => {
       G.breakT = 3;
       G.banner = { text: 'Wave cleared!', t: 2.5 };
     }
+  }
+
+  // which boss shows up on this wave
+  function bossFor(wave) {
+    const n = wave / BOSS_EVERY;
+    return n % 10 === 0 ? CREATOR : BOSSES[(n - 1) % 10 % BOSSES.length];
   }
 
   function spawnEnemy(type) {
@@ -1624,7 +1635,100 @@ const Game = (() => {
       cd: 1 + Math.random(), side: Math.random() < 0.5 ? -1 : 1, pattern: 0,
     };
     G.enemies.push(e);
-    if (type === 'boss') G.boss = e;
+    if (type === 'boss') {
+      const B = bossFor(G.wave);
+      Object.assign(e, { boss: B.id, name: B.name, color: B.color, bt: B.every || 3, hp: e.hp * B.hp, maxHp: e.maxHp * B.hp, seen: 0 });
+      if (B.id === 'phantom') e.speed *= 1.7;
+      G.boss = e;
+      if (B.id === 'gamemaster') enterArena(e);
+    }
+  }
+
+  // minion spawned right next to (x, y)
+  function spawnNear(type, x, y) {
+    const def = ENEMIES[type], scale = 1 + (G.wave - 1) * 0.12;
+    const c = { x: x + (Math.random() - 0.5) * 160, y: y + (Math.random() - 0.5) * 160, r: def.r };
+    collideWorld(c);
+    G.enemies.push({ type, def, x: c.x, y: c.y, r: def.r, hp: def.hp * scale, maxHp: def.hp * scale, speed: def.speed, kx: 0, ky: 0, flash: 0, aim: 0, cd: 1, side: 1, pattern: 0 });
+    burst(c.x, c.y, '#6c5ce7', 12, 200);
+  }
+
+  // GAMEMASTER: you and him get pulled into an empty arena (no walls) until he dies
+  function enterArena(e) {
+    const me = G.me;
+    G.arena = { walls: MAP.walls, solid: MAP.solid, x: me.x, y: me.y };
+    MAP.walls = [];
+    MAP.solid = new Uint8Array(MAP.solid.length);
+    flowT = 0;
+    G.enemies = [e];
+    G.queue = [];
+    burst(me.x, me.y, '#fd79a8', 40, 400);
+    me.x = MAP.w / 2; me.y = MAP.h / 2 + 300;
+    e.x = MAP.w / 2; e.y = MAP.h / 2 - 300;
+    G.cam.x = me.x; G.cam.y = me.y;
+    G.banner = { text: 'GAMEMASTER: Welcome to my game!', t: 3 };
+  }
+  function leaveArena() {
+    if (!G.arena) return;
+    MAP.walls = G.arena.walls; MAP.solid = G.arena.solid;
+    G.me.x = G.arena.x; G.me.y = G.arena.y;
+    G.cam.x = G.me.x; G.cam.y = G.me.y;
+    collideWorld(G.me);
+    flowT = 0;
+    G.arena = null;
+  }
+
+  // the special move of each boss
+  function bossMove(e, dt) {
+    const me = G.me;
+    e.bt -= dt;
+    e.seen = Math.max(0, e.seen - dt);
+    if (e.boss === 'gamemaster') { // bullet hell: a spinning spiral plus a ring every so often
+      e.spin = (e.spin || 0) + dt;
+      e.hellCd = (e.hellCd || 0) - dt;
+      if (e.hellCd <= 0) {
+        e.hellCd = 0.12;
+        for (let i = 0; i < 3; i++) addBullet(e.x, e.y, e.spin * 1.7 + i * Math.PI * 2 / 3, 420, 7, 1, 'e', null, 2000);
+      }
+      if (e.bt <= 0) { e.bt = 2.2; for (let i = 0; i < 24; i++) addBullet(e.x, e.y, i * Math.PI / 12 + e.spin, 300, 9, 1, 'e', null, 2000); }
+      return;
+    }
+    if (e.bt > 0) return;
+    const B = e.boss === 'creator' ? CREATOR : BOSSES.find(b => b.id === e.boss);
+    e.bt = B.every || 3;
+    const toMe = Math.atan2(me.y - e.y, me.x - e.x);
+    if (e.boss === 'tp') {
+      for (let i = 0; i < 60; i++) {
+        const an = Math.random() * Math.PI * 2, d = 350 + Math.random() * 350;
+        const c = { x: clamp(me.x + Math.cos(an) * d, e.r, MAP.w - e.r), y: clamp(me.y + Math.sin(an) * d, e.r, MAP.h - e.r), r: e.r };
+        collideWorld(c);
+        if (!MAP.walls.some(w => c.x + c.r > w[0] && c.x - c.r < w[0] + w[2] && c.y + c.r > w[1] && c.y - c.r < w[1] + w[3])) {
+          burst(e.x, e.y, B.color, 30, 380);
+          e.x = c.x; e.y = c.y;
+          burst(e.x, e.y, B.color, 30, 380);
+          e.cd = 0.3;
+          break;
+        }
+      }
+    }
+    if (e.boss === 'summoner') for (let i = 0; i < 3; i++) spawnNear(Math.random() < 0.5 ? 'grunt' : 'runner', e.x, e.y);
+    if (e.boss === 'inferno') addGadget({ kind: 'firepit', x: e.x, y: e.y, a: 0, owner: 'enemy', id: 'f' + Math.random() });
+    if (e.boss === 'frost') G.nades.push({ x0: e.x, y0: e.y, x1: me.x, y1: me.y, t: 0, owner: 'enemy', kind: 'freeze' });
+    if (e.boss === 'warlord') { addRocket(e.x + Math.cos(toMe) * e.r, e.y + Math.sin(toMe) * e.r, toMe, 'enemy'); hear(e.x, e.y, 12 * HEAR_UNIT); }
+    if (e.boss === 'creator') {
+      const move = ['airstrike', 'meteors', 'nuke', 'laser', 'bullethell', 'timestop', 'megaslam', 'summon'][Math.floor(Math.random() * 8)];
+      const U = ULTIMATES[move];
+      G.banner = { text: `CREATOR uses ${U ? U.name.toUpperCase() : 'SUMMON'}!`, t: 1.5 };
+      const strike = (x, y, t, r, dmg) => G.strikes.push({ x: clamp(x, 0, MAP.w), y: clamp(y, 0, MAP.h), t, max: t, r, dmg, owner: 'enemy' });
+      if (move === 'airstrike') for (let i = 0; i < 8; i++) { const d = 150 + i * 120; strike(e.x + Math.cos(toMe) * d, e.y + Math.sin(toMe) * d, 0.8 + i * 0.18, 120, 40); }
+      if (move === 'meteors') for (let i = 0; i < 14; i++) { const an = Math.random() * 6.28, d = Math.random() * 350; strike(me.x + Math.cos(an) * d, me.y + Math.sin(an) * d, 0.8 + Math.random() * 3, 90, 30); }
+      if (move === 'nuke') strike(me.x, me.y, 3, 380, 90);
+      if (move === 'laser') G.lasers.push({ x: e.x + Math.cos(toMe) * 120, y: e.y + Math.sin(toMe) * 120, a: toMe, t: 5, tick: 0, owner: 'enemy' });
+      if (move === 'bullethell') e.hellT = 3;
+      if (move === 'timestop') { me.frozenT = 1.5; G.rings.push({ x: e.x, y: e.y, r: 900, life: 0.8, max: 0.8, color: '116,185,255' }); }
+      if (move === 'megaslam') slam(e.x, e.y, 600, 30, 18, 'enemy');
+      if (move === 'summon') for (let i = 0; i < 4; i++) spawnNear(['grunt', 'runner', 'shooter'][i % 3], e.x, e.y);
+    }
   }
 
   // ---- pathfinding: a distance map from the player over the grid (refreshed a few times a second)
@@ -1705,6 +1809,11 @@ const Game = (() => {
       e.aim = Math.atan2(dy, dx);
       collideWorld(e);
 
+      if (e.boss && me.alive) bossMove(e, dt);
+      if (e.hellT > 0) { // creator's bullet hell
+        e.hellT -= dt; e.hellCd = (e.hellCd || 0) - dt;
+        if (e.hellCd <= 0) { e.hellCd = 0.25; for (let i = 0; i < 16; i++) addBullet(e.x, e.y, G.time * 2 + i * Math.PI / 8, 500, 8, 1, 'e', null, 1200); }
+      }
       if (e.def.gun && me.alive && sees && d < BULLET_RANGE * 0.8) {
         e.cd -= dt;
         if (e.cd <= 0) { enemyShoot(e); e.cd = e.def.gun.delay * (0.8 + Math.random() * 0.4); }
@@ -1729,6 +1838,7 @@ const Game = (() => {
 
   function enemyShoot(e) {
     const g = e.def.gun;
+    e.seen = 0.6;
     const shots = [];
     if (e.type === 'boss') {
       e.pattern = (e.pattern + 1) % 2;
@@ -1757,14 +1867,24 @@ const Game = (() => {
     G.kills++;
     onKill();
     G.score += e.def.score;
-    burst(e.x, e.y, e.def.color, e.type === 'boss' ? 60 : 14, e.type === 'boss' ? 500 : 260);
+    burst(e.x, e.y, e.color || e.def.color, e.type === 'boss' ? 60 : 14, e.type === 'boss' ? 500 : 260);
     G.enemies = G.enemies.filter(x => x !== e);
-    if (e === G.boss) {
+    if (e.boss === 'hydra' && !e.mini) { // HYDRA splits into 3 smaller heads
+      for (let i = 0; i < 3; i++) {
+        const an = i * Math.PI * 2 / 3, c = { x: e.x + Math.cos(an) * 60, y: e.y + Math.sin(an) * 60, r: 30 };
+        collideWorld(c);
+        G.enemies.push({ ...e, x: c.x, y: c.y, r: 30, hp: e.maxHp * 0.25, maxHp: e.maxHp * 0.25, mini: true, speed: e.speed * 1.4, kx: 0, ky: 0, flash: 0 });
+      }
+      G.banner = { text: 'HYDRA splits!', t: 1.5 };
+    }
+    if (e.boss && G.boss === e) G.boss = G.enemies.find(x => x.boss) || e;
+    if (e.boss && !G.enemies.some(x => x.boss)) {
+      leaveArena();
       G.boss = null;
       // beating a boss gives your ability back
       const A = ABILITIES[G.me.ability];
       if (A && A.type !== 'passive') { G.me.abUses = A.uses ?? Infinity; G.me.abCd = 0; }
-      G.banner = { text: 'Boss defeated! Ability restored', t: 2.5 };
+      G.banner = { text: `${e.name || 'Boss'} defeated! Ability restored`, t: 2.5 };
       updateWeaponBar(true);
     }
   }
@@ -1906,7 +2026,9 @@ const Game = (() => {
     }
 
     for (const e of G.enemies) {
-      drawChar(e.def, e.x, e.y, e.r, e.aim, e.def.color, e.flash > 0);
+      if (e.boss === 'phantom') ctx.globalAlpha = e.seen > 0 || e.flash > 0 ? 0.85 : 0.1;
+      drawChar(e.def, e.x, e.y, e.r, e.aim, e.color || e.def.color, e.flash > 0);
+      ctx.globalAlpha = 1;
       if (e !== G.boss) drawBar(e.x, e.y - e.r - 10, e.r * 2, 5, e.hp / e.maxHp);
     }
 
@@ -2207,10 +2329,10 @@ const Game = (() => {
       ctx.textAlign = 'center';
       ctx.font = '800 12px system-ui, sans-serif';
       ctx.fillStyle = '#e2b6ff';
-      ctx.fillText('BOSS', W / 2, y);
+      ctx.fillText(G.boss.name || 'BOSS', W / 2, y);
       ctx.fillStyle = 'rgba(0,0,0,0.6)';
       ctx.fillRect(W / 2 - bw / 2, y + 16, bw, 10);
-      ctx.fillStyle = '#b05cff';
+      ctx.fillStyle = G.boss.color || '#b05cff';
       ctx.fillRect(W / 2 - bw / 2, y + 16, bw * Math.max(0, G.boss.hp / G.boss.maxHp), 10);
     }
 
@@ -2297,6 +2419,7 @@ const Game = (() => {
     const me = G.me, A = ABILITIES[me.ability], btn = el('abilityBtn');
     if (!A) { btn.classList.add('hidden'); return; }
     const state = A.type === 'passive' ? 'Passive'
+      : me.abUses <= 0 && A.respawn ? `+1 in ${Math.ceil(me.refillT ?? A.respawn)}s`
       : me.abUses <= 0 ? 'Used'
       : me.shieldT > 0 ? `${Math.ceil(me.shieldT)}s`
       : me.rapidT > 0 ? `${Math.ceil(me.rapidT)}s`
