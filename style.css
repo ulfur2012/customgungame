@@ -492,3 +492,7 @@ body.mobile:has(#ability2Btn:not(.hidden)) #ultBtn { bottom: calc(205px + var(--
 /* section titles in the Ability tab (Buildings, Placeables, ...) */
 .ab-section { grid-column: 1 / -1; margin-top: 10px; padding-bottom: 4px; border-bottom: 1px solid var(--line); font-weight: 900; font-size: 15px; color: var(--text); }
 .ab-section small { font-weight: 600; font-size: 11px; color: var(--muted); margin-left: 6px; }
+
+/* combo loadout cards at the bottom of the Ability tab */
+.combo-icons { display: flex; align-items: center; gap: 6px; font-weight: 900; color: var(--muted); }
+.combo-icons span { flex: 1; height: 40px; border-radius: 8px; display: grid; place-items: center; color: #fff; font-size: 20px; font-weight: 900; }

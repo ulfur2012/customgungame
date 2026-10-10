@@ -261,6 +261,30 @@
       wrap.appendChild(sec);
       for (const id of ids) addAbilityCard(id);
     }
+    // combo loadouts at the bottom: tap one to equip both of its abilities
+    const csec = document.createElement('div');
+    csec.className = 'ab-section';
+    csec.innerHTML = '🔗 Combos <small>tap to equip both abilities</small>';
+    wrap.appendChild(csec);
+    for (const c of COMBOS) {
+      const A1 = ABILITIES[c.a], A2 = ABILITIES[c.b];
+      const on = (L.ability === c.a && L.ability2 === c.b) || (L.ability === c.b && L.ability2 === c.a);
+      const card = document.createElement('button');
+      card.className = 'card combo-pick' + (on ? ' equipped' : '');
+      card.innerHTML = `<div class="combo-icons"><span style="background:${A1.color}">${A1.name[0]}</span>+<span style="background:${A2.color}">${A2.name[0]}</span></div>
+        <div class="card-name">${c.name}${on ? ' ✓' : ''}</div>
+        <div class="card-desc"><b>${A1.name} + ${A2.name}</b><br>${c.how}</div>`;
+      card.onclick = () => {
+        if (!on) {
+          if (L.ability !== c.a) L.perk = null;
+          if (L.ability2 !== c.b) L.perk2 = null;
+          L.ability = c.a; L.ability2 = c.b;
+          toast(`Equipped ${A1.name} (E) + ${A2.name} (C)`);
+        }
+        Account.save(); renderLoadout();
+      };
+      wrap.appendChild(card);
+    }
     function addAbilityCard(id) {
       const A = ABILITIES[id];
       const card = document.createElement('button');
