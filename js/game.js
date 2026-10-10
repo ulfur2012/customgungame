@@ -734,8 +734,38 @@ const Game = (() => {
   function landGadget(n) {
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
     const main = G.me.guns[0];
-    addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite, hp: n.hp, dur: n.dur });
-    if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build, hp: n.hp, dur: n.dur });
+    addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite, hp: n.hp, dur: n.dur, big: n.big });
+    if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build, hp: n.hp, dur: n.dur, g: n.big ? 1 : 0 });
+    if (ABILITIES[n.kind].building && !n.big) mergeBuildings(n.kind, n.x1, n.y1);
+  }
+
+  // 3 of your same building close together -> one BIG building in the middle
+  function mergeBuildings(kind, x, y) {
+    const near = G.gadgets.filter(g => g.kind === kind && !g.big && !g.dead && isMine(g.owner) && Math.hypot(g.x - x, g.y - y) <= MERGE.near);
+    if (near.length < 3) return;
+    const three = near.slice(-3), cx = three.reduce((s, g) => s + g.x, 0) / 3, cy = three.reduce((s, g) => s + g.y, 0) / 3;
+    for (const g of three) {
+      removeGadget(g);
+      if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id });
+    }
+    burst(cx, cy, ABILITIES[kind].color, 50, 420);
+    G.rings.push({ x: cx, y: cy, r: 160, life: 0.6, max: 0.6, color: '255,215,0' });
+    G.banner = { text: `BIG ${ABILITIES[kind].name.toUpperCase()}!`, t: 1.5 };
+    landGadget({ kind, x1: cx, y1: cy, a: 0, owner: myOwnerId(), big: true });
+  }
+
+  // 3 of your turrets in the same floor square -> ROCKET TURRET
+  function mergeTurrets(x, y) {
+    const near = G.turrets.filter(t => !t.rocket && t.hp > 0 && Math.hypot(t.x - x, t.y - y) <= MERGE.turretNear);
+    if (near.length < 3) return;
+    const three = near.slice(-3), R = MERGE.rocketTurret;
+    for (const t of three) t.t = 0;
+    const cx = three.reduce((s, t) => s + t.x, 0) / 3, cy = three.reduce((s, t) => s + t.y, 0) / 3;
+    G.turrets = G.turrets.filter(t => t.t > 0);
+    G.turrets.push({ x: cx, y: cy, t: Infinity, hp: R.hp, maxHp: R.hp, cd: 1, aim: 0, rocket: true, stats: three[0].stats, sprite: three[0].sprite });
+    burst(cx, cy, '#e17055', 50, 420);
+    G.rings.push({ x: cx, y: cy, r: 160, life: 0.6, max: 0.6, color: '225,112,85' });
+    G.banner = { text: 'ROCKET TURRET!', t: 1.5 };
   }
   function addGadget(g) {
     const A = ABILITIES[g.kind];
@@ -755,6 +785,8 @@ const Game = (() => {
       });
     }
     if (A.hp) g.hp = g.maxHp = g.hp || A.hp; // clones bring their own HP
+    g.sc = g.big ? MERGE.size : 1; // big (merged) buildings
+    if (g.big) { g.hp = g.maxHp = A.hp * MERGE.hp; g.t = (A.duration || g.t) * MERGE.range; }
     if (g.kind === 'decoy') Object.assign(g, { r: PLAYER.r, cd: 0.5, kick: 0, aim: g.a });
     if (g.kind === 'barrier') {
       const L = A.len, T = A.thick, vert = Math.abs(Math.cos(g.a)) > Math.abs(Math.sin(g.a));
@@ -801,11 +833,11 @@ const Game = (() => {
         g.tick = A.every;
         if (isMine(g.owner)) {
           for (const e of (G.mode === 'sp' ? [...G.enemies] : targets())) {
-            if (Math.hypot(e.x - g.x, e.y - g.y) > A.radius || !lineOfSight(g.x, g.y, e.x, e.y)) continue;
+            if (Math.hypot(e.x - g.x, e.y - g.y) > A.radius * (g.big ? MERGE.range : 1) || !lineOfSight(g.x, g.y, e.x, e.y)) continue;
             g.zaps.push({ x: e.x, y: e.y, life: 0.15 });
             if (G.mode === 'sp') hurtEnemy(e, A.damage, 0.5, Math.atan2(e.y - g.y, e.x - g.x));
           }
-        } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius && lineOfSight(g.x, g.y, me.x, me.y)) {
+        } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius * (g.big ? MERGE.range : 1) && lineOfSight(g.x, g.y, me.x, me.y)) {
           g.zaps.push({ x: me.x, y: me.y, life: 0.15 });
           hurtMe(A.damage, 0.5, Math.atan2(me.y - g.y, me.x - g.x), g.owner);
         }
@@ -911,7 +943,7 @@ const Game = (() => {
     // your turrets (only on your screen)
     const hostileToMe = G.mode === 'sp' ? b.team === 'e' : b.team === 'r' && hostileTo(b.owner);
     if (hostileToMe) for (const t of G.turrets) {
-      if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, 18)) continue;
+      if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, t.rocket ? 26 : 18)) continue;
       t.hp -= bulletDamage(b); t.flash = 0.1;
       if (t.hp <= 0) { t.t = 0; burst(t.x, t.y, '#cd84f1', 24, 300); }
       return true;
@@ -926,7 +958,7 @@ const Game = (() => {
       if (g.hp === undefined || g.dead) continue;
       const hostile = G.mode === 'sp' ? b.team === 'e'
         : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
-      if (!hostile || !segHitsCircle(x1, y1, b.x, b.y, g.x, g.y, g.kind === 'decoy' ? PLAYER.r : 22)) continue;
+      if (!hostile || !segHitsCircle(x1, y1, b.x, b.y, g.x, g.y, g.kind === 'decoy' ? PLAYER.r : 22 * (g.sc || 1))) continue;
       damageGadget(g, bulletDamage(b));
       return true;
     }
@@ -996,21 +1028,26 @@ const Game = (() => {
       } else if (g.kind === 'radar') {
         ctx.strokeStyle = `rgba(255,159,243,${0.6 * (1 - (G.time % 1.5) / 1.5)})`; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(g.x, g.y, 30 + ((G.time % 1.5) / 1.5) * 200, 0, Math.PI * 2); ctx.stroke();
-        // tower: base, mast and a spinning dish
+        // tower: base, mast and a spinning dish (big = merged)
+        ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc); ctx.translate(-g.x, -g.y);
+        if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(g.x - 22, g.y - 22, 44, 44); }
         ctx.fillStyle = g.flash > 0 ? '#fff' : '#57606f'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
         ctx.strokeStyle = '#2f3542'; ctx.lineWidth = 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
         ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(G.time * 3);
         ctx.fillStyle = '#ff9ff3'; ctx.fillRect(-4, -4, 26, 8); ctx.beginPath(); ctx.arc(22, 0, 9, 0, Math.PI * 2); ctx.fill();
         ctx.restore();
-        drawBar(g.x, g.y - 32, 44, 6, g.hp / A.hp, false, '#ff9ff3');
+        drawBar(g.x, g.y - 32, 44, 6, g.hp / g.maxHp, false, '#ff9ff3');
       } else if (g.kind === 'tesla') {
         ctx.strokeStyle = 'rgba(72,219,251,0.25)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(g.x, g.y, A.radius, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * (g.big ? MERGE.range : 1), 0, Math.PI * 2); ctx.stroke();
+        ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc); ctx.translate(-g.x, -g.y);
+        if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(g.x - 22, g.y - 22, 44, 44); }
         ctx.fillStyle = g.flash > 0 ? '#fff' : '#2d3436'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
         ctx.strokeStyle = '#48dbfb'; ctx.lineWidth = 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
         ctx.fillStyle = '#636e72'; ctx.fillRect(g.x - 5, g.y - 14, 10, 18);
         ctx.fillStyle = '#48dbfb'; ctx.beginPath(); ctx.arc(g.x, g.y - 12, 8 + Math.sin(G.time * 20) * 2, 0, Math.PI * 2); ctx.fill();
-        drawBar(g.x, g.y - 32, 44, 6, g.hp / A.hp, false, '#48dbfb');
+        drawBar(g.x, g.y - 32, 44, 6, g.hp / g.maxHp, false, '#48dbfb');
+        ctx.restore();
         ctx.strokeStyle = '#c7f4ff'; ctx.lineWidth = 3;
         for (const z of g.zaps) { // jagged lightning
           ctx.beginPath(); ctx.moveTo(g.x, g.y - 4);
@@ -1082,7 +1119,7 @@ const Game = (() => {
           ctx.fillText(`${Math.round(bd / MAP.grid)}m`, ax, ay + 26);
         }
         for (const t of targets()) {
-          if (Math.hypot(t.x - g.x, t.y - g.y) > ABILITIES.radar.radius) continue;
+          if (Math.hypot(t.x - g.x, t.y - g.y) > ABILITIES.radar.radius * (g.big ? MERGE.range : 1)) continue;
           ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(t.x, t.y, (t.r || PLAYER.r) + 6 + Math.sin(G.time * 8) * 3, 0, Math.PI * 2); ctx.stroke();
           ctx.fillStyle = 'rgba(255,77,77,0.35)'; ctx.fill();
@@ -1310,6 +1347,20 @@ const Game = (() => {
     G.zones = G.zones.filter(z => z.t > 0);
     for (const t of G.turrets) {
       t.t -= dt; t.cd -= dt;
+      if (t.rocket) { // ROCKET TURRET: an RPG every 5 seconds
+        const R = MERGE.rocketTurret;
+        let best = null, bd = R.range;
+        for (const e of targets()) { const d = Math.hypot(e.x - t.x, e.y - t.y); if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; } }
+        if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
+        if (best && t.cd <= 0) {
+          t.cd = R.every;
+          const sx = t.x + Math.cos(t.aim) * 34, sy = t.y + Math.sin(t.aim) * 34;
+          addRocket(sx, sy, t.aim, myOwnerId());
+          if (G.mode === 'mp') Net.send({ t: 'rpg', x: Math.round(sx), y: Math.round(sy), a: +t.aim.toFixed(4) });
+          muzzleFlash(sx, sy, t.aim);
+        }
+        continue;
+      }
       let best = null, bd = t.stats.range; // sees as far as your sidearm shoots
       for (const e of targets()) {
         const d = Math.hypot(e.x - t.x, e.y - t.y);
@@ -1350,6 +1401,17 @@ const Game = (() => {
       }
     }
     for (const t of G.turrets) {
+      if (t.rocket) {
+        ctx.fillStyle = '#3d3d4a'; ctx.strokeStyle = '#e17055'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(t.x, t.y, 26, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
+        ctx.fillStyle = '#5d6d4e'; ctx.fillRect(-6, -13, 40, 11); ctx.fillRect(-6, 2, 40, 11);
+        ctx.fillStyle = '#e17055'; ctx.fillRect(30, -12, 6, 9); ctx.fillRect(30, 3, 6, 9);
+        ctx.restore();
+        if (t.flash > 0) { t.flash -= 1 / 60; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(t.x, t.y, 26, 0, Math.PI * 2); ctx.fill(); }
+        drawBar(t.x, t.y - 38, 56, 6, t.hp / t.maxHp, false, '#e17055');
+        continue;
+      }
       ctx.fillStyle = '#4b4b5a'; ctx.strokeStyle = '#cd84f1'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
@@ -1442,6 +1504,7 @@ const Game = (() => {
       else if (n.kind === 'turret') {
         // the turret gets a copy of your sidearm
         const side = me.guns[1];
+        setTimeout(() => G && mergeTurrets(n.x1, n.y1), 0);
         G.turrets.push({ x: n.x1, y: n.y1, t: ABILITIES.turret.duration, hp: ABILITIES.turret.hp, maxHp: ABILITIES.turret.hp, cd: 0.5, aim: 0, stats: side.stats, sprite: side.sprite });
       } else if (n.kind === 'cluster') {
         const C = ABILITIES.cluster, list = [];
@@ -2065,7 +2128,7 @@ const Game = (() => {
   Net.on('gad', m => {
     if (!inMP()) return;
     const sprite = m.k === 'decoy' && m.b ? renderGunSprite('main', m.b) : null;
-    addGadget({ kind: m.k, x: m.x, y: m.y, a: m.a, owner: m.from, id: m.id, color: m.c, name: m.n, sprite, hp: m.hp, dur: m.dur });
+    addGadget({ kind: m.k, x: m.x, y: m.y, a: m.a, owner: m.from, id: m.id, color: m.c, name: m.n, sprite, hp: m.hp, dur: m.dur, big: !!m.g });
   });
   Net.on('gadx', m => {
     if (!inMP()) return;

@@ -512,6 +512,12 @@ const ABILITY_CRATE = { chance: 0.6 };
 // chance = per health pack spawn (every 30s), so about one every 6 minutes.
 const EPIC_CRATE = { chance: 0.08 };
 
+// Merging: 3 of the same building of yours close together become one BIG one.
+//   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.
+// 3 turrets in the same floor square (turretNear) become a ROCKET TURRET.
+const MERGE = { near: 160, size: 1.5, range: 1.5, hp: 3, turretNear: 80,
+                rocketTurret: { hp: 300, every: 5, range: 1300 } };
+
 // Ability boosts: passives that only exist for one ability (you only see them once that ability is equipped).
 // add / mul change that ability's numbers for you while it's equipped.
 const ABILITY_PERKS = {
