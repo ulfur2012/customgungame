@@ -1118,7 +1118,7 @@ const Game = (() => {
       }
     }
     if (mx || my) g.aim = Math.atan2(my, mx);
-    g.x += mx * ABILITIES.decoy.speed * 1.1 * dt; g.y += my * ABILITIES.decoy.speed * 1.1 * dt;
+    g.x += mx * ABILITIES.decoy.speed * COMBO.supplySpeed * dt; g.y += my * ABILITIES.decoy.speed * COMBO.supplySpeed * dt; // a bit faster than every other decoy
     collideWorld(g);
   }
 
