@@ -2303,18 +2303,27 @@ const Game = (() => {
     const decoy = myDecoy();
     // your buddies, towers and turrets can be attacked too
     const allies = [...G.gadgets.filter(g => g.hp !== undefined && !g.dead && isMine(g.owner)), ...G.turrets];
+    const buddies = allies.filter(a => a.kind === 'decoy');
     for (const e of list) {
       if (e.frozen > 0) { e.flash = 0; continue; } // frozen solid
       // you come first: if they can see you, they go for you. Otherwise the closest buddy/building they can see
-      let tgt = me;
-      if (!(me.alive && lineOfSight(e.x, e.y, me.x, me.y) && !smokeBlocks(e.x, e.y, me.x, me.y))) {
+      // you and your buddies are equally important: go for the closest one it can see
+      const visible = a => lineOfSight(e.x, e.y, a.x, a.y) && !smokeBlocks(e.x, e.y, a.x, a.y);
+      let tgt = me, bestD = Infinity;
+      for (const a of [me.alive ? me : null, ...buddies]) {
+        if (!a || !visible(a)) continue;
+        const d = Math.hypot(a.x - e.x, a.y - e.y);
+        if (d < bestD) { tgt = a; bestD = d; }
+      }
+      if (bestD === Infinity) { // nobody in sight: shoot buildings it can see, otherwise hunt you down
         let bd = BULLET_RANGE * 0.8;
         for (const a of allies) {
           const d = Math.hypot(a.x - e.x, a.y - e.y);
           if (d < bd && lineOfSight(e.x, e.y, a.x, a.y) && !smokeBlocks(e.x, e.y, a.x, a.y)) { tgt = a; bd = d; }
         }
       }
-      if (decoy && (e.botCd = Math.max(0, (e.botCd || 0) - dt)) === 0 && Math.hypot(decoy.x - e.x, decoy.y - e.y) < e.r + PLAYER.r) { damageGadget(decoy, e.def.melee); e.botCd = 0.6; }
+      e.botCd = Math.max(0, (e.botCd || 0) - dt);
+      if (e.botCd === 0 && e.def.melee) for (const bd of buddies) if (!bd.dead && Math.hypot(bd.x - e.x, bd.y - e.y) < e.r + PLAYER.r) { damageGadget(bd, e.def.melee); e.botCd = 0.6; break; }
       const dx = tgt.x - e.x, dy = tgt.y - e.y, d = Math.hypot(dx, dy) || 1;
       const sees = lineOfSight(e.x, e.y, tgt.x, tgt.y) && !smokeBlocks(e.x, e.y, tgt.x, tgt.y);
       let mx = dx / d, my = dy / d;
