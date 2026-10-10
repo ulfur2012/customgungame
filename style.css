@@ -539,3 +539,7 @@ body.mobile #ability4Btn.cooling { background: rgba(43, 217, 107, 0.3); }
 body.mobile #ability4Btn .ab-key { display: none; }
 body.mobile #ability4Btn .ab-name { font-size: 11px; }
 body.mobile #ability4Btn .ab-state { color: #062b12; font-weight: 800; font-size: 12px; }
+
+.card.locked { opacity: 0.6; }
+.card .price { color: #ffd35d; font-weight: 800; }
+.bank-line { color: #ffd35d; font-weight: 800; font-size: 14px; }

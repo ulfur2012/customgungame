@@ -66,6 +66,19 @@ function allowedBuild(kind, build) {
   return out;
 }
 
+// what an unlock costs in banked score; 0 = free or already owned. key = 'ab:id' | 'perk:id' | 'part:kind:slot:id'
+function priceOf(key) {
+  if (!Account.user || Account.user.owned.includes(key)) return 0;
+  const [type, a, b, c] = key.split(':');
+  if (type === 'ab') {
+    const A = ABILITIES[a];
+    return SHOP.freeAbilities.includes(a) ? 0 : A.gadget ? SHOP.ability.gadget : A.type === 'passive' ? SHOP.ability.passive : SHOP.ability.active;
+  }
+  if (type === 'perk') return SHOP.perk;
+  const i = PARTS[b].filter(p => (p.gun || 'main') === a || p.gun === 'both').findIndex(p => p.id === c);
+  return i < SHOP.freeParts ? 0 : Math.min(SHOP.partMax, (i - SHOP.freeParts + 1) * SHOP.part);
+}
+
 function findPart(slot, id) {
   return id ? PARTS[slot].find(p => p.id === id) || null : null;
 }
@@ -366,6 +379,16 @@ const Account = {
     for (const p of u.presets) if (p.ability2 && (!ABILITIES[p.ability2] || p.ability2 === p.ability)) p.ability2 = null;
     for (const p of u.presets) if (p.ability3 && (!ABILITIES[p.ability3] || p.ability3 === p.ability || p.ability3 === p.ability2)) p.ability3 = null;
     for (const p of u.presets) if (p.ability4 && (!ABILITIES[p.ability4] || [p.ability, p.ability2, p.ability3].includes(p.ability4))) p.ability4 = null;
+    // shop: banked score + what you've unlocked. Things already equipped before the shop existed stay yours.
+    if (!Array.isArray(u.owned)) {
+      u.owned = [];
+      if (u.bank === undefined) u.bank = SHOP.start;
+      for (const L of u.presets) {
+        for (const k of ['ability', 'ability2', 'ability3', 'ability4']) if (L[k]) u.owned.push('ab:' + L[k]);
+        for (const k of ['perk', 'perk2', 'perk3', 'perk4']) if (L[k]) u.owned.push('perk:' + L[k]);
+        for (const kind of ['main', 'secondary']) for (const sl in L[kind] || {}) if (L[kind][sl]) u.owned.push(`part:${kind}:${sl}:${L[kind][sl]}`);
+      }
+    }
     for (const L of this.user.presets) for (const kind of ['main', 'secondary']) {
       const b = { ...emptyBuild(), ...L[kind] };
       for (const s of SLOTS) if (b[s.key] && !partsFor(kind, s.key).some(p => p.id === b[s.key])) b[s.key] = null;

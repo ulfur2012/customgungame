@@ -59,7 +59,7 @@
   function goMenu() {
     Rules.banned = new Set(); // host rules only apply inside a multiplayer room
     el('menuName').textContent = Account.user.name;
-    el('menuBest').textContent = Account.user.best ? `· best wave ${Account.user.best}` : '';
+    el('menuBest').textContent = (Account.user.best ? `· best wave ${Account.user.best} ` : '') + `· ⭐ ${Account.user.bank} score to spend`;
     show('menu');
   }
 
@@ -120,7 +120,19 @@
   el('loadoutDone').onclick = () => onDone && onDone();
   el('loadoutBack').onclick = () => onBack && onBack();
 
+  // ---- shop: locked cards show a price, tapping one buys it with banked score
+  const priceTag = cost => cost ? ` <small class="price">⭐ ${cost}</small>` : '';
+  function buy(key, name) {
+    const u = Account.user, cost = priceOf(key);
+    if ((u.bank || 0) < cost) { toast(`${name} costs ${cost} score — you have ${u.bank || 0}`); return false; }
+    if (!confirm(`Unlock ${name} for ${cost} score? (you have ${u.bank})`)) return false;
+    u.bank -= cost; u.owned.push(key); Account.save();
+    toast(`Unlocked ${name}! ${u.bank} score left`);
+    return true;
+  }
+
   function renderLoadout() {
+    el('bankLine').textContent = `⭐ ${Account.user.bank || 0} score to spend`;
     el('presetTabs').innerHTML = '<span>Loadout</span>';
     for (let i = 0; i < LOADOUT_PRESETS; i++) {
       const b = document.createElement('button');
@@ -157,17 +169,19 @@
     wrap.innerHTML = '';
     for (const part of [null, ...partsFor(gunKind, slot)]) {
       const equipped = (build[slot] || null) === (part ? part.id : null);
+      const key = part && 'part:' + gunKind + ':' + slot + ':' + part.id, cost = part ? priceOf(key) : 0;
       const card = document.createElement('button');
-      card.className = 'card' + (equipped ? ' equipped' : '');
+      card.className = 'card' + (equipped ? ' equipped' : '') + (cost ? ' locked' : '');
       const thumb = document.createElement('canvas');
       thumb.className = 'thumb';
       card.appendChild(thumb);
       const mods = part ? describeMods(part).map(m => `<span class="${m.good ? 'good' : 'bad'}">${m.text}</span>`).join('') : '';
       const info = document.createElement('div');
-      info.innerHTML = `<div class="card-name">${part ? part.name : 'None'}</div><div class="card-mods">${mods || '<span>no changes</span>'}</div>`;
+      info.innerHTML = `<div class="card-name">${part ? part.name : 'None'}${priceTag(cost)}</div><div class="card-mods">${mods || '<span>no changes</span>'}</div>`;
       card.appendChild(info);
       card.dataset.part = part ? part.id : 'none';
       card.onclick = () => {
+        if (cost && !buy(key, part.name)) return;
         build[slot] = part ? part.id : null;
         Account.save();
         keepInPlace(`[data-part="${part ? part.id : 'none'}"]`, renderLoadout);
@@ -217,10 +231,11 @@
       wrap.appendChild(head);
       for (const p of [null, ...perks]) {
         const card = document.createElement('button');
-        card.className = 'card perk' + ((L[perkKey] || null) === (p ? p.id : null) ? ' equipped' : '');
-        card.innerHTML = `<div class="card-name">${p ? p.name : 'No boost'}</div><div class="card-desc">${p ? p.desc : 'Plain ability'}</div>`;
+        const pk = p && 'perk:' + p.id, cost = p ? priceOf(pk) : 0;
+        card.className = 'card perk' + ((L[perkKey] || null) === (p ? p.id : null) ? ' equipped' : '') + (cost ? ' locked' : '');
+        card.innerHTML = `<div class="card-name">${p ? p.name : 'No boost'}${priceTag(cost)}</div><div class="card-desc">${p ? p.desc : 'Plain ability'}</div>`;
         card.dataset.perk = p ? p.id : 'none';
-        card.onclick = () => { L[perkKey] = p ? p.id : null; Account.save(); keepInPlace(`[data-perk="${p ? p.id : 'none'}"]`, renderLoadout); };
+        card.onclick = () => { if (cost && !buy(pk, p.name)) return; L[perkKey] = p ? p.id : null; Account.save(); keepInPlace(`[data-perk="${p ? p.id : 'none'}"]`, renderLoadout); };
         wrap.appendChild(card);
       }
     }
@@ -290,6 +305,8 @@
         <div class="card-name">${c.name}${c.passive ? ' <small class="hint">auto</small>' : ''}${on ? ' ✓' : ''}</div>
         <div class="card-desc"><b>${A1.name} + ${A2.name}</b><br>${c.how}</div>`;
       card.onclick = () => {
+        const need = [c.a, c.b].filter(id => priceOf('ab:' + id));
+        if (need.length) return toast(`Unlock ${need.map(id => ABILITIES[id].name).join(' and ')} first`);
         if (!on) {
           if (L.ability !== c.a) L.perk = null;
           if (L.ability2 !== c.b) L.perk2 = null;
@@ -304,12 +321,13 @@
     function addAbilityCard(id) {
       const A = ABILITIES[id];
       const card = document.createElement('button');
-      card.className = 'card' + (id === current ? ' equipped' : '');
+      const cost = priceOf('ab:' + id);
+      card.className = 'card' + (id === current ? ' equipped' : '') + (cost ? ' locked' : '');
       card.innerHTML = `<div class="ab-icon">${abilityIconSVG(id, 36)}</div>
-        <div class="card-name">${A.name}${KEYS.some((k, i) => i !== abSlot && L[k] === id) ? ' <small class="hint">other slot</small>' : ''}</div>
+        <div class="card-name">${A.name}${priceTag(cost)}${KEYS.some((k, i) => i !== abSlot && L[k] === id) ? ' <small class="hint">other slot</small>' : ''}</div>
         <div class="card-desc">${A.desc}</div>`;
       card.dataset.ab = id;
-      card.onclick = () => pick(id);
+      card.onclick = () => { if (cost && !buy('ab:' + id, A.name)) return; pick(id); };
       wrap.appendChild(card);
     }
     if (!current) {
@@ -433,9 +451,9 @@
     el('parts').prepend(note);
   });
   Game.on('spOver', r => {
-    if (!r.test) { Account.user.best = Math.max(Account.user.best || 0, r.wave); Account.save(); }
+    if (!r.test) { Account.user.best = Math.max(Account.user.best || 0, r.wave); Account.user.bank = (Account.user.bank || 0) + r.score; Account.save(); }
     Game.stop();
-    showResult('You died', `Wave ${r.wave} · ${r.kills} kills · score ${r.score}${r.test ? ' (test mode — not counted)' : ''}`, [
+    showResult('You died', `Wave ${r.wave} · ${r.kills} kills · score ${r.score}${r.test ? ' (test mode — not counted)' : ` · +${r.score} to spend (you have ${Account.user.bank})`}`, [
       { label: 'Play again', fn: spLoadout },
       { label: 'Main menu', fn: goMenu },
     ]);

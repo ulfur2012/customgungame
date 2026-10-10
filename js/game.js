@@ -428,6 +428,7 @@ const Game = (() => {
     const me = G.me;
     if (!me.alive || me.invT > 0 || me.godT > 0) return;
     if (hasAb('armor')) dmg *= ABILITIES.armor.takeMul;
+    if (easy()) dmg *= EASY.damage;
     const soaked = Math.min(me.shield, dmg);
     me.shield -= soaked;
     me.hp = Math.max(0, me.hp - (dmg - soaked));
@@ -2343,6 +2344,7 @@ const Game = (() => {
   }
 
   // ---------------------------------------------------------------- single player
+  const easy = () => G.mode === 'sp' && G.wave <= EASY.waves;
   function updateWaves(dt) {
     if (!G.me.alive) return;
     if (G.phase === 'break') {
@@ -2364,7 +2366,7 @@ const Game = (() => {
       } else {
         // old mix, plus the newer enemies once their wave comes up
         const extra = Object.keys(ENEMIES).filter(k => ENEMIES[k].from && G.wave >= ENEMIES[k].from);
-        G.queue = Array.from({ length: 3 + G.wave * 2 }, () => {
+        G.queue = Array.from({ length: Math.round((3 + G.wave * 2) * (easy() ? EASY.count : 1)) }, () => {
           if (extra.length && Math.random() < Math.min(0.45, 0.1 + G.wave * 0.02)) {
             let r = Math.random() * extra.reduce((n, k) => n + ENEMIES[k].weight, 0);
             for (const k of extra) if ((r -= ENEMIES[k].weight) < 0) return k;
@@ -2378,7 +2380,7 @@ const Game = (() => {
       G.spawnT -= dt;
       if (G.spawnT <= 0) {
         spawnEnemy(G.queue.shift());
-        G.spawnT = Math.max(0.25, 1 - G.wave * 0.05);
+        G.spawnT = Math.max(0.25, 1 - G.wave * 0.05) * (easy() ? EASY.spawn : 1);
       }
     } else if (G.enemies.length === 0) {
       G.phase = 'break';
@@ -2410,7 +2412,7 @@ const Game = (() => {
       const C = MAP.grid, gx = Math.floor((x - C / 2) / C), gy = Math.floor((y - C / 2) / C);
       if (gx >= 0 && gy >= 0 && flowBig[gy * MAP.cols + gx] >= 0) { x = (gx + 1) * C; y = (gy + 1) * C; break; }
     }
-    const scale = type === 'boss' ? 1 + (G.wave / BOSS_EVERY - 1) * 0.6 : 1 + (G.wave - 1) * 0.12;
+    const scale = (type === 'boss' ? 1 + (G.wave / BOSS_EVERY - 1) * 0.6 : 1 + (G.wave - 1) * 0.12) * (easy() ? EASY.hp : 1);
     const e = {
       type, def, x, y, r: def.r, hp: def.hp * scale, maxHp: def.hp * scale,
       speed: def.speed * (0.9 + Math.random() * 0.2), kx: 0, ky: 0, flash: 0, aim: 0,
@@ -2428,7 +2430,7 @@ const Game = (() => {
 
   // minion spawned right next to (x, y)
   function spawnNear(type, x, y) {
-    const def = ENEMIES[type], scale = 1 + (G.wave - 1) * 0.12;
+    const def = ENEMIES[type], scale = (1 + (G.wave - 1) * 0.12) * (easy() ? EASY.hp : 1);
     const c = { x: x + (Math.random() - 0.5) * 160, y: y + (Math.random() - 0.5) * 160, r: def.r };
     collideWorld(c);
     G.enemies.push({ type, def, x: c.x, y: c.y, r: def.r, hp: def.hp * scale, maxHp: def.hp * scale, speed: def.speed, kx: 0, ky: 0, flash: 0, aim: 0, cd: 1, side: 1, pattern: 0 });
