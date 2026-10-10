@@ -455,11 +455,11 @@ const ABILITIES = {
                radius: 40, duration: 15, speed: 1400, air: 0.45,
                desc: 'Throw a launch pad. Step on it to get flung over walls in the direction you threw it (you and teammates).' },
   radar:     { name: 'Radar', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#ff9ff3', cooldown: 25, uses: 2,
-               radius: 1100, duration: 10, hp: 30, building: true,
-               desc: 'Throw a radar tower (30 HP, 10s). You and your teammates get an arrow to the nearest enemy, and see enemies near it through walls.' },
+               radius: 1100, duration: Infinity, hp: 30, building: true,
+               desc: 'Throw a radar tower (30 HP, stays until destroyed). You and your teammates get an arrow to the nearest enemy, and see enemies near it through walls.' },
   tesla:     { name: 'Tesla Coil', type: 'active', thrown: true, gadget: true, color: '#48dbfb', cooldown: 25, uses: 2,
-               radius: 230, duration: 10, every: 0.6, damage: 10, hp: 100, building: true,
-               desc: 'Throw a tesla tower (100 HP, 10s) that zaps every enemy close to it with lightning (10 damage).' },
+               radius: 230, duration: Infinity, every: 0.6, damage: 10, hp: 100, building: true,
+               desc: 'Throw a tesla tower (100 HP, stays until destroyed) that zaps every enemy close to it with lightning (10 damage).' },
   smoke:     { name: 'Smoke Bomb', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#a4b0be', cooldown: 18, uses: 2,
                radius: 300, duration: 7,
                desc: 'Throw a big thick smoke cloud nobody can see through for 7s. Enemies can\'t shoot you through it.' },
@@ -515,8 +515,10 @@ const EPIC_CRATE = { chance: 0.08 };
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.
 // 3 turrets in the same floor square (turretNear) become a ROCKET TURRET.
-const MERGE = { near: 160, size: 1.5, range: 1.5, hp: 3, turretNear: 80,
-                rocketTurret: { hp: 300, every: 5, range: 1300 } };
+const MERGE = { near: 160, size: 1.5, range: 1.5, hp: 3, turretNear: 40,
+                rocketTurret: { hp: 300, every: 5, range: 1300 },
+// BIG TESLA + ROCKET TURRET + BIG TESLA in a row (side by side squares, rocket turret in the middle) = RAILGUN
+                railgun: { hp: 300, every: 0.15, range: 2000, damage: 8, speed: 5000 } };
 
 // Ability boosts: passives that only exist for one ability (you only see them once that ability is equipped).
 // add / mul change that ability's numbers for you while it's equipped.
@@ -557,7 +559,7 @@ const ABILITY_PERKS = {
   mine:       [{ id: 'moremines', name: 'Minefield', desc: '+2 mines', add: { uses: 2 } },
                { id: 'bigmine', name: 'Claymore', desc: '+40 mine damage', add: { damage: 40 } }],
   jumppad:    [{ id: 'highjump', name: 'Super Spring', desc: 'Fly 50% further', mul: { air: 1.5 } }],
-  radar:      [{ id: 'strongradar', name: 'Reinforced Tower', desc: 'Tower has 90 HP and lasts 16s', add: { hp: 60, duration: 6 } }],
+  radar:      [{ id: 'strongradar', name: 'Reinforced Tower', desc: 'Tower has 90 HP', add: { hp: 60 } }],
   tesla:      [{ id: 'overclock', name: 'Overclock', desc: 'Zaps almost twice as fast', mul: { every: 0.55 } },
                { id: 'bigcoil', name: 'Long Reach', desc: '+40% zap range', mul: { radius: 1.4 } }],
   smoke:      [{ id: 'longsmoke', name: 'Thick Smoke', desc: 'Smoke lasts 12s', add: { duration: 5 } }],

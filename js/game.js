@@ -732,11 +732,38 @@ const Game = (() => {
   // ---- thrown gadgets: everyone simulates them; damage is worked out by whoever gets hit
   let gadgetSeq = 0;
   function landGadget(n) {
+    if (ABILITIES[n.kind].building) ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
     const main = G.me.guns[0];
     addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite, hp: n.hp, dur: n.dur, big: n.big });
     if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build, hp: n.hp, dur: n.dur, g: n.big ? 1 : 0 });
     if (ABILITIES[n.kind].building && !n.big) mergeBuildings(n.kind, n.x1, n.y1);
+  }
+
+  // buildings sit in the middle of a floor square (unless that square is a wall)
+  function snapCell(x, y) {
+    const C = MAP.grid, cx = (Math.floor(x / C) + 0.5) * C, cy = (Math.floor(y / C) + 0.5) * C;
+    return pointInWall(cx, cy) ? { x, y } : { x: cx, y: cy };
+  }
+  const cellOf = o => [Math.floor(o.x / MAP.grid), Math.floor(o.y / MAP.grid)];
+
+  // big tesla | rocket turret | big tesla in a row -> RAILGUN in the middle square
+  function checkRailgun() {
+    const teslas = G.gadgets.filter(g => g.kind === 'tesla' && g.big && !g.dead && isMine(g.owner));
+    const at = (x, y) => teslas.find(g => { const [a, b] = cellOf(g); return a === x && b === y; });
+    for (const t of G.turrets) {
+      if (!t.rocket || t.hp <= 0) continue;
+      const [x, y] = cellOf(t);
+      const pair = at(x - 1, y) && at(x + 1, y) ? [at(x - 1, y), at(x + 1, y)] : at(x, y - 1) && at(x, y + 1) ? [at(x, y - 1), at(x, y + 1)] : null;
+      if (!pair) continue;
+      for (const g of pair) { removeGadget(g); if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id }); }
+      const R = MERGE.railgun;
+      Object.assign(t, { rocket: false, rail: true, hp: R.hp, maxHp: R.hp, cd: 0.5, zap: null });
+      burst(t.x, t.y, '#48dbfb', 60, 500);
+      G.rings.push({ x: t.x, y: t.y, r: 220, life: 0.7, max: 0.7, color: '72,219,251' });
+      G.banner = { text: 'RAILGUN!', t: 1.8 };
+      return;
+    }
   }
 
   // 3 of your same building close together -> one BIG building in the middle
@@ -752,6 +779,7 @@ const Game = (() => {
     G.rings.push({ x: cx, y: cy, r: 160, life: 0.6, max: 0.6, color: '255,215,0' });
     G.banner = { text: `BIG ${ABILITIES[kind].name.toUpperCase()}!`, t: 1.5 };
     landGadget({ kind, x1: cx, y1: cy, a: 0, owner: myOwnerId(), big: true });
+    if (kind === 'tesla') checkRailgun();
   }
 
   // 3 of your turrets in the same floor square -> ROCKET TURRET
@@ -760,12 +788,13 @@ const Game = (() => {
     if (near.length < 3) return;
     const three = near.slice(-3), R = MERGE.rocketTurret;
     for (const t of three) t.t = 0;
-    const cx = three.reduce((s, t) => s + t.x, 0) / 3, cy = three.reduce((s, t) => s + t.y, 0) / 3;
+    const { x: cx, y: cy } = snapCell(three.reduce((s, t) => s + t.x, 0) / 3, three.reduce((s, t) => s + t.y, 0) / 3);
     G.turrets = G.turrets.filter(t => t.t > 0);
     G.turrets.push({ x: cx, y: cy, t: Infinity, hp: R.hp, maxHp: R.hp, cd: 1, aim: 0, rocket: true, stats: three[0].stats, sprite: three[0].sprite });
     burst(cx, cy, '#e17055', 50, 420);
     G.rings.push({ x: cx, y: cy, r: 160, life: 0.6, max: 0.6, color: '225,112,85' });
     G.banner = { text: 'ROCKET TURRET!', t: 1.5 };
+    checkRailgun();
   }
   function addGadget(g) {
     const A = ABILITIES[g.kind];
@@ -943,7 +972,7 @@ const Game = (() => {
     // your turrets (only on your screen)
     const hostileToMe = G.mode === 'sp' ? b.team === 'e' : b.team === 'r' && hostileTo(b.owner);
     if (hostileToMe) for (const t of G.turrets) {
-      if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, t.rocket ? 26 : 18)) continue;
+      if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, t.rail ? 30 : t.rocket ? 26 : 18)) continue;
       t.hp -= bulletDamage(b); t.flash = 0.1;
       if (t.hp <= 0) { t.t = 0; burst(t.x, t.y, '#cd84f1', 24, 300); }
       return true;
@@ -1347,6 +1376,20 @@ const Game = (() => {
     G.zones = G.zones.filter(z => z.t > 0);
     for (const t of G.turrets) {
       t.t -= dt; t.cd -= dt;
+      if (t.rail) { // RAILGUN: fast, long range bolts of electricity
+        const R = MERGE.railgun;
+        if (t.zap) { t.zap.life -= dt; if (t.zap.life <= 0) t.zap = null; }
+        let best = null, bd = R.range;
+        for (const e of targets()) { const d = Math.hypot(e.x - t.x, e.y - t.y); if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; } }
+        if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
+        if (best && t.cd <= 0) {
+          t.cd = R.every;
+          const sx = t.x + Math.cos(t.aim) * 40, sy = t.y + Math.sin(t.aim) * 40;
+          fireBullets(sx, sy, [+t.aim.toFixed(4)], R.speed, R.damage, 0.3, R.range, 4 * HEAR_UNIT);
+          t.zap = { x0: sx, y0: sy, x: best.x, y: best.y, life: 0.08 };
+        }
+        continue;
+      }
       if (t.rocket) { // ROCKET TURRET: an RPG every 5 seconds
         const R = MERGE.rocketTurret;
         let best = null, bd = R.range;
@@ -1401,6 +1444,25 @@ const Game = (() => {
       }
     }
     for (const t of G.turrets) {
+      if (t.rail) {
+        ctx.fillStyle = '#1e272e'; ctx.strokeStyle = '#48dbfb'; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(t.x, t.y, 30, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
+        ctx.fillStyle = '#485460'; ctx.fillRect(-8, -9, 56, 6); ctx.fillRect(-8, 3, 56, 6);
+        ctx.fillStyle = '#48dbfb'; ctx.fillRect(4, -3, 44, 6);
+        ctx.restore();
+        ctx.fillStyle = '#c7f4ff'; ctx.beginPath(); ctx.arc(t.x, t.y, 8 + Math.sin(G.time * 25) * 2, 0, Math.PI * 2); ctx.fill();
+        if (t.zap) { // electric bolt
+          const z = t.zap;
+          ctx.strokeStyle = '#c7f4ff'; ctx.lineWidth = 4; ctx.shadowColor = '#48dbfb'; ctx.shadowBlur = 12;
+          ctx.beginPath(); ctx.moveTo(z.x0, z.y0);
+          for (let i = 1; i < 10; i++) { const k = i / 10; ctx.lineTo(z.x0 + (z.x - z.x0) * k + (Math.random() - 0.5) * 26, z.y0 + (z.y - z.y0) * k + (Math.random() - 0.5) * 26); }
+          ctx.lineTo(z.x, z.y); ctx.stroke(); ctx.shadowBlur = 0;
+        }
+        if (t.flash > 0) { t.flash -= 1 / 60; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(t.x, t.y, 30, 0, Math.PI * 2); ctx.fill(); }
+        drawBar(t.x, t.y - 42, 60, 6, t.hp / t.maxHp, false, '#48dbfb');
+        continue;
+      }
       if (t.rocket) {
         ctx.fillStyle = '#3d3d4a'; ctx.strokeStyle = '#e17055'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(t.x, t.y, 26, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -1504,6 +1566,7 @@ const Game = (() => {
       else if (n.kind === 'turret') {
         // the turret gets a copy of your sidearm
         const side = me.guns[1];
+        ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
         setTimeout(() => G && mergeTurrets(n.x1, n.y1), 0);
         G.turrets.push({ x: n.x1, y: n.y1, t: ABILITIES.turret.duration, hp: ABILITIES.turret.hp, maxHp: ABILITIES.turret.hp, cd: 0.5, aim: 0, stats: side.stats, sprite: side.sprite });
       } else if (n.kind === 'cluster') {
