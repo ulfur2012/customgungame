@@ -169,6 +169,9 @@ const PARTS = {
 // Enemies with `gun` shoot at you (and you can hear them).
 const ENEMIES = {
   grunt:   { size: 40, r: 16, color: '#e05555', hp: 40,   speed: 115, melee: 12, score: 10 },
+  // early game: a guy with a plain revolver (6 shots, then reloads)
+  gunslinger: { size: 40, r: 16, color: '#d4a373', hp: 30, speed: 100, melee: 6, score: 12, from: 1, weight: 2.5, keepDistance: 320,
+             gun: { damage: 7, delay: 0.7, loudness: 6, speed: 800, mag: 6, reload: 2.2 } },
   runner:  { size: 30, r: 12, color: '#f0a84e', hp: 20,   speed: 200, melee: 7,  score: 10 },
   shooter: { size: 40, r: 16, color: '#4ecdc4', hp: 35,   speed: 90,  melee: 8,  score: 15, keepDistance: 380,
              gun: { damage: 9, delay: 1.1, loudness: 7, speed: 700 } },
@@ -550,7 +553,7 @@ const COMBOS = [
   { a: 'turret', b: 'tesla',   name: 'Railgun',        how: '3 Turrets → Rocket Turret, 3 Teslas → Big Tesla. Line up Big Tesla, Rocket Turret, Big Tesla.' },
   { a: 'turret', b: 'radar',   name: 'Spotter Turret', how: 'Throw a Radar next to a Turret (or a Turret next to a Radar): the turret shoots through walls from very far away.' },
   { a: 'turret', b: 'medic',   name: 'Heal Turret',    how: 'Throw a second Heal Zone onto a Medic Turret: it shoots green healing beams at hurt buddies (+50 HP) and you (+20 HP). Low buddies run to it.' },
-  { a: 'turret', b: 'medic',   name: 'Medic Turret',   how: 'Throw a Heal Zone onto a Turret: it keeps shooting and heals you 6 HP/s when you stand near it, forever.' },
+  { a: 'turret', b: 'medic',   name: 'Medic Turret',   how: 'Throw a Heal Zone onto a Turret: it keeps shooting and heals you 5 HP every 3 seconds when you are near it and out of combat.' },
   { a: 'blackhole', b: 'firepit', name: 'Inferno Vortex', how: 'Throw a Fire Pit into your Black Hole: it burns enemies it pulls in (20/s) and lasts 3s longer.' },
   { a: 'tesla', b: 'freeze',   name: 'Cryo Coil',      how: 'Throw a Freeze Bomb onto a Tesla Coil: its zaps freeze enemies for a moment.' },
   { a: 'barrier', b: 'tesla',  name: 'Electric Fence', how: 'Throw a Barrier next to a Tesla Coil: the wall crackles and shocks enemies that touch it (15/s).' },
@@ -575,7 +578,7 @@ const COMBOS = [
   { a: 'adrenaline', b: 'stim', name: 'Racing Heart',   passive: true, how: 'Equip both: Stim Shot costs no HP and lasts 12s.', syn: { stim: { add: { cost: -10, duration: 4 } } } },
   { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
 ];
-const COMBO = { healBeam: 50, healBeamMe: 20, healEvery: 3, healRange: 700,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 6, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
+const COMBO = { healBeam: 50, healBeamMe: 20, healEvery: 3, healRange: 700,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
 
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.

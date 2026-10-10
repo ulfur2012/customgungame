@@ -1760,7 +1760,12 @@ const Game = (() => {
       }
       if (t.medic) { // medic turret heals you when you're close
         t.healT -= dt;
-        if (t.healT <= 0) { t.healT = 1; const me = G.me; if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - t.x, me.y - t.y) <= COMBO.medicRadius) heal(COMBO.medicHeal); healBuddies(t.x, t.y, COMBO.medicRadius, COMBO.medicHeal); }
+        if (t.healT <= 0) { // 5 HP every 3s, only when you're out of combat
+          t.healT = COMBO.medicEvery;
+          const me = G.me, calm = G.time - G.lastCombat >= COMBO.medicCalm;
+          if (calm && me.alive && me.hp < me.maxHp && Math.hypot(me.x - t.x, me.y - t.y) <= COMBO.medicRadius) heal(COMBO.medicHeal);
+          healBuddies(t.x, t.y, COMBO.medicRadius, COMBO.medicHeal);
+        }
       }
       // spotter turrets see through walls from very far away
       let best = null, bd = t.spot ? COMBO.spotRange : t.stats.range; // otherwise as far as your sidearm shoots
@@ -2475,7 +2480,11 @@ const Game = (() => {
       }
       if (e.def.gun && me.alive && sees && d < BULLET_RANGE * 0.8) {
         e.cd -= dt;
-        if (e.cd <= 0) { enemyShoot(e); e.cd = e.def.gun.delay * (0.8 + Math.random() * 0.4); }
+        if (e.cd <= 0) {
+          enemyShoot(e); e.cd = e.def.gun.delay * (0.8 + Math.random() * 0.4);
+          const g = e.def.gun;
+          if (g.mag) { e.shots = (e.shots ?? g.mag) - 1; if (e.shots <= 0) { e.shots = g.mag; e.cd = g.reload; } } // revolver: reload after 6
+        }
       }
       if (me.alive && e.def.melee && Math.hypot(me.x - e.x, me.y - e.y) < e.r + me.r && me.meleeInv === 0) {
         hurtMe(e.def.melee, 4, Math.atan2(dy, dx), null);
