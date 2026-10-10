@@ -412,7 +412,7 @@ const ABILITIES = {
                desc: 'Throw an ice bomb. Everyone it hits is frozen solid for 2.5s, you too!' },
   decoy:     { name: 'Decoy', type: 'active', thrown: true, gadget: true, color: '#dfe6e9', cooldown: 20, uses: 2,
                radius: 20, duration: 15, hp: 100, speed: 220,
-               desc: 'Throw a buddy on your team. It carries a copy of your main gun and hunts down enemies (100 HP, 15s).' },
+               desc: 'Throw a buddy on your team. It carries a copy of your main gun and goes out hunting enemies (100 HP, 15s).' },
   barrier:   { name: 'Barrier', type: 'active', thrown: true, gadget: true, color: '#54a0ff', cooldown: 15, uses: 3,
                radius: 180, duration: 7, len: 360, thick: 36,
                desc: 'Throw a wall that pops up where it lands. Blocks bullets and movement for 7s.' },

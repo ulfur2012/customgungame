@@ -772,33 +772,24 @@ const Game = (() => {
   }
   // Buddy (decoy): a teammate bot with a copy of your main gun that hunts enemies
   function updateBuddy(g, dt) {
-    const A = ABILITIES.decoy, me = G.me;
+    const A = ABILITIES.decoy;
     let best = null, bd = Infinity;
     for (const t of targets()) { const d = Math.hypot(t.x - g.x, t.y - g.y); if (d < bd) { best = t; bd = d; } }
     let mx = 0, my = 0;
     const sees = best && lineOfSight(g.x, g.y, best.x, best.y) && !smokeBlocks(g.x, g.y, best.x, best.y);
     if (best) {
+      g.roam = null;
       g.aim = Math.atan2(best.y - g.y, best.x - g.x);
-      const want = sees && bd < g.stats.range * 0.8 ? (bd < 200 ? -1 : bd > 320 ? 1 : 0) : 1;
-      mx = Math.cos(g.aim) * want; my = Math.sin(g.aim) * want;
-      if (!sees) { // find a way around the walls to the target
-        const C = MAP.grid, cols = MAP.cols;
-        g.pathT = (g.pathT || 0) - dt;
-        if (g.pathT <= 0 || !g.flow) {
-          g.pathT = 0.4;
-          const open = (x, y) => x >= 0 && y >= 0 && x < cols && y < cols && !MAP.solid[y * cols + x];
-          g.flow = bfs(open, [clamp(Math.floor(best.y / C), 0, cols - 1) * cols + clamp(Math.floor(best.x / C), 0, cols - 1)]);
-        }
-        const x = clamp(Math.floor(g.x / C), 0, cols - 1), y = clamp(Math.floor(g.y / C), 0, cols - 1);
-        let step = null, sd = g.flow[y * cols + x] >= 0 ? g.flow[y * cols + x] : Infinity;
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-          const nx = x + dx, ny = y + dy, v = nx >= 0 && ny >= 0 && nx < cols && ny < cols ? g.flow[ny * cols + nx] : -1;
-          if (v >= 0 && v < sd) { sd = v; step = { x: (nx + 0.5) * C, y: (ny + 0.5) * C }; }
-        }
-        if (step) { const l = Math.hypot(step.x - g.x, step.y - g.y) || 1; mx = (step.x - g.x) / l; my = (step.y - g.y) / l; }
-      }
-    } else if (Math.hypot(me.x - g.x, me.y - g.y) > 150) { // nobody around: stick with you
-      const a = Math.atan2(me.y - g.y, me.x - g.x); mx = Math.cos(a); my = Math.sin(a); g.aim = a;
+      if (sees) {
+        // in range: hold a fighting distance, otherwise charge in
+        const want = bd < g.stats.range * 0.8 ? (bd < 200 ? -1 : bd > 320 ? 1 : 0) : 1;
+        mx = Math.cos(g.aim) * want; my = Math.sin(g.aim) * want;
+      } else ({ x: mx, y: my } = buddyPath(g, best.x, best.y, dt));
+    } else {
+      // nobody to fight right now: go out and look for them instead of waiting by you
+      if (!g.roam || Math.hypot(g.roam.x - g.x, g.roam.y - g.y) < 80) { g.roam = randomFloorSpot(); g.flow = null; }
+      ({ x: mx, y: my } = buddyPath(g, g.roam.x, g.roam.y, dt));
+      if (mx || my) g.aim = Math.atan2(my, mx);
     }
     g.x += mx * A.speed * dt; g.y += my * A.speed * dt;
     collideWorld(g);
@@ -810,6 +801,29 @@ const Game = (() => {
       g.kick = 4;
       shootFrom(g.x + Math.cos(g.aim) * 30, g.y + Math.sin(g.aim) * 30, g.aim, s);
     }
+  }
+
+  // direction for the buddy to walk to reach (tx, ty) around walls (grid paths, refreshed often)
+  function buddyPath(g, tx, ty, dt) {
+    const C = MAP.grid, cols = MAP.cols;
+    const cell = (v) => clamp(Math.floor(v / C), 0, cols - 1);
+    const goal = cell(ty) * cols + cell(tx);
+    g.pathT = (g.pathT || 0) - dt;
+    if (g.pathT <= 0 || !g.flow || g.goal !== goal) {
+      g.pathT = 0.4; g.goal = goal;
+      const open = (x, y) => x >= 0 && y >= 0 && x < cols && y < cols && !MAP.solid[y * cols + x];
+      g.flow = bfs(open, [goal]);
+    }
+    const x = cell(g.x), y = cell(g.y);
+    let step = null, sd = g.flow[y * cols + x] >= 0 ? g.flow[y * cols + x] : Infinity;
+    if (sd === 0) step = { x: tx, y: ty };
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, v = nx >= 0 && ny >= 0 && nx < cols && ny < cols ? g.flow[ny * cols + nx] : -1;
+      if (v >= 0 && v < sd) { sd = v; step = { x: (nx + 0.5) * C, y: (ny + 0.5) * C }; }
+    }
+    if (!step) { const l = Math.hypot(tx - g.x, ty - g.y) || 1; return { x: (tx - g.x) / l, y: (ty - g.y) / l }; }
+    const l = Math.hypot(step.x - g.x, step.y - g.y) || 1;
+    return { x: (step.x - g.x) / l, y: (step.y - g.y) / l };
   }
 
   // fire one shot of a gun's stats from somewhere (turret / buddy)
