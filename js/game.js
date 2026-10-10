@@ -35,7 +35,7 @@ const Game = (() => {
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
-        frozenT: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
+        frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
       bullets: [], fx: [], texts: [], hears: [], feed: [],
@@ -187,7 +187,12 @@ const Game = (() => {
     me.x += (mv.x * speed + me.vx) * dt;
     me.y += (mv.y * speed + me.vy) * dt;
     me.vx *= Math.exp(-10 * dt); me.vy *= Math.exp(-10 * dt);
-    if (me.phaseT > 0) { me.x = clamp(me.x, me.r, MAP.w - me.r); me.y = clamp(me.y, me.r, MAP.h - me.r); } // phase walk
+    if (me.airT > 0) { // jump pad flight
+      me.airT -= dt;
+      me.vx = Math.cos(me.airA) * ABILITIES.jumppad.speed; me.vy = Math.sin(me.airA) * ABILITIES.jumppad.speed;
+      if (me.airT <= 0) { me.vx *= 0.15; me.vy *= 0.15; }
+    }
+    if (me.phaseT > 0 || me.airT > 0) { me.x = clamp(me.x, me.r, MAP.w - me.r); me.y = clamp(me.y, me.r, MAP.h - me.r); } // phase walk
     else collideWorld(me);
     me.kick = Math.max(0, me.kick - 50 * dt);
     me.meleeInv = Math.max(0, me.meleeInv - dt);
@@ -403,6 +408,7 @@ const Game = (() => {
         continue;
       }
       const a = Math.atan2(b.vy, b.vx);
+      if (G.gadgets.length && bulletHitsGadget(b, x1, y1)) { b.life = 0; continue; }
       if (b.team === 'me') {
         if (G.mode === 'sp') {
           for (const e of G.enemies) {
@@ -648,12 +654,20 @@ const Game = (() => {
     } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= r + me.r) onMe();
   }
 
+  // like areaOf, but hits everyone in range, the thrower too
+  function areaAll(g, r, onEnemy, onMe) {
+    const me = G.me;
+    if (isMine(g.owner) && G.mode === 'sp') for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= r + e.r) onEnemy(e);
+    if (me.alive && Math.hypot(me.x - g.x, me.y - g.y) <= r + me.r) onMe();
+  }
+
   // ---- thrown gadgets: everyone simulates them; damage is worked out by whoever gets hit
   let gadgetSeq = 0;
   function landGadget(n) {
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
-    addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name });
-    if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name });
+    const main = G.me.guns[0];
+    addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: main.stats, sprite: main.sprite });
+    if (G.mode === 'mp') Net.send({ t: 'gad', k: n.kind, x: Math.round(n.x1), y: Math.round(n.y1), a: +(n.a || 0).toFixed(3), id, c: G.me.color, n: G.me.name, b: main.build });
   }
   function addGadget(g) {
     const A = ABILITIES[g.kind];
@@ -661,11 +675,21 @@ const Game = (() => {
     burst(g.x, g.y, A.color, 18, 260);
     if (g.kind === 'freeze') {
       G.rings.push({ x: g.x, y: g.y, r: A.radius, life: 0.6, max: 0.6, color: '126,214,255' });
-      areaOf(g, A.radius, e => { e.frozen = A.time; }, () => { G.me.frozenT = A.time; G.banner = { text: 'Frozen!', t: 1 }; });
+      areaAll(g, A.radius, e => { e.frozen = A.time; }, () => { G.me.frozenT = A.time; G.banner = { text: 'Frozen!', t: 1 }; });
       g.t = 0.6;
     }
+    if (g.kind === 'smoke') {
+      // a lumpy cloud: lots of puffs of different sizes, not one circle
+      const R = A.radius;
+      g.puffs = Array.from({ length: 14 }, (_, i) => {
+        const an = i * 2.4 + Math.random() * 0.8, d = R * (0.15 + Math.random() * 0.55);
+        return { x: g.x + Math.cos(an) * d, y: g.y + Math.sin(an) * d * 0.8, r: R * (0.3 + Math.random() * 0.3), ph: Math.random() * 6 };
+      });
+    }
+    if (A.hp) g.hp = A.hp;
+    if (g.kind === 'decoy') Object.assign(g, { r: PLAYER.r, cd: 0.5, kick: 0, aim: g.a });
     if (g.kind === 'barrier') {
-      const L = A.len, T = 24, vert = Math.abs(Math.cos(g.a)) > Math.abs(Math.sin(g.a));
+      const L = A.len, T = A.thick, vert = Math.abs(Math.cos(g.a)) > Math.abs(Math.sin(g.a));
       g.rect = vert ? [g.x - T / 2, g.y - L / 2, T, L] : [g.x - L / 2, g.y - T / 2, L, T];
       MAP.walls.push(g.rect);
       if (!G.me.phaseT) collideWorld(G.me);
@@ -676,7 +700,7 @@ const Game = (() => {
     g.dead = true;
     if (g.rect) MAP.walls = MAP.walls.filter(w => w !== g.rect);
   }
-  const smokeBlocks = (x1, y1, x2, y2) => G.gadgets.some(g => g.kind === 'smoke' && segHitsCircle(x1, y1, x2, y2, g.x, g.y, ABILITIES.smoke.radius * 0.8));
+  const smokeBlocks = (x1, y1, x2, y2) => G.gadgets.some(g => g.kind === 'smoke' && g.puffs.some(p => segHitsCircle(x1, y1, x2, y2, p.x, p.y, p.r * 0.8)));
   const myDecoy = () => G.gadgets.find(g => g.kind === 'decoy' && isMine(g.owner));
 
   function updateGadgetList(dt) {
@@ -688,7 +712,7 @@ const Game = (() => {
       for (const z of g.zaps) z.life -= dt;
       g.zaps = g.zaps.filter(z => z.life > 0);
       if (g.kind === 'blackhole') {
-        areaOf(g, A.radius, e => {
+        areaAll(g, A.radius, e => {
           const d = Math.hypot(g.x - e.x, g.y - e.y) || 1, w = e.r / 16;
           e.kx += (g.x - e.x) / d * A.pull * dt * 6 / w; e.ky += (g.y - e.y) / d * A.pull * dt * 6 / w;
         }, () => {
@@ -696,9 +720,9 @@ const Game = (() => {
           me.vx += (g.x - me.x) / d * A.pull * dt * 3; me.vy += (g.y - me.y) / d * A.pull * dt * 3;
         });
       }
-      if ((g.kind === 'blackhole' || g.kind === 'firepit') && g.tick <= 0) {
+      if (g.kind === 'firepit' && g.tick <= 0) {
         g.tick = 0.5;
-        areaOf(g, A.radius, e => hurtEnemy(e, A.dps / 2, 0.2, Math.atan2(e.y - g.y, e.x - g.x)),
+        areaAll(g, A.radius, e => hurtEnemy(e, A.dps / 2, 0.2, Math.atan2(e.y - g.y, e.x - g.x)),
           () => hurtMe(A.dps / 2, 0, Math.atan2(me.y - g.y, me.x - g.x), g.owner));
       }
       if (g.kind === 'firepit' && Math.random() < 0.6) {
@@ -727,19 +751,102 @@ const Game = (() => {
           if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id });
         }
       }
+      if (g.kind === 'decoy' && isMine(g.owner)) updateBuddy(g, dt);
       if (g.kind === 'jumppad' && me.alive && me.padCd === 0 && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius + me.r * 0.5) {
-        me.padCd = 0.6;
-        me.vx = Math.cos(g.a) * A.power; me.vy = Math.sin(g.a) * A.power;
+        me.padCd = 0.8;
+        me.airT = A.air; me.airA = g.a; // flying: walls don't stop you until you land
         burst(g.x, g.y, A.color, 12, 260);
       }
-      if (g.t <= 0) removeGadget(g);
+      if (g.t <= 0 || g.hp <= 0) removeGadget(g);
     }
     G.gadgets = G.gadgets.filter(g => !g.dead);
+    G.buddySend = (G.buddySend || 0) - dt;
+    if (G.mode === 'mp' && G.buddySend <= 0) {
+      G.buddySend = 0.08;
+      for (const g of G.gadgets) if (g.kind === 'decoy' && isMine(g.owner)) Net.send({ t: 'gadm', id: g.id, x: Math.round(g.x), y: Math.round(g.y), a: +g.aim.toFixed(3), hp: Math.round(g.hp) });
+    }
     for (const r of G.rings) r.life -= dt;
     G.rings = G.rings.filter(r => r.life > 0);
     // frozen single player enemies thaw out
     if (G.mode === 'sp') for (const e of G.enemies) if (e.frozen > 0) e.frozen -= dt;
   }
+  // Buddy (decoy): a teammate bot with a copy of your main gun that hunts enemies
+  function updateBuddy(g, dt) {
+    const A = ABILITIES.decoy, me = G.me;
+    let best = null, bd = Infinity;
+    for (const t of targets()) { const d = Math.hypot(t.x - g.x, t.y - g.y); if (d < bd) { best = t; bd = d; } }
+    let mx = 0, my = 0;
+    const sees = best && lineOfSight(g.x, g.y, best.x, best.y) && !smokeBlocks(g.x, g.y, best.x, best.y);
+    if (best) {
+      g.aim = Math.atan2(best.y - g.y, best.x - g.x);
+      const want = sees && bd < g.stats.range * 0.8 ? (bd < 200 ? -1 : bd > 320 ? 1 : 0) : 1;
+      mx = Math.cos(g.aim) * want; my = Math.sin(g.aim) * want;
+      if (!sees) { // find a way around the walls to the target
+        const C = MAP.grid, cols = MAP.cols;
+        g.pathT = (g.pathT || 0) - dt;
+        if (g.pathT <= 0 || !g.flow) {
+          g.pathT = 0.4;
+          const open = (x, y) => x >= 0 && y >= 0 && x < cols && y < cols && !MAP.solid[y * cols + x];
+          g.flow = bfs(open, [clamp(Math.floor(best.y / C), 0, cols - 1) * cols + clamp(Math.floor(best.x / C), 0, cols - 1)]);
+        }
+        const x = clamp(Math.floor(g.x / C), 0, cols - 1), y = clamp(Math.floor(g.y / C), 0, cols - 1);
+        let step = null, sd = g.flow[y * cols + x] >= 0 ? g.flow[y * cols + x] : Infinity;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, v = nx >= 0 && ny >= 0 && nx < cols && ny < cols ? g.flow[ny * cols + nx] : -1;
+          if (v >= 0 && v < sd) { sd = v; step = { x: (nx + 0.5) * C, y: (ny + 0.5) * C }; }
+        }
+        if (step) { const l = Math.hypot(step.x - g.x, step.y - g.y) || 1; mx = (step.x - g.x) / l; my = (step.y - g.y) / l; }
+      }
+    } else if (Math.hypot(me.x - g.x, me.y - g.y) > 150) { // nobody around: stick with you
+      const a = Math.atan2(me.y - g.y, me.x - g.x); mx = Math.cos(a); my = Math.sin(a); g.aim = a;
+    }
+    g.x += mx * A.speed * dt; g.y += my * A.speed * dt;
+    collideWorld(g);
+    g.cd -= dt;
+    g.kick = Math.max(0, g.kick - 40 * dt);
+    if (sees && bd < g.stats.range && g.cd <= 0) {
+      const s = g.stats;
+      g.cd = Math.max(s.fireDelay, s.reloadTime / s.magSize, 0.12);
+      g.kick = 4;
+      shootFrom(g.x + Math.cos(g.aim) * 30, g.y + Math.sin(g.aim) * 30, g.aim, s);
+    }
+  }
+
+  // fire one shot of a gun's stats from somewhere (turret / buddy)
+  function shootFrom(sx, sy, aim, s) {
+    const angles = [];
+    for (let i = 0; i < s.pellets; i++) {
+      const fan = s.pellets > 1 ? (i / (s.pellets - 1) - 0.5) * s.spread : 0;
+      angles.push(+(aim + fan + (Math.random() - 0.5) * s.spread).toFixed(4));
+    }
+    fireBullets(sx, sy, angles, s.speed, s.damage, s.knockback, s.range, s.hearRadius, { bounce: s.bounce, pierce: s.pierce, boom: s.boom }, s.falloff);
+    muzzleFlash(sx, sy, aim);
+  }
+
+  // buildings and your buddy can be shot. Returns true if the bullet was stopped.
+  // The owner keeps track of the HP and tells everyone when it breaks.
+  function bulletHitsGadget(b, x1, y1) {
+    for (const g of G.gadgets) {
+      if (g.hp === undefined || g.dead) continue;
+      const hostile = G.mode === 'sp' ? b.team === 'e'
+        : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
+      if (!hostile || !segHitsCircle(x1, y1, b.x, b.y, g.x, g.y, g.kind === 'decoy' ? PLAYER.r : 22)) continue;
+      damageGadget(g, bulletDamage(b));
+      return true;
+    }
+    return false;
+  }
+  function damageGadget(g, dmg) {
+    g.flash = 0.1;
+    if (!isMine(g.owner)) return;
+    g.hp -= dmg;
+    if (g.hp <= 0) {
+      burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300);
+      removeGadget(g);
+      if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id });
+    }
+  }
+
   function mineBoom(g) {
     if (g.dead) return;
     const A = ABILITIES.mine;
@@ -750,6 +857,7 @@ const Game = (() => {
   function drawGadgetList() {
     for (const g of G.gadgets) {
       const A = ABILITIES[g.kind], pop = Math.min(1, g.age / 0.25);
+      g.flash = Math.max(0, (g.flash || 0) - 1 / 60);
       ctx.save();
       if (g.kind === 'blackhole') {
         const r = A.radius * pop;
@@ -762,10 +870,9 @@ const Game = (() => {
         ctx.fillStyle = 'rgba(255,107,26,0.25)'; ctx.strokeStyle = 'rgba(255,160,40,0.7)'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * pop, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       } else if (g.kind === 'decoy') {
-        ctx.globalAlpha = 0.85;
-        drawChar(PLAYER, g.x, g.y, PLAYER.r, g.a, g.color, false);
-        ctx.globalAlpha = 1;
-        if (G.mode === 'mp') nameTag(g.name, g.x, g.y - PLAYER.r - 20, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
+        drawPlayer({ x: g.x, y: g.y, aim: g.aim ?? g.a, kick: g.kick || 0 }, g.color, g.sprite, g.flash > 0);
+        drawBar(g.x, g.y - PLAYER.r - 14, 54, 7, g.hp / A.hp, false, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
+        nameTag(`${g.name}'s buddy`, g.x, g.y - PLAYER.r - 20, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
       } else if (g.kind === 'barrier' && g.rect) {
         const [x, y, w, h] = g.rect;
         ctx.fillStyle = 'rgba(84,160,255,0.55)'; ctx.strokeStyle = '#c8e1ff'; ctx.lineWidth = 2;
@@ -787,12 +894,21 @@ const Game = (() => {
       } else if (g.kind === 'radar') {
         ctx.strokeStyle = `rgba(255,159,243,${0.6 * (1 - (G.time % 1.5) / 1.5)})`; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(g.x, g.y, 30 + ((G.time % 1.5) / 1.5) * 200, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = '#ff9ff3'; ctx.beginPath(); ctx.arc(g.x, g.y, 10, 0, Math.PI * 2); ctx.fill();
+        // tower: base, mast and a spinning dish
+        ctx.fillStyle = g.flash > 0 ? '#fff' : '#57606f'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
+        ctx.strokeStyle = '#2f3542'; ctx.lineWidth = 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
+        ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(G.time * 3);
+        ctx.fillStyle = '#ff9ff3'; ctx.fillRect(-4, -4, 26, 8); ctx.beginPath(); ctx.arc(22, 0, 9, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        drawBar(g.x, g.y - 32, 44, 6, g.hp / A.hp, false, '#ff9ff3');
       } else if (g.kind === 'tesla') {
         ctx.strokeStyle = 'rgba(72,219,251,0.25)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(g.x, g.y, A.radius, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = '#2d3436'; ctx.fillRect(g.x - 10, g.y - 10, 20, 20);
-        ctx.fillStyle = '#48dbfb'; ctx.beginPath(); ctx.arc(g.x, g.y - 4, 7 + Math.sin(G.time * 20) * 2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = g.flash > 0 ? '#fff' : '#2d3436'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
+        ctx.strokeStyle = '#48dbfb'; ctx.lineWidth = 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
+        ctx.fillStyle = '#636e72'; ctx.fillRect(g.x - 5, g.y - 14, 10, 18);
+        ctx.fillStyle = '#48dbfb'; ctx.beginPath(); ctx.arc(g.x, g.y - 12, 8 + Math.sin(G.time * 20) * 2, 0, Math.PI * 2); ctx.fill();
+        drawBar(g.x, g.y - 32, 44, 6, g.hp / A.hp, false, '#48dbfb');
         ctx.strokeStyle = '#c7f4ff'; ctx.lineWidth = 3;
         for (const z of g.zaps) { // jagged lightning
           ctx.beginPath(); ctx.moveTo(g.x, g.y - 4);
@@ -827,16 +943,27 @@ const Game = (() => {
     const me = G.me;
     for (const g of G.gadgets) {
       if (g.kind === 'smoke') {
-        const A = ABILITIES.smoke, r = A.radius * Math.min(1, g.age / 0.4), fade = Math.min(1, g.t / 0.8);
-        for (let i = 0; i < 6; i++) {
-          const an = i * 1.05 + G.time * 0.3, ox = Math.cos(an) * r * 0.35, oy = Math.sin(an) * r * 0.35;
-          const grd = ctx.createRadialGradient(g.x + ox, g.y + oy, 0, g.x + ox, g.y + oy, r * 0.8);
-          grd.addColorStop(0, `rgba(160,166,176,${0.9 * fade})`); grd.addColorStop(1, 'rgba(160,166,176,0)');
-          ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(g.x + ox, g.y + oy, r * 0.8, 0, Math.PI * 2); ctx.fill();
+        const grow = Math.min(1, g.age / 0.5), fade = Math.min(1, g.t / 0.8);
+        for (const p of g.puffs) {
+          const px = g.x + (p.x - g.x) * grow + Math.sin(G.time * 0.7 + p.ph) * 8, py = g.y + (p.y - g.y) * grow + Math.cos(G.time * 0.6 + p.ph) * 8;
+          const r = p.r * grow * (1 + 0.05 * Math.sin(G.time + p.ph));
+          const grd = ctx.createRadialGradient(px, py, 0, px, py, r);
+          grd.addColorStop(0, `rgba(158,164,174,${0.97 * fade})`); grd.addColorStop(0.65, `rgba(150,156,166,${0.9 * fade})`); grd.addColorStop(1, 'rgba(150,156,166,0)');
+          ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
         }
-        ctx.fillStyle = `rgba(150,156,166,${0.92 * fade})`; ctx.beginPath(); ctx.arc(g.x, g.y, r * 0.6, 0, Math.PI * 2); ctx.fill();
       }
-      if (g.kind === 'radar' && !hostileTo(g.owner)) {
+      if (g.kind === 'radar' && !hostileTo(g.owner) && me.alive) {
+        let best = null, bd = Infinity;
+        for (const t of targets()) { const d = Math.hypot(t.x - me.x, t.y - me.y); if (d < bd) { best = t; bd = d; } }
+        if (best) {
+          const an = Math.atan2(best.y - me.y, best.x - me.x), ax = me.x + Math.cos(an) * 75, ay = me.y + Math.sin(an) * 75;
+          ctx.save(); ctx.translate(ax, ay); ctx.rotate(an);
+          ctx.fillStyle = '#ff4d4d'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-10, -11); ctx.lineTo(-4, 0); ctx.lineTo(-10, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.restore();
+          ctx.fillStyle = '#fff'; ctx.font = '700 12px system-ui, sans-serif'; ctx.textAlign = 'center';
+          ctx.fillText(`${Math.round(bd / MAP.grid)}m`, ax, ay + 26);
+        }
         for (const t of targets()) {
           if (Math.hypot(t.x - g.x, t.y - g.y) > ABILITIES.radar.radius) continue;
           ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 3;
@@ -869,14 +996,7 @@ const Game = (() => {
       if (best && t.cd <= 0) {
         const s = t.stats;
         t.cd = Math.max(s.fireDelay, s.reloadTime / s.magSize, 0.15); // reloads built in, never runs dry
-        const sx = t.x + Math.cos(t.aim) * 20, sy = t.y + Math.sin(t.aim) * 20;
-        const angles = [];
-        for (let i = 0; i < s.pellets; i++) {
-          const fan = s.pellets > 1 ? (i / (s.pellets - 1) - 0.5) * s.spread : 0;
-          angles.push(+(t.aim + fan + (Math.random() - 0.5) * s.spread).toFixed(4));
-        }
-        fireBullets(sx, sy, angles, s.speed, s.damage, s.knockback, s.range, s.hearRadius, { bounce: s.bounce, pierce: s.pierce, boom: s.boom }, s.falloff);
-        muzzleFlash(sx, sy, t.aim);
+        shootFrom(t.x + Math.cos(t.aim) * 20, t.y + Math.sin(t.aim) * 20, t.aim, s);
       }
     }
     G.turrets = G.turrets.filter(t => t.t > 0);
@@ -1319,9 +1439,12 @@ const Game = (() => {
   function updateEnemies(dt) {
     const me = G.me, list = G.enemies;
     updateFlow(dt);
-    const decoy = myDecoy(), tgt = decoy || me; // a decoy pulls all the attention
+    const decoy = myDecoy();
     for (const e of list) {
       if (e.frozen > 0) { e.flash = 0; continue; } // frozen solid
+      // go for whoever is closer: you or your buddy
+      const tgt = decoy && Math.hypot(decoy.x - e.x, decoy.y - e.y) < Math.hypot(me.x - e.x, me.y - e.y) ? decoy : me;
+      if (decoy && (e.botCd = Math.max(0, (e.botCd || 0) - dt)) === 0 && Math.hypot(decoy.x - e.x, decoy.y - e.y) < e.r + PLAYER.r) { damageGadget(decoy, e.def.melee); e.botCd = 0.6; }
       const dx = tgt.x - e.x, dy = tgt.y - e.y, d = Math.hypot(dx, dy) || 1;
       const sees = lineOfSight(e.x, e.y, tgt.x, tgt.y) && !smokeBlocks(e.x, e.y, tgt.x, tgt.y);
       let mx = dx / d, my = dy / d;
@@ -1454,8 +1577,23 @@ const Game = (() => {
     addFeed(m.by, m.from);
     if (m.by === G.myId) onKill();
   });
-  Net.on('gad', m => { if (inMP()) addGadget({ kind: m.k, x: m.x, y: m.y, a: m.a, owner: m.from, id: m.id, color: m.c, name: m.n }); });
-  Net.on('gadx', m => { if (!inMP()) return; const g = G.gadgets.find(g => g.id === m.id); if (g) mineBoom(g); });
+  Net.on('gad', m => {
+    if (!inMP()) return;
+    const sprite = m.k === 'decoy' && m.b ? renderGunSprite('main', m.b) : null;
+    addGadget({ kind: m.k, x: m.x, y: m.y, a: m.a, owner: m.from, id: m.id, color: m.c, name: m.n, sprite });
+  });
+  Net.on('gadx', m => {
+    if (!inMP()) return;
+    const g = G.gadgets.find(g => g.id === m.id);
+    if (!g) return;
+    if (g.kind === 'mine') mineBoom(g);
+    else { burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300); removeGadget(g); }
+  });
+  Net.on('gadm', m => {
+    if (!inMP()) return;
+    const g = G.gadgets.find(g => g.id === m.id);
+    if (g) { g.x = m.x; g.y = m.y; g.aim = m.a; g.hp = m.hp; }
+  });
   Net.on('aoe', m => { if (inMP()) slam(m.x, m.y, m.r, m.dmg, m.kb, m.from); });
   Net.on('nade', m => { if (inMP()) G.nades.push({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, t: 0, owner: m.from }); });
   Net.on('rpg', m => { if (inMP()) addRocket(m.x, m.y, m.a, m.from); });
