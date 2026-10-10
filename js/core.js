@@ -133,19 +133,116 @@ function layoutGun(kind, build) {
   return { pieces, muzzle, minX, minY, w: maxX - minX, h: maxY - minY };
 }
 
+// which slot each part belongs to (for the drawing style)
+const PART_SLOT = new Map();
+for (const k in PARTS) for (const p of PARTS[k]) PART_SLOT.set(p, k);
+
+// lighten (amt > 0) or darken (amt < 0) a #rrggbb colour
+function shade(hex, amt) {
+  const n = parseInt(hex.slice(1), 16), f = v => clamp(Math.round(v + (amt > 0 ? (255 - v) : v) * amt), 0, 255);
+  return `rgb(${f(n >> 16)},${f((n >> 8) & 255)},${f(n & 255)})`;
+}
+
+function rrect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+// a shaded, rounded block: lighter on top, darker underneath, thin outline and a shine line
+function block(ctx, color, x, y, w, h, r = 3) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, shade(color, 0.28)); g.addColorStop(0.45, color); g.addColorStop(1, shade(color, -0.35));
+  rrect(ctx, x, y, w, h, r);
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 1; ctx.stroke();
+  if (h > 5 && w > 6) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    ctx.beginPath(); ctx.moveTo(x + Math.min(r, 3) + 1, y + 1.5); ctx.lineTo(x + w - Math.min(r, 3) - 1, y + 1.5); ctx.stroke();
+  }
+}
+
+function lines(ctx, list, color = 'rgba(0,0,0,0.35)', width = 1) {
+  ctx.strokeStyle = color; ctx.lineWidth = width;
+  ctx.beginPath();
+  for (const [x1, y1, x2, y2] of list) { ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); }
+  ctx.stroke();
+}
+
 function drawPart(ctx, part, x, y) {
   if (part._img) {
     ctx.imageSmoothingEnabled = !PIXEL_ART;
     ctx.drawImage(part._img, x, y, part.w, part.h);
     return;
   }
-  ctx.fillStyle = part.color;
-  ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-  ctx.lineWidth = 1;
-  for (const [rx, ry, rw, rh] of part.shape || [[0, 0, part.w, part.h]]) {
-    ctx.fillRect(x + rx, y + ry, rw, rh);
-    ctx.strokeRect(x + rx + 0.5, y + ry + 0.5, rw - 1, rh - 1);
+  const slot = PART_SLOT.get(part) || 'body', c = part.color, w = part.w, h = part.h;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  if (slot === 'barrel') {
+    block(ctx, c, x, y + 1, w - 4, h - 2, h / 2);
+    block(ctx, shade(c, -0.3), x + w - 6, y, 6, h, 2); // muzzle ring
+    if (w > 40) lines(ctx, Array.from({ length: Math.floor(w / 14) }, (_, i) => [x + 8 + i * 12, y + h / 2, x + 13 + i * 12, y + h / 2]), 'rgba(0,0,0,0.45)', 2); // vents
+  } else if (slot === 'silencer') {
+    block(ctx, c, x, y, w, h, h / 2.2);
+    lines(ctx, [0.25, 0.5, 0.75].map(f => [x + w * f, y + 2, x + w * f, y + h - 2]));
+  } else if (slot === 'mag') {
+    if (part.id.includes('drum')) {
+      const r = Math.min(w, h) / 2, g = ctx.createRadialGradient(x + r * 0.7, y + r * 0.7, 1, x + r, y + r, r);
+      g.addColorStop(0, shade(c, 0.35)); g.addColorStop(1, shade(c, -0.35));
+      ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, r, 0, Math.PI * 2);
+      ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(x + w / 2, y + h / 2, r * 0.35, 0, Math.PI * 2); ctx.fillStyle = shade(c, -0.4); ctx.fill();
+    } else {
+      block(ctx, c, x, y, w, h, 2);
+      lines(ctx, Array.from({ length: Math.floor(h / 6) }, (_, i) => [x + 2, y + 5 + i * 6, x + w - 2, y + 5 + i * 6]), 'rgba(0,0,0,0.25)');
+      block(ctx, shade(c, -0.3), x - 1, y + h - 4, w + 2, 4, 1.5); // base plate
+    }
+  } else if (slot === 'handle') {
+    // slanted grip
+    const g = ctx.createLinearGradient(x, 0, x + w, 0);
+    g.addColorStop(0, shade(c, 0.25)); g.addColorStop(1, shade(c, -0.35));
+    ctx.beginPath();
+    ctx.moveTo(x + 1, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w - 2, y + h - 2);
+    ctx.quadraticCurveTo(x + w - 3, y + h, x + w - 6, y + h); ctx.lineTo(x - 2, y + h); ctx.quadraticCurveTo(x - 4, y + h, x - 3, y + h - 3); ctx.closePath();
+    ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
+    lines(ctx, Array.from({ length: Math.floor(h / 5) - 1 }, (_, i) => [x + 1 - i * 0.3, y + 5 + i * 5, x + w - 3 - i * 0.1, y + 5 + i * 5]), 'rgba(0,0,0,0.3)');
+  } else if (slot === 'stock') {
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, shade(c, 0.25)); g.addColorStop(1, shade(c, -0.35));
+    ctx.beginPath(); // thin at the gun, wide butt at the back
+    ctx.moveTo(x + w, y + 1); ctx.lineTo(x + 4, y); ctx.quadraticCurveTo(x, y, x, y + 4);
+    ctx.lineTo(x, y + h - 2); ctx.quadraticCurveTo(x, y + h, x + 3, y + h); ctx.lineTo(x + w, y + h * 0.6); ctx.closePath();
+    ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
+    if (part.id === 'skeleton') { rrect(ctx, x + 6, y + 3, w - 14, h * 0.35, 2); ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill(); }
+    block(ctx, shade(c, -0.45), x, y, 3, h, 1); // butt pad
+  } else if (slot === 'bullets') {
+    // a little cartridge: brass case + coloured tip
+    const cw = w * 0.55;
+    block(ctx, '#d4a537', x, y, cw, h, 1.5);
+    ctx.beginPath(); ctx.moveTo(x + cw, y + 0.5); ctx.quadraticCurveTo(x + w, y + h / 2 - 1, x + w, y + h / 2); ctx.quadraticCurveTo(x + w, y + h / 2 + 1, x + cw, y + h - 0.5); ctx.closePath();
+    ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.stroke();
+  } else if (slot === 'extra' && part.id === 'scope') {
+    block(ctx, c, x + 4, y + 1, w - 8, h - 4, 3);
+    block(ctx, shade(c, -0.25), x, y, 6, h - 2, 2); block(ctx, shade(c, -0.25), x + w - 6, y, 6, h - 2, 2);
+    ctx.fillStyle = 'rgba(180,230,255,0.9)'; ctx.fillRect(x + w - 2, y + 2, 1.5, h - 6); // lens glint
+  } else if (slot === 'extra' && part.id === 'laser') {
+    block(ctx, c, x, y, w, h, 2);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x + w - 2, y + h / 2, 1.5, 0, Math.PI * 2); ctx.fill();
+  } else if (slot === 'extra' && part.id === 'reddot') {
+    block(ctx, c, x, y + h * 0.4, w, h * 0.6, 2);
+    rrect(ctx, x + w * 0.3, y, w * 0.45, h * 0.55, 2); ctx.strokeStyle = shade(c, -0.3); ctx.lineWidth = 1.5; ctx.stroke();
+  } else {
+    // bodies (and anything else): rounded shaded blocks + details
+    for (const [rx, ry, rw, rh] of part.shape || [[0, 0, w, h]]) block(ctx, c, x + rx, y + ry, rw, rh, Math.min(4, rh / 3));
+    if (slot === 'body' && w > 40) {
+      const top = (part.shape ? part.shape[0] : [0, 0, w, h]);
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; // ejection port
+      rrect(ctx, x + top[0] + top[2] * 0.42, y + top[1] + 3, top[2] * 0.16, Math.max(2, top[3] * 0.22), 1); ctx.fill();
+      lines(ctx, [[x + top[0] + top[2] * 0.68, y + top[1] + top[3] * 0.55, x + top[0] + top[2] * 0.92, y + top[1] + top[3] * 0.55]], 'rgba(255,255,255,0.18)');
+    }
   }
+  ctx.restore();
 }
 
 function drawGun(ctx, layout) {
