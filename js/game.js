@@ -56,10 +56,26 @@ const Game = (() => {
     }
   }
 
-  function startSP() {
+  // test = test mode: you can't die and can change guns/ability/loadout from the pause menu
+  function startSP(test = false) {
     resize();
     G = newState('sp', [MAP.w / 2, MAP.h / 2], PLAYER_COLORS[0]);
+    G.test = test;
     begin();
+  }
+
+  // test mode: rebuild your guns and ability from the current loadout, keeping where you are
+  function applyLoadout() {
+    if (!G) return;
+    const me = G.me, L = Account.user.loadout;
+    me.guns = [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))];
+    me.cur = 0;
+    me.ability = L.ability;
+    me.abCd = 0; me.abUses = (ABILITIES[L.ability] || {}).uses ?? Infinity;
+    me.shield = 0; me.shieldT = 0; me.speedT = 0; me.rapidT = 0; me.slowT = 0; me.lastStand = false;
+    applyBandolier(me);
+    abCache = '';
+    updateWeaponBar(true);
   }
 
   // players: [{id, name, team}] in spawn order. team mode = no friendly fire, last team standing wins
@@ -320,6 +336,7 @@ const Game = (() => {
       me.invT = ABILITIES.laststand.inv;
       G.banner = { text: 'LAST STAND!', t: 1.5 };
     }
+    if (me.hp <= 0 && G.test) { me.hp = me.maxHp; G.banner = { text: 'Test mode: you would have died', t: 1.5 }; }
     if (me.hp > 0) return;
     me.alive = false;
     burst(me.x, me.y, me.color, 20, 280);
@@ -1559,7 +1576,8 @@ const Game = (() => {
   function resume() { if (G) { G.paused = false; last = performance.now(); } }
 
   return {
-    startSP, startMP, stop, pause, resume,
+    startSP, startMP, stop, pause, resume, applyLoadout,
+    get test() { return !!(G && G.test); },
     get running() { return !!G; },
     get mode() { return G && G.mode; },
     get debugState() { return G; },

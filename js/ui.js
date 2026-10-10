@@ -65,6 +65,13 @@
 
   const spLoadout = () => openLoadout('Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); Game.startSP(); }, goMenu);
   el('spBtn').onclick = spLoadout;
+  el('testBtn').onclick = () => openLoadout('Start test', () => { show(null); buildMap('medium', MAP.seed, 'medium'); Game.startSP(true); }, goMenu);
+  // test mode: change loadout from the pause menu, then jump straight back in
+  el('testLoadoutBtn').onclick = () => {
+    overlay('pauseScreen', false);
+    openLoadout('Back to game', () => { show(null); Game.applyLoadout(); Game.resume(); },
+      () => { show(null); Game.applyLoadout(); Game.resume(); });
+  };
   el('mpBtn').onclick = () => { el('mpStatus').textContent = ''; show('mp'); };
   el('customizeBtn').onclick = () => openLoadout('Save', goMenu, goMenu);
   el('settingsBtn').onclick = () => overlay('settingsScreen', true);
@@ -239,7 +246,8 @@
   // ---------------------------------------------------------------- pause
   el('pauseBtn').onclick = () => {
     Game.pause();
-    el('pauseNote').textContent = Game.mode === 'mp' ? 'The round keeps going while this is open!' : '';
+    el('pauseNote').textContent = Game.mode === 'mp' ? 'The round keeps going while this is open!' : Game.test ? 'Test mode' : '';
+    el('testLoadoutBtn').classList.toggle('hidden', !Game.test);
     overlay('pauseScreen', true);
   };
   el('resumeBtn').onclick = () => { overlay('pauseScreen', false); Game.resume(); };
