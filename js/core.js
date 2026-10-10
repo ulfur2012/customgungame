@@ -155,6 +155,10 @@ function computeStats(kind, build) {
   s.falloff = body.falloff || 0;
   s.assist = body.assist || 1;
   s.recoil = body.recoil || 1; // extra kick (sniper)
+  const ammoType = findPart('bullets', build.bullets) || {};
+  s.bounce = ammoType.bounce || 0;
+  s.pierce = !!ammoType.pierce;
+  s.boom = ammoType.boom || null;
   if (body.fixed) Object.assign(s, body.fixed);
   s.flare = !!body.flare;
   // limited ammo: spare rounds on top of the loaded mag
@@ -223,7 +227,7 @@ function hashString(str) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 
-const emptyBuild = () => ({ barrel: null, mag: null, handle: null, stock: null, silencer: null });
+const emptyBuild = () => ({ body: null, barrel: null, mag: null, handle: null, stock: null, silencer: null, bullets: null });
 
 const Account = {
   user: null,

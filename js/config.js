@@ -35,6 +35,7 @@ const SLOTS = [
   { key: 'handle',   label: 'Handle' },
   { key: 'stock',    label: 'Stock' },
   { key: 'silencer', label: 'Silencer' },
+  { key: 'bullets',  label: 'Bullets' },
 ];
 
 // The two guns you build before every round.
@@ -113,6 +114,15 @@ const PARTS = {
     { id: 'padded',   name: 'Padded Stock',   w: 40, h: 16, color: '#6c5ce7', add: { knockback: -0.4 } },
     { id: 'heavy',    name: 'Heavy Stock',    w: 46, h: 18, color: '#a0522d', add: { knockback: -0.6, reloadTime: 0.3 } },
     { id: 'folding',  name: 'Folding Stock',  w: 22, h: 8,  color: '#fab1a0', gun: 'secondary', add: { knockback: -0.3 } },
+  ],
+  // Bullet types (both guns). None = normal bullets; the special ones do 20% less damage.
+  bullets: [
+    { id: 'bouncy',   name: 'Bouncing Bullets', gun: 'both', w: 14, h: 8, color: '#a29bfe', bounce: 4, mul: { damage: 0.8 },
+      note: 'Bounce off walls up to 4 times' },
+    { id: 'piercing', name: 'Armor Piercing',   gun: 'both', w: 16, h: 6, color: '#dfe6e9', pierce: true, mul: { damage: 0.8 },
+      note: 'Go through enemies' },
+    { id: 'boom',     name: 'Boom Bullets',     gun: 'both', w: 14, h: 8, color: '#ff7675', boom: { radius: 60, damage: 5 }, mul: { damage: 0.8 },
+      note: 'Small 5 damage explosion when they hit a wall' },
   ],
   // Silencers make you much quieter but each one makes one stat worse.
   silencer: [

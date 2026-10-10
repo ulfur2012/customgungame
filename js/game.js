@@ -243,7 +243,8 @@ const Game = (() => {
       const fan = s.pellets > 1 ? (i / (s.pellets - 1) - 0.5) * s.spread : 0;
       angles.push(+(me.aim + fan + (Math.random() - 0.5) * (s.pellets > 1 ? 0.08 : s.spread)).toFixed(4));
     }
-    for (const a of angles) addBullet(m.x, m.y, a, s.speed, s.damage, s.knockback, 'me', G.myId, s.range, s.falloff, s.flare);
+    const kind = { bounce: s.bounce, pierce: s.pierce, boom: s.boom };
+    for (const a of angles) addBullet(m.x, m.y, a, s.speed, s.damage, s.knockback, 'me', G.myId, s.range, s.falloff, s.flare, kind);
     const a = me.aim;
     G.lastCombat = G.time;
     gun.ammo--;
@@ -253,12 +254,13 @@ const Game = (() => {
     G.shake = Math.min(6 * s.recoil, G.shake + (1 + s.knockback * 0.5) * s.recoil);
     muzzleFlash(m.x, m.y, a);
     if (G.mode === 'mp') {
-      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, fl: s.flare ? 1 : 0, rng: s.range, fo: s.falloff, dmg: s.damage, kb: s.knockback, loud: s.hearRadius });
+      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, fl: s.flare ? 1 : 0, bt: kind, rng: s.range, fo: s.falloff, dmg: s.damage, kb: s.knockback, loud: s.hearRadius });
     }
   }
 
-  function addBullet(x, y, a, speed, dmg, kb, team, owner, range = BULLET_RANGE, falloff = 0, flare = false) {
-    G.bullets.push({ x, y, ox: x, oy: y, range, falloff, flare, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
+  function addBullet(x, y, a, speed, dmg, kb, team, owner, range = BULLET_RANGE, falloff = 0, flare = false, kind = {}) {
+    G.bullets.push({ x, y, ox: x, oy: y, range, falloff, flare,
+      bounce: kind.bounce || 0, pierce: !!kind.pierce, boom: kind.boom || null, hit: new Set(), vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
   }
   // damage after falloff (shotguns hit hardest up close)
   const bulletDamage = b => b.dmg * (1 - b.falloff * Math.min(1, Math.hypot(b.x - b.ox, b.y - b.oy) / b.range));
@@ -320,40 +322,83 @@ const Game = (() => {
       const x1 = b.x, y1 = b.y;
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
       if (b.life <= 0) continue;
-      if (b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h || MAP.walls.some(w => segmentHitsRect(x1, y1, b.x, b.y, w))) {
+      const wall = MAP.walls.find(w => segmentHitsRect(x1, y1, b.x, b.y, w));
+      const out = b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h;
+      if (wall || out) {
+        if (b.bounce > 0) {
+          // bounce: flip the side that crossed into the wall
+          b.bounce--;
+          let flipX, flipY;
+          if (out) { flipX = b.x < 0 || b.x > MAP.w; flipY = b.y < 0 || b.y > MAP.h; }
+          else {
+            const [rx, ry, rw, rh] = wall;
+            flipX = x1 < rx || x1 > rx + rw;
+            flipY = y1 < ry || y1 > ry + rh;
+            if (flipX && flipY) { flipX = Math.abs(b.vx) > Math.abs(b.vy); flipY = !flipX; }
+          }
+          if (flipX) b.vx = -b.vx;
+          if (flipY || (!flipX && !flipY)) b.vy = -b.vy;
+          b.x = x1; b.y = y1;
+          burst(x1, y1, '#a29bfe', 3, 60);
+          continue;
+        }
         b.life = 0;
-        burst(b.x, b.y, '#9aa3b2', 3, 80);
+        if (b.boom) miniBoom(x1, y1, b);
+        else burst(b.x, b.y, '#9aa3b2', 3, 80);
         continue;
       }
       const a = Math.atan2(b.vy, b.vx);
       if (b.team === 'me') {
         if (G.mode === 'sp') {
           for (const e of G.enemies) {
-            if (e.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, e.x, e.y, e.r)) continue;
+            if (e.hp <= 0 || b.hit.has(e) || !segHitsCircle(x1, y1, b.x, b.y, e.x, e.y, e.r)) continue;
+            b.hit.add(e);
             hitEnemy(e, b, a);
-            b.life = 0;
-            break;
+            if (!b.pierce) { b.life = 0; break; }
           }
         } else {
           for (const r of G.remotes.values()) {
-            if (r.alive && isEnemy(r) && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) { b.life = 0; r.flash = 0.08; break; }
+            if (r.alive && isEnemy(r) && !b.hit.has(r.id) && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) {
+              b.hit.add(r.id); r.flash = 0.08;
+              if (!b.pierce) { b.life = 0; break; }
+            }
           }
         }
       } else {
         const friendly = G.mode === 'mp' && G.teams && teamOf(b.owner) === me.team;
-        if (me.alive && !friendly && segHitsCircle(x1, y1, b.x, b.y, me.x, me.y, me.r)) {
+        if (me.alive && !friendly && !b.hit.has('me') && segHitsCircle(x1, y1, b.x, b.y, me.x, me.y, me.r)) {
+          b.hit.add('me');
           hurtMe(bulletDamage(b), b.kb, a, b.owner);
-          b.life = 0;
-          continue;
+          if (!b.pierce) { b.life = 0; continue; }
         }
         if (b.team === 'r') {
           for (const r of G.remotes.values()) {
-            if (r.id !== b.owner && r.alive && (!G.teams || r.team !== teamOf(b.owner)) && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) { b.life = 0; break; }
+            if (r.id !== b.owner && r.alive && !b.hit.has(r.id) && (!G.teams || r.team !== teamOf(b.owner)) && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) {
+              b.hit.add(r.id);
+              if (!b.pierce) { b.life = 0; break; }
+            }
           }
         }
       }
     }
     G.bullets = G.bullets.filter(b => b.life > 0);
+  }
+
+  // boom bullets: a small 5 damage blast where they hit a wall
+  function miniBoom(x, y, b) {
+    const { radius, damage } = b.boom, me = G.me;
+    burst(x, y, '#ff7675', 10, 200);
+    G.fx.push({ x, y, vx: 0, vy: 0, life: 0.15, max: 0.15, size: radius * 1.4, color: 'rgba(255,120,100,0.45)' });
+    if (b.team === 'me') {
+      if (G.mode === 'sp') {
+        for (const e of [...G.enemies]) {
+          if (Math.hypot(e.x - x, e.y - y) <= radius + e.r) hitEnemy(e, { dmg: damage, falloff: 0, kb: 1, x: e.x, y: e.y, ox: e.x, oy: e.y, range: 1 }, Math.atan2(e.y - y, e.x - x));
+        }
+      }
+    } else {
+      const friendly = G.mode === 'mp' && G.teams && teamOf(b.owner) === me.team;
+      if (me.alive && !friendly && Math.hypot(me.x - x, me.y - y) <= radius + me.r) hurtMe(damage, 1, Math.atan2(me.y - y, me.x - x), b.owner);
+    }
   }
 
   function burst(x, y, color, n, speed) {
@@ -886,7 +931,7 @@ const Game = (() => {
     const r = remote(m.from);
     r.kick = 6;
     const angles = m.as || [m.a];
-    for (const a of angles) addBullet(m.x, m.y, a, m.sp || BULLET_SPEED, m.dmg, m.kb, 'r', m.from, m.rng || BULLET_RANGE, m.fo || 0, !!m.fl);
+    for (const a of angles) addBullet(m.x, m.y, a, m.sp || BULLET_SPEED, m.dmg, m.kb, 'r', m.from, m.rng || BULLET_RANGE, m.fo || 0, !!m.fl, m.bt);
     muzzleFlash(m.x, m.y, angles[0]);
     hear(m.x, m.y, m.loud);
   });
@@ -952,7 +997,7 @@ const Game = (() => {
     ctx.lineCap = 'round';
     ctx.lineWidth = 3;
     for (const b of G.bullets) {
-      ctx.strokeStyle = b.flare ? '#ff7b00' : b.team === 'me' ? '#ffe9a8' : '#ff8a7a';
+      ctx.strokeStyle = b.flare ? '#ff7b00' : b.bounce || b.boom || b.pierce ? (b.boom ? '#ff7675' : b.pierce ? '#dfe6e9' : '#a29bfe') : b.team === 'me' ? '#ffe9a8' : '#ff8a7a';
       ctx.lineWidth = b.flare ? 9 : 3;
       ctx.beginPath();
       ctx.moveTo(b.x, b.y);
