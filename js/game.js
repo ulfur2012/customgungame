@@ -527,6 +527,7 @@ const Game = (() => {
     if (!A) return;
     me.invT = Math.max(0, me.invT - dt);
     me.abCd = Math.max(0, me.abCd - dt);
+    if (G.test && G.infAbility) { me.abCd = 0; me.abUses = Infinity; me.frozenT = 0; } // test mode: infinite ability, no stun
     if (A.respawn && me.abUses < A.uses) { // weak abilities come back by themselves
       me.refillT = (me.refillT ?? A.respawn) - dt;
       if (me.refillT <= 0) { me.abUses++; me.refillT = A.respawn; G.texts.push({ x: me.x, y: me.y - 34, text: `+1 ${A.name}`, color: '#2bd96b', life: 1 }); }
@@ -570,7 +571,7 @@ const Game = (() => {
     }
     const pressed = Input.take('abPress');
     const held = Input.abilityHeld();
-    const ready = me.abCd === 0 && me.abUses > 0 && me.shieldT === 0;
+    const ready = me.abCd === 0 && me.abUses > 0 && (me.shieldT === 0 || G.infAbility);
     const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'resupply', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability);
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
@@ -2569,6 +2570,8 @@ const Game = (() => {
   return {
     startSP, startMP, stop, pause, resume, applyLoadout, spawnEpic,
     get test() { return !!(G && G.test); },
+    get infAbility() { return !!(G && G.infAbility); },
+    set infAbility(v) { if (G) G.infAbility = v; },
     get running() { return !!G; },
     get mode() { return G && G.mode; },
     get debugState() { return G; },

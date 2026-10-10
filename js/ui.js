@@ -70,6 +70,11 @@
   el('spStart').onclick = () => { testMode = el('testToggle').checked; overlay('spScreen', false); spLoadout(); };
   el('spCancel').onclick = () => overlay('spScreen', false);
   // test mode: change loadout from the pause menu, then jump straight back in
+  el('testInfBtn').onclick = () => {
+    Game.infAbility = !Game.infAbility;
+    el('testInfBtn').textContent = `∞ Infinite ability: ${Game.infAbility ? 'ON' : 'OFF'}`;
+    el('testInfBtn').classList.toggle('primary', Game.infAbility);
+  };
   el('testEpicBtn').onclick = () => { overlay('pauseScreen', false); Game.spawnEpic(); Game.resume(); };
   el('testLoadoutBtn').onclick = () => {
     overlay('pauseScreen', false);
@@ -280,6 +285,9 @@
     el('pauseNote').textContent = Game.mode === 'mp' ? 'The round keeps going while this is open!' : Game.test ? 'Test mode' : '';
     el('testLoadoutBtn').classList.toggle('hidden', !Game.test);
     el('testEpicBtn').classList.toggle('hidden', !Game.test);
+    el('testInfBtn').classList.toggle('hidden', !Game.test);
+    el('testInfBtn').textContent = `∞ Infinite ability: ${Game.infAbility ? 'ON' : 'OFF'}`;
+    el('testInfBtn').classList.toggle('primary', Game.infAbility);
     overlay('pauseScreen', true);
   };
   el('resumeBtn').onclick = () => { overlay('pauseScreen', false); Game.resume(); };
