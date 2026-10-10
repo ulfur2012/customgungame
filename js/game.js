@@ -566,7 +566,7 @@ const Game = (() => {
   function updateGadgets(dt) {
     const me = G.me, M = ABILITIES.medic, T = ABILITIES.turret;
     for (const z of G.zones) {
-      z.t -= dt; z.tick -= dt;
+      z.t -= dt; z.tick -= dt; z.age += dt;
       if (z.tick <= 0) {
         z.tick = 1;
         if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - z.x, me.y - z.y) <= M.radius) heal(M.perSec);
@@ -600,11 +600,26 @@ const Game = (() => {
   function drawGadgets() {
     const M = ABILITIES.medic;
     for (const z of G.zones) {
+      // grows in with a little overshoot when it lands, then gently pulses
+      const a = Math.min(1, z.age / 0.35), pop = a < 1 ? a * (1 + 0.25 * Math.sin(a * Math.PI)) : 1;
+      const r = M.radius * pop * (1 + 0.03 * Math.sin(G.time * 4));
       ctx.fillStyle = 'rgba(50,255,126,0.13)';
       ctx.strokeStyle = 'rgba(50,255,126,0.7)'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(z.x, z.y, M.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(z.x, z.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // shockwave ring right after landing
+      if (z.age < 0.6) {
+        const k = z.age / 0.6;
+        ctx.strokeStyle = `rgba(180,255,210,${1 - k})`; ctx.lineWidth = 6 * (1 - k) + 1;
+        ctx.beginPath(); ctx.arc(z.x, z.y, M.radius * (0.3 + 1.1 * k), 0, Math.PI * 2); ctx.stroke();
+      }
+      const c = 1 + (z.age < 0.35 ? 0.6 * (1 - a) : 0);
       ctx.fillStyle = '#32ff7e';
-      ctx.fillRect(z.x - 4, z.y - 14, 8, 28); ctx.fillRect(z.x - 14, z.y - 4, 28, 8);
+      ctx.fillRect(z.x - 4 * c, z.y - 14 * c, 8 * c, 28 * c); ctx.fillRect(z.x - 14 * c, z.y - 4 * c, 28 * c, 8 * c);
+      // little green pluses floating up
+      if (Math.random() < 0.15) {
+        const ang = Math.random() * Math.PI * 2, d = Math.random() * M.radius * 0.9;
+        G.fx.push({ x: z.x + Math.cos(ang) * d, y: z.y + Math.sin(ang) * d, vx: 0, vy: -60, life: 0.7, max: 0.7, size: 5, color: '#7dffaa' });
+      }
     }
     for (const t of G.turrets) {
       ctx.fillStyle = '#4b4b5a'; ctx.strokeStyle = '#cd84f1'; ctx.lineWidth = 3;
@@ -687,7 +702,13 @@ const Game = (() => {
       n.t += dt;
       if (n.t < G_.flight) continue;
       n.done = true;
-      if (n.kind === 'medic') G.zones.push({ x: n.x1, y: n.y1, t: ABILITIES.medic.duration, tick: 1 });
+      if (n.kind === 'medic') {
+        G.zones.push({ x: n.x1, y: n.y1, t: ABILITIES.medic.duration, tick: 1, age: 0 });
+        // landing effect: green splash + sparkles
+        burst(n.x1, n.y1, '#32ff7e', 26, 320);
+        burst(n.x1, n.y1, '#eafff1', 10, 180);
+        G.fx.push({ x: n.x1, y: n.y1, vx: 0, vy: 0, life: 0.2, max: 0.2, size: ABILITIES.medic.radius * 1.2, color: 'rgba(50,255,126,0.35)' });
+      }
       else if (n.kind === 'turret') {
         // the turret gets a copy of your sidearm
         const side = me.guns[1];
