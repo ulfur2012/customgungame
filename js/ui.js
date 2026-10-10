@@ -271,7 +271,7 @@
       const on = (L.ability === c.a && L.ability2 === c.b) || (L.ability === c.b && L.ability2 === c.a);
       const card = document.createElement('button');
       card.className = 'card combo-pick' + (on ? ' equipped' : '');
-      card.innerHTML = `<div class="combo-icons"><span style="background:${A1.color}">${A1.icon}</span>+<span style="background:${A2.color}">${A2.icon}</span></div>
+      card.innerHTML = `<div class="combo-icons"><span>${abilityIconSVG(c.a, 32)}</span>+<span>${abilityIconSVG(c.b, 32)}</span></div>
         <div class="card-name">${c.name}${c.passive ? ' <small class="hint">auto</small>' : ''}${on ? ' ✓' : ''}</div>
         <div class="card-desc"><b>${A1.name} + ${A2.name}</b><br>${c.how}</div>`;
       card.onclick = () => {
@@ -289,7 +289,7 @@
       const A = ABILITIES[id];
       const card = document.createElement('button');
       card.className = 'card' + (id === current ? ' equipped' : '');
-      card.innerHTML = `<div class="ab-icon" style="background:${A.color}">${A.icon}</div>
+      card.innerHTML = `<div class="ab-icon">${abilityIconSVG(id, 36)}</div>
         <div class="card-name">${A.name} <small class="hint">${A.type}${id === L[abSlot ? 'ability' : 'ability2'] ? ' · other slot' : ''}</small></div>
         <div class="card-desc">${A.desc}</div>`;
       card.onclick = () => pick(id);
@@ -304,12 +304,12 @@
     const A = ABILITIES[current];
     const { ctx, w, h } = fitCanvas(el('preview'));
     if (w && h) {
-      ctx.fillStyle = A.color;
-      ctx.beginPath(); ctx.arc(w / 2, h / 2 - 10, Math.min(w, h) * 0.22, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.font = `900 ${Math.round(Math.min(w, h) * 0.2)}px system-ui, sans-serif`;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(A.icon, w / 2, h / 2 - 6);
+      const r = Math.min(w, h) * 0.24;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath(); ctx.arc(w / 2, h / 2 - 10, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = A.color; ctx.lineWidth = 3; ctx.stroke();
+      drawAbilityIcon(ctx, current, w / 2, h / 2 - 10, r * 1.25);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = '800 16px system-ui, sans-serif';
       ctx.fillText(A.name, w / 2, h - 22);
     }

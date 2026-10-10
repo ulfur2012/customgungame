@@ -211,6 +211,79 @@ function describeMods(part) {
   return out;
 }
 
+// ---------------------------------------------------------------- ability icons
+// Simple shapes as SVG paths in a 40x40 box. [path, fill rule]. Used as SVG in menus and Path2D on canvas.
+const ICON_SHAPES = {
+  plus:      ['M15 5h10v10h10v10H25v10H15V25H5V15h10z'],
+  heart:     ['M20 35L6 21a8.5 8.5 0 0 1 14-11 8.5 8.5 0 0 1 14 11z'],
+  heartbolt: ['M20 35L6 21a8.5 8.5 0 0 1 14-11 8.5 8.5 0 0 1 14 11zM22 12l-7 10h5l-2 8 7-11h-5z', 'evenodd'],
+  shield:    ['M20 3l14 5v11c0 9-6 15-14 18C12 34 6 28 6 19V8z'],
+  vest:      ['M9 4h7l4 5 4-5h7v32H9z'],
+  grenade:   ['M20 12a12 12 0 1 1-.01 0zM16 3h8v8h-8zM24 5h7v4h-7z'],
+  rocket:    ['M20 2l7 11v17h-14V13zM13 24l-6 10h6zM27 24l6 10h-6zM16 31h8l-4 7z'],
+  can:       ['M12 7h16v29H12zM15 3h10v4H15z'],
+  burger:    ['M5 17a15 11 0 0 1 30 0zM4 20h32v4H4zM5 27h30a6 6 0 0 1-6 6H11a6 6 0 0 1-6-6z'],
+  arrow:     ['M3 15h18V7l16 13-16 13v-8H3z'],
+  chevrons:  ['M3 6l13 14L3 34h7l13-14L10 6zM17 6l13 14-13 14h7l13-14L24 6z'],
+  reload:    ['M20 4a16 16 0 1 0 16 16h-6a10 10 0 1 1-10-10v6l9-9-9-9z'],
+  star:      ['M20 2l5 12 13 1-10 8 3 13-11-7-11 7 3-13L2 15l13-1z'],
+  burst:     ['M20 1l4 11 11-5-5 11 11 4-11 4 5 11-11-5-4 11-4-11-11 5 5-11L1 20l11-4L7 5l11 5z'],
+  hourglass: ['M8 3h24v5l-9 12 9 12v5H8v-5l9-12-9-12z'],
+  turret:    ['M20 9a11 11 0 1 1-.01 0zM20 17h17v6H20z'],
+  box:       ['M5 12l15-8 15 8v17l-15 8-15-8zM5 12l15 8 15-8M20 20v17'],
+  fangs:     ['M5 6h30v7l-6 18-5-18h-8l-5 18-6-18z'],
+  skull:     ['M20 3a15 14 0 0 1 15 14c0 5-3 8-5 9v8H10v-8c-2-1-5-4-5-9A15 14 0 0 1 20 3zM13 15a4 4 0 1 0 .01 0zM27 15a4 4 0 1 0 .01 0z', 'evenodd'],
+  bullets:   ['M7 12a3 3 0 0 1 6 0v24H7zM17 8a3 3 0 0 1 6 0v28h-6zM27 12a3 3 0 0 1 6 0v24h-6z'],
+  vortex:    ['M20 3a17 17 0 1 1-.01 0zM20 10a10 10 0 1 0 .01 0zM20 16a4 4 0 1 1-.01 0z', 'evenodd'],
+  flame:     ['M20 2c3 8 12 12 12 22a12 12 0 0 1-24 0c0-6 4-9 6-13 1 4 3 6 5 6-1-5 0-10 1-15z'],
+  snow:      ['M17 2h6v13l9-9 4 4-9 9h13v6H27l9 9-4 4-9-9v13h-6V27l-9 9-4-4 9-9H2v-6h13L6 10l4-4 7 7z'],
+  person:    ['M20 3a7 7 0 1 1-.01 0zM8 37v-9a12 12 0 0 1 24 0v9z'],
+  wall:      ['M3 10h16v8H3zM21 10h16v8H21zM3 20h8v8H3zM13 20h14v8H13zM29 20h8v8h-8zM3 30h16v6H3zM21 30h16v6H21z'],
+  mine:      ['M20 9a11 11 0 1 1-.01 0zM18 2h4v8h-4zM18 30h4v8h-4zM2 18h8v4H2zM30 18h8v4h-8z'],
+  up:        ['M3 22L20 6l17 16v8L20 14 3 30zM3 34L20 18l17 16v4L20 26 3 38z'],
+  dish:      ['M5 31A22 22 0 0 1 31 5l-4 5A16 16 0 0 0 10 27zM14 22l8-8 4 4-8 8zM6 34h14v4H6z'],
+  bolt:      ['M24 2L7 23h11l-4 15 19-22H22z'],
+  cloud:     ['M12 14a7 7 0 1 1-.01 0zM26 12a9 9 0 1 1-.01 0zM18 22a10 10 0 1 1-.01 0zM8 22a6 6 0 1 1-.01 0zM32 22a6 6 0 1 1-.01 0z'],
+  hook:      ['M21 3h5v21a10 10 0 1 1-20 0h5a5 5 0 1 0 10 0z'],
+  ghost:     ['M7 37V18a13 13 0 0 1 26 0v19l-4-4-4 4-5-4-5 4-4-4zM15 15a3 3 0 1 0 .01 0zM25 15a3 3 0 1 0 .01 0z', 'evenodd'],
+  mirror:    ['M20 2l16 18-16 18L4 20zM20 10l9 10-9 10-9-10z', 'evenodd'],
+  battery:   ['M10 8h20v30H10zM15 3h10v5H15zM22 13l-7 11h5l-2 9 7-12h-5z', 'evenodd'],
+  hammer:    ['M5 5h24v11H5zM14 16h6v21h-6zM29 8h6v5h-6z'],
+  rewind:    ['M37 7L21 20l16 13zM20 7L4 20l16 13z'],
+  spikes:    ['M3 37L9 9l5 28 6-35 6 35 5-28 6 28z'],
+  bone:      ['M12 16h16v8H12zM9 11a5 5 0 1 1-.01 0zM9 21a5 5 0 1 1-.01 0zM31 11a5 5 0 1 1-.01 0zM31 21a5 5 0 1 1-.01 0z'],
+  gem:       ['M10 5h20l7 11-17 21L3 16z'],
+  dots:      ['M20 13a7 7 0 1 1-.01 0zM9 4a5 5 0 1 1-.01 0zM31 4a5 5 0 1 1-.01 0zM9 26a5 5 0 1 1-.01 0zM31 26a5 5 0 1 1-.01 0z'],
+  ring:      ['M20 3a17 17 0 1 1-.01 0zM20 9a11 11 0 1 0 .01 0z', 'evenodd'],
+  syringe:   ['M17 2h6v5h4v4h-2v18l-5 7-5-7V11h-2V7h4z'],
+  dagger:    ['M20 2l5 8v17h-10V10zM10 27h20v4H10zM17 31h6v7h-6z'],
+  magnet:    ['M5 4h10v17a5 5 0 0 0 10 0V4h10v17a15 15 0 0 1-30 0z'],
+  moon:      ['M25 3a17 17 0 1 0 12 27A14 14 0 0 1 25 3z'],
+  clover:    ['M20 4a8 8 0 1 1-.01 0zM20 20a8 8 0 1 1-.01 0zM12 12a8 8 0 1 1-.01 0zM28 12a8 8 0 1 1-.01 0zM18 26h4v12h-4z'],
+};
+const iconOf = id => ICON_SHAPES[ABILITY_ICONS[id]] || ICON_SHAPES.star;
+// very dark ability colours get a light grey icon so you can still see it
+function iconColor(id) {
+  const c = ABILITIES[id].color, n = parseInt(c.slice(1), 16);
+  const lum = (0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255)) / 255;
+  return lum < 0.3 ? '#b2bec3' : c;
+}
+// SVG for menus. size in px, colour defaults to the ability colour
+function abilityIconSVG(id, size = 32, color) {
+  const [d, rule] = iconOf(id);
+  return `<svg viewBox="0 0 40 40" width="${size}" height="${size}" aria-hidden="true"><path d="${d}" fill="${color || iconColor(id)}" fill-rule="${rule || 'nonzero'}"/></svg>`;
+}
+// draw on a canvas, centred on (x, y)
+function drawAbilityIcon(ctx, id, x, y, size, color) {
+  const [d, rule] = iconOf(id);
+  ctx.save();
+  ctx.translate(x - size / 2, y - size / 2);
+  ctx.scale(size / 40, size / 40);
+  ctx.fillStyle = color || iconColor(id);
+  ctx.fill(new Path2D(d), rule || 'nonzero');
+  ctx.restore();
+}
+
 // ---------------------------------------------------------------- art
 let onArtLoaded = () => {};
 function loadArt() {

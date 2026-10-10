@@ -512,17 +512,17 @@ const ABILITY_CRATE = { chance: 0.6 };
 // chance = per health pack spawn (every 30s), so about one every 6 minutes.
 const EPIC_CRATE = { chance: 0.08 };
 
-// Ability icons (shown in the Ability tab, the in-game buttons and combo cards)
+// Ability icons: simple flat shapes in the ability's colour until real art is added.
+// Shape names are drawn by ICON_SHAPES in core.js.
 const ABILITY_ICONS = {
-  grenade: '💣', shield: '🛡️', regen: '💚', rpg: '🚀', energy: '🥤', burger: '🍔', dash: '💨', rapid: '⏩',
-  armor: '🦺', hands: '✋', blink: '✨', nova: '💥', slowmo: '⏳', medic: '🩹', turret: '🔫', resupply: '📦',
-  vampire: '🧛', laststand: '💀', sprinter: '👟', bandolier: '🎒', blackhole: '🌀', firepit: '🔥', freeze: '❄️',
-  decoy: '🤖', barrier: '🧱', mine: '🧨', jumppad: '🦘', radar: '📡', tesla: '⚡', smoke: '🌫️', grapple: '🪝',
-  phase: '👻', reflect: '🪞', overcharge: '🔋', quake: '🔨', recall: '⏪', thorns: '🌵', scavenger: '🦴',
-  glass: '🔮', adrenaline: '❤️‍🔥', cluster: '🎆', bubble: '🫧', stim: '💉', shadowstep: '🥷', magnet: '🧲',
-  ninja: '🌑', lucky: '🍀',
+  grenade: 'grenade', shield: 'shield', regen: 'heart', rpg: 'rocket', energy: 'can', burger: 'burger', dash: 'arrow',
+  rapid: 'chevrons', armor: 'vest', hands: 'reload', blink: 'star', nova: 'burst', slowmo: 'hourglass', medic: 'plus',
+  turret: 'turret', resupply: 'box', vampire: 'fangs', laststand: 'skull', sprinter: 'chevrons', bandolier: 'bullets',
+  blackhole: 'vortex', firepit: 'flame', freeze: 'snow', decoy: 'person', barrier: 'wall', mine: 'mine', jumppad: 'up',
+  radar: 'dish', tesla: 'bolt', smoke: 'cloud', grapple: 'hook', phase: 'ghost', reflect: 'mirror', overcharge: 'battery',
+  quake: 'hammer', recall: 'rewind', thorns: 'spikes', scavenger: 'bone', glass: 'gem', adrenaline: 'heartbolt',
+  cluster: 'dots', bubble: 'ring', stim: 'syringe', shadowstep: 'dagger', magnet: 'magnet', ninja: 'moon', lucky: 'clover',
 };
-for (const id in ABILITIES) ABILITIES[id].icon = ABILITY_ICONS[id] || ABILITIES[id].name[0];
 
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
 const ABILITY_GROUPS = [
