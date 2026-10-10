@@ -905,7 +905,10 @@ const Game = (() => {
     if (A.hp) g.hp = g.maxHp = g.hp || A.hp; // clones bring their own HP
     g.sc = g.big ? MERGE.size : 1; // big (merged) buildings
     if (g.big) { g.hp = g.maxHp = A.hp * MERGE.hp; g.t = (A.duration || g.t) * MERGE.range; }
-    if (g.kind === 'decoy') Object.assign(g, { r: PLAYER.r, cd: 0.5, kick: 0, aim: g.a });
+    if (g.kind === 'decoy') {
+      Object.assign(g, { r: PLAYER.r, cd: 0.5, kick: 0, aim: g.a, reloadT: 0 });
+      if (g.stats) { g.ammo = g.stats.magSize; g.reserve = g.stats.magSize * A.spareMags; }
+    }
     if (g.kind === 'barrier') {
       const L = A.len * (g.big ? 1.4 : 1), T = A.thick * (g.big ? 1.5 : 1), vert = Math.abs(Math.cos(g.a)) > Math.abs(Math.sin(g.a));
       g.rect = vert ? [g.x - T / 2, g.y - L / 2, T, L] : [g.x - L / 2, g.y - T / 2, L, T];
@@ -986,11 +989,13 @@ const Game = (() => {
           g.healT = 1;
           g.hp = Math.min(g.maxHp, g.hp + COMBO.buddyHeal);
           if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - g.x, me.y - g.y) <= COMBO.buddyRadius) heal(COMBO.buddyHeal);
+          healBuddies(g.x, g.y, COMBO.buddyRadius, COMBO.buddyHeal);
         }
       }
       if (g.kind === 'bubble' && g.heal && g.tick <= 0) {
         g.tick = 1;
         if (me.alive && me.hp < me.maxHp && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius) heal(COMBO.domeHeal);
+        if (isMine(g.owner)) healBuddies(g.x, g.y, A.radius, COMBO.domeHeal);
       }
       if (g.kind === 'barrier' && g.fire && g.rect && Math.random() < 0.5) {
         const [rx, ry, rw, rh] = g.rect;
@@ -1024,13 +1029,65 @@ const Game = (() => {
     if (G.mode === 'sp') for (const e of G.enemies) if (e.frozen > 0) e.frozen -= dt;
   }
   // Buddy (decoy): a teammate bot with a copy of your main gun that hunts enemies
+  // heal sources (heal zones, medic turrets, medic buddies, healing domes) also patch up your buddies
+  function healBuddies(x, y, r, amount) {
+    for (const b of G.gadgets) {
+      if (b.kind !== 'decoy' || b.dead || !isMine(b.owner) || b.hp >= b.maxHp || Math.hypot(b.x - x, b.y - y) > r) continue;
+      b.hp = Math.min(b.maxHp, b.hp + amount);
+      G.texts.push({ x: b.x, y: b.y - 34, text: `+${amount}`, color: '#4cff7a', life: 0.7 });
+    }
+  }
+
+  // where a buddy that needs ammo or healing should go (null = nothing to go for)
+  function buddyNeed(g) {
+    const A = ABILITIES.decoy, near = list => list.reduce((b, o) => (!b || Math.hypot(o.x - g.x, o.y - g.y) < Math.hypot(b.x - g.x, b.y - g.y) ? o : b), null);
+    if (g.stats && g.ammo === 0 && g.reserve === 0) {
+      const box = near(G.packs.filter(p => p.kind === 'ammo'));
+      if (box) return { x: box.x, y: box.y, why: 'ammo' };
+    }
+    if (g.hp < g.maxHp * A.lowHp) {
+      const spots = [
+        ...G.packs.filter(p => !p.kind),                                   // green health packs
+        ...G.zones.map(z => ({ x: z.x, y: z.y })),                         // heal zones
+        ...G.turrets.filter(t => t.medic),                                  // medic turrets
+        ...G.gadgets.filter(o => o !== g && !o.dead && isMine(o.owner) && (o.medicBuddy || (o.kind === 'bubble' && o.heal))),
+      ];
+      const h = near(spots);
+      if (h) return { x: h.x, y: h.y, why: 'heal' };
+    }
+    return null;
+  }
+
   function updateBuddy(g, dt) {
     const A = ABILITIES.decoy;
     let best = null, bd = Infinity;
     for (const t of targets()) { const d = Math.hypot(t.x - g.x, t.y - g.y); if (d < bd) { best = t; bd = d; } }
     let mx = 0, my = 0;
     const sees = best && lineOfSight(g.x, g.y, best.x, best.y) && !smokeBlocks(g.x, g.y, best.x, best.y);
-    if (best) {
+    // reload from the spare mag
+    if (g.stats && g.ammo === 0 && g.reserve > 0) {
+      g.reloadT += dt;
+      if (g.reloadT >= g.stats.reloadTime) { g.reloadT = 0; const n = Math.min(g.stats.magSize, g.reserve); g.ammo = n; g.reserve -= n; }
+    }
+    // pick up ammo boxes / health packs it walks over
+    for (const p of G.packs) {
+      if (Math.hypot(p.x - g.x, p.y - g.y) > g.r + HEALTH_PACK.r) continue;
+      if (p.kind === 'ammo' && g.stats && g.ammo + g.reserve < g.stats.magSize * (1 + A.spareMags)) { g.ammo = g.stats.magSize; g.reserve = g.stats.magSize * A.spareMags; }
+      else if (!p.kind && g.hp < g.maxHp) g.hp = Math.min(g.maxHp, g.hp + HEALTH_PACK.heal);
+      else continue;
+      G.texts.push({ x: g.x, y: g.y - 34, text: p.kind === 'ammo' ? '+AMMO' : `+${HEALTH_PACK.heal}`, color: p.kind === 'ammo' ? '#ffd23f' : '#4cff7a', life: 0.9 });
+      removePack(p.id);
+      if (G.mode === 'mp') Net.send({ t: 'took', id: p.id });
+      break;
+    }
+    const need = buddyNeed(g);
+    g.need = need && need.why;
+    if (need) { // out of ammo / hurt: head for supplies, still turning to face enemies it can see
+      g.roam = null;
+      ({ x: mx, y: my } = buddyPath(g, need.x, need.y, dt));
+      if (Math.hypot(need.x - g.x, need.y - g.y) < 30) mx = my = 0; // sitting in a heal zone
+      g.aim = sees ? Math.atan2(best.y - g.y, best.x - g.x) : (mx || my ? Math.atan2(my, mx) : g.aim);
+    } else if (best) {
       g.roam = null;
       g.aim = Math.atan2(best.y - g.y, best.x - g.x);
       if (sees) {
@@ -1048,9 +1105,10 @@ const Game = (() => {
     collideWorld(g);
     g.cd -= dt;
     g.kick = Math.max(0, g.kick - 40 * dt);
-    if (sees && bd < g.stats.range && g.cd <= 0) {
+    if (sees && bd < g.stats.range && g.cd <= 0 && g.ammo > 0) {
       const s = g.stats;
-      g.cd = Math.max(s.fireDelay, s.reloadTime / s.magSize, 0.12);
+      g.ammo--;
+      g.cd = Math.max(s.fireDelay, 0.12);
       g.kick = 4;
       shootFrom(g.x + Math.cos(g.aim) * 30, g.y + Math.sin(g.aim) * 30, g.aim, s);
     }
@@ -1173,6 +1231,12 @@ const Game = (() => {
         if (g.medicBuddy) { ctx.fillStyle = '#32ff7e'; ctx.fillRect(g.x - 3, g.y - 9, 6, 18); ctx.fillRect(g.x - 9, g.y - 3, 18, 6); }
         drawBar(g.x, g.y - PLAYER.r - 14, 54, 7, g.hp / g.maxHp, false, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
         nameTag(`${g.name}'s buddy`, g.x, g.y - PLAYER.r - 20, hostileTo(g.owner) ? '#ff5050' : '#4aa3ff');
+        if (isMine(g.owner) && g.stats) {
+          const txt = g.ammo === 0 && g.reserve === 0 ? 'NO AMMO' : g.ammo === 0 ? 'RELOADING' : g.need === 'heal' ? 'HEALING' : `${g.ammo}/${g.reserve}`;
+          ctx.font = '700 10px system-ui, sans-serif'; ctx.textAlign = 'center';
+          ctx.fillStyle = txt === 'NO AMMO' ? '#ff6b6b' : txt === 'HEALING' ? '#4cff7a' : '#ffd23f';
+          ctx.fillText(txt, g.x, g.y + PLAYER.r + 14);
+        }
       } else if (g.kind === 'barrier' && g.rect) {
         const [x, y, w, h] = g.rect;
         ctx.fillStyle = g.fire ? 'rgba(255,107,26,0.6)' : g.electric ? 'rgba(254,202,87,0.55)' : 'rgba(84,160,255,0.55)'; ctx.strokeStyle = g.electric ? '#fff7d6' : '#c8e1ff'; ctx.lineWidth = 2;
@@ -1607,6 +1671,7 @@ const Game = (() => {
       if (z.tick <= 0) {
         z.tick = 1;
         if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - z.x, me.y - z.y) <= M.radius) heal(M.perSec);
+        healBuddies(z.x, z.y, M.radius, M.perSec);
       }
     }
     G.zones = G.zones.filter(z => z.t > 0);
@@ -1650,7 +1715,7 @@ const Game = (() => {
       }
       if (t.medic) { // medic turret heals you when you're close
         t.healT -= dt;
-        if (t.healT <= 0) { t.healT = 1; const me = G.me; if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - t.x, me.y - t.y) <= COMBO.medicRadius) heal(COMBO.medicHeal); }
+        if (t.healT <= 0) { t.healT = 1; const me = G.me; if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - t.x, me.y - t.y) <= COMBO.medicRadius) heal(COMBO.medicHeal); healBuddies(t.x, t.y, COMBO.medicRadius, COMBO.medicHeal); }
       }
       // spotter turrets see through walls from very far away
       let best = null, bd = t.spot ? COMBO.spotRange : t.stats.range; // otherwise as far as your sidearm shoots
