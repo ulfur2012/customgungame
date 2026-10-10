@@ -230,7 +230,10 @@ function buildMap(layout = 'medium', seed = MAP.seed) {
     const x0 = ri(1, cols - w - 1), y0 = ri(1, rows - h - 1);
     const area = [], doors = new Set();
     for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) area.push([x, y]);
-    const sides = [0, 1, 2, 3].sort(() => rand() - 0.5).slice(0, ri(2, 3)); // 2-3 entrances
+    // shuffle the 4 sides (Fisher-Yates, so every browser builds the exact same map)
+    const order = [0, 1, 2, 3];
+    for (let i = 3; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    const sides = order.slice(0, ri(2, 3)); // 2-3 entrances
     for (const side of sides) {
       const along = side < 2 ? ri(x0 + 1, x0 + w - 2) : ri(y0 + 1, y0 + h - 2);
       const [dx, dy] = side === 0 ? [along, y0] : side === 1 ? [along, y0 + h - 1] : side === 2 ? [x0, along] : [x0 + w - 1, along];
@@ -346,4 +349,4 @@ const ABILITIES = {
 const LOADOUT_PRESETS = 3; // saved loadouts you can switch between
 
 // Rare red crate: restores all your ability uses. Chance that one shows up each time packs spawn.
-const ABILITY_CRATE = { chance: 0.25 };
+const ABILITY_CRATE = { chance: 0.6 };

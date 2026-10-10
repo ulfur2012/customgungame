@@ -764,13 +764,19 @@ const Game = (() => {
   function spawnEnemy(type) {
     const def = ENEMIES[type], me = G.me;
     let x = 0, y = 0;
-    for (let i = 0; i < 40; i++) {
+    // the boss only spawns where a 2-wide route leads to you
+    const big = def.r > MAP.grid * 0.45;
+    if (big) { flowT = 0; updateFlow(0); }
+    for (let i = 0; i < 200; i++) {
       x = def.r + Math.random() * (MAP.w - def.r * 2);
       y = def.r + Math.random() * (MAP.h - def.r * 2);
       const c = { x, y, r: def.r };
       collideWorld(c);
       x = c.x; y = c.y;
-      if (Math.hypot(x - me.x, y - me.y) > 650) break;
+      if (Math.hypot(x - me.x, y - me.y) <= 650) continue;
+      if (!big) break;
+      const C = MAP.grid, gx = Math.floor((x - C / 2) / C), gy = Math.floor((y - C / 2) / C);
+      if (gx >= 0 && gy >= 0 && flowBig[gy * MAP.cols + gx] >= 0) { x = (gx + 1) * C; y = (gy + 1) * C; break; }
     }
     const scale = type === 'boss' ? 1 + (G.wave / BOSS_EVERY - 1) * 0.6 : 1 + (G.wave - 1) * 0.12;
     const e = {
@@ -783,43 +789,55 @@ const Game = (() => {
   }
 
   // ---- pathfinding: a distance map from the player over the grid (refreshed a few times a second)
-  let flow = null, flowT = 0;
+  // Two maps: one for normal enemies (1 square wide gaps) and one for big ones like the boss,
+  // which only walk where there's a 2x2 square of open floor.
+  let flow = null, flowBig = null, flowT = 0;
+  function bfs(walkable, starts) {
+    const cols = MAP.cols, n = cols * cols, dist = new Int32Array(n).fill(-1), q = new Int32Array(n);
+    let head = 0, tail = 0;
+    for (const i of starts) if (walkable(i % cols, (i - i % cols) / cols) && dist[i] < 0) { dist[i] = 0; q[tail++] = i; }
+    while (head < tail) {
+      const i = q[head++], x = i % cols, y = (i - x) / cols;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, j = ny * cols + nx;
+        if (nx < 0 || ny < 0 || nx >= cols || ny >= cols || dist[j] !== -1 || !walkable(nx, ny)) continue;
+        dist[j] = dist[i] + 1;
+        q[tail++] = j;
+      }
+    }
+    return dist;
+  }
   function updateFlow(dt) {
     flowT -= dt;
     if (flow && flowT > 0) return;
     flowT = 0.25;
-    const C = MAP.grid, cols = MAP.cols, n = cols * cols;
-    flow = flow && flow.length === n ? flow : new Int32Array(n);
-    flow.fill(-1);
-    const sx = clamp(Math.floor(G.me.x / C), 0, cols - 1), sy = clamp(Math.floor(G.me.y / C), 0, cols - 1);
-    const q = new Int32Array(n);
-    let head = 0, tail = 0;
-    flow[sy * cols + sx] = 0; q[tail++] = sy * cols + sx;
-    while (head < tail) {
-      const i = q[head++], x = i % cols, y = (i - x) / cols;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= cols || ny >= cols) continue;
-        const j = ny * cols + nx;
-        if (flow[j] !== -1 || MAP.solid[j]) continue;
-        flow[j] = flow[i] + 1;
-        q[tail++] = j;
-      }
-    }
-  }
-  // the centre of the next grid square on the way to the player (no cutting corners)
-  function pathStep(e) {
-    if (!flow) return null;
     const C = MAP.grid, cols = MAP.cols;
-    const x = clamp(Math.floor(e.x / C), 0, cols - 1), y = clamp(Math.floor(e.y / C), 0, cols - 1);
-    const free = (a, b) => a >= 0 && b >= 0 && a < cols && b < cols && flow[b * cols + a] >= 0;
-    let best = null, bd = free(x, y) ? flow[y * cols + x] : Infinity;
+    const open = (x, y) => x >= 0 && y >= 0 && x < cols && y < cols && !MAP.solid[y * cols + x];
+    const sx = clamp(Math.floor(G.me.x / C), 0, cols - 1), sy = clamp(Math.floor(G.me.y / C), 0, cols - 1);
+    flow = bfs(open, [sy * cols + sx]);
+    // big: (x, y) is the top-left of a 2x2 block that must be all open
+    const open2 = (x, y) => open(x, y) && open(x + 1, y) && open(x, y + 1) && open(x + 1, y + 1);
+    const starts = [];
+    for (let y = sy - 1; y <= sy; y++) for (let x = sx - 1; x <= sx; x++) if (x >= 0 && y >= 0) starts.push(y * cols + x);
+    flowBig = bfs(open2, starts);
+  }
+  // the next spot on the way to the player (no cutting corners)
+  function pathStep(e, forceSmall) {
+    if (!flow) return null;
+    const C = MAP.grid, cols = MAP.cols, big = e.r > C * 0.45 && !forceSmall;
+    const f = big ? flowBig : flow;
+    // big enemies are tracked by the top-left square of their 2x2 block
+    const x = clamp(Math.floor((big ? e.x - C / 2 : e.x) / C), 0, cols - 1), y = clamp(Math.floor((big ? e.y - C / 2 : e.y) / C), 0, cols - 1);
+    const free = (a, b) => a >= 0 && b >= 0 && a < cols && b < cols && f[b * cols + a] >= 0;
+    let best = null, bd = free(x, y) ? f[y * cols + x] : Infinity;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       if ((!dx && !dy) || !free(x + dx, y + dy)) continue;
       if (dx && dy && (!free(x + dx, y) || !free(x, y + dy))) continue;
-      const v = flow[(y + dy) * cols + x + dx] + (dx && dy ? 0.4 : 0);
-      if (v < bd) { bd = v; best = { x: (x + dx + 0.5) * C, y: (y + dy + 0.5) * C }; }
+      const v = f[(y + dy) * cols + x + dx] + (dx && dy ? 0.4 : 0);
+      if (v < bd) { bd = v; best = { x: (x + dx + (big ? 1 : 0.5)) * C, y: (y + dy + (big ? 1 : 0.5)) * C }; }
     }
+    // a big enemy cut off from every 2-wide route squeezes through the narrow path instead
+    if (!best && big) return pathStep(e, true);
     return best;
   }
 
@@ -832,7 +850,7 @@ const Game = (() => {
       let mx = dx / d, my = dy / d;
       if (!me.alive) { mx = my = 0; }
       else if (e.def.keepDistance && sees && d < e.def.keepDistance) { mx *= -0.6; my *= -0.6; }
-      else if (!sees) { // can't see you: follow the path around the walls toward you
+      else if (!sees || (e.r > MAP.grid * 0.45 && d > 250)) { // follow the path around the walls toward you (the boss always does)
         const step = pathStep(e);
         if (step) { const l = Math.hypot(step.x - e.x, step.y - e.y) || 1; mx = (step.x - e.x) / l; my = (step.y - e.y) / l; }
       }
@@ -895,7 +913,14 @@ const Game = (() => {
     G.score += e.def.score;
     burst(e.x, e.y, e.def.color, e.type === 'boss' ? 60 : 14, e.type === 'boss' ? 500 : 260);
     G.enemies = G.enemies.filter(x => x !== e);
-    if (e === G.boss) { G.boss = null; G.banner = { text: 'Boss defeated!', t: 2.5 }; }
+    if (e === G.boss) {
+      G.boss = null;
+      // beating a boss gives your ability back
+      const A = ABILITIES[G.me.ability];
+      if (A && A.type !== 'passive') { G.me.abUses = A.uses ?? Infinity; G.me.abCd = 0; }
+      G.banner = { text: 'Boss defeated! Ability restored', t: 2.5 };
+      updateWeaponBar(true);
+    }
   }
 
   // ---------------------------------------------------------------- multiplayer messages
