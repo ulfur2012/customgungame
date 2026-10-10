@@ -502,4 +502,32 @@ const ULTIMATES = {
                desc: 'For 5 seconds every shot is an RPG rocket.' },
   tracker:   { name: 'Tracker', color: '#ff4d4d', duration: 10,
                desc: 'For 10 seconds you and your teammates get an arrow pointing at the nearest enemy.' },
+  clones:    { name: 'Clone Army', color: '#dfe6e9', count: 3,
+               desc: '3 buddies with copies of your main gun jump in and hunt enemies.' },
+  fountain:  { name: 'Fountain of Youth', color: '#55efc4', duration: 10, perSec: 6,
+               desc: 'Instantly back to full health, then +6 HP every second for 10 seconds.' },
+  meteors:   { name: 'Meteor Shower', color: '#e67e22', count: 18, spread: 380, dist: 550, radius: 90, damage: 40,
+               desc: '18 meteors smash down around where you aim over 4 seconds.' },
+  timestop:  { name: 'Time Stop', color: '#74b9ff', duration: 4,
+               desc: 'Freezes every enemy for 4 seconds (in multiplayer: 3s) and slows their bullets.' },
+  juggernaut:{ name: 'Juggernaut', color: '#636e72', duration: 10, shield: 200, mul: 1.5,
+               desc: '10 seconds with a 200 HP shield and +50% damage.' },
+  overdrive: { name: 'Overdrive', color: '#fd79a8', duration: 10,
+               desc: 'For 10 seconds your ability has no cooldown and never runs out.' },
+  megaslam:  { name: 'Mega Slam', color: '#b8845a', radius: 600, damage: 60, kb: 18,
+               desc: 'A giant ground slam: 60 damage and a massive push to everyone around you.' },
+};
+
+// Hidden: the ability you have equipped makes some ultimates more likely from an epic crate.
+// The matching ultimate gets `weight` tickets, every other one gets 1.
+const ULT_AFFINITY = {
+  weight: 6,
+  grenade: 'airstrike', rpg: 'rockets', nova: 'bullethell', rapid: 'minigun', shield: 'juggernaut',
+  regen: 'fountain', medic: 'fountain', burger: 'fountain', vampire: 'fountain', energy: 'god', dash: 'god',
+  sprinter: 'god', laststand: 'god', blink: 'wallhack', smoke: 'wallhack', grapple: 'wallhack', phase: 'wallhack',
+  turret: 'clones', decoy: 'clones', slowmo: 'timestop', freeze: 'timestop', recall: 'timestop',
+  blackhole: 'nuke', glass: 'nuke', firepit: 'meteors', mine: 'meteors', jumppad: 'airstrike',
+  quake: 'megaslam', radar: 'tracker', tesla: 'laser', overcharge: 'aimbot', reflect: 'juggernaut',
+  armor: 'juggernaut', barrier: 'juggernaut', resupply: 'overdrive', hands: 'overdrive', scavenger: 'overdrive',
+  bandolier: 'minigun', adrenaline: 'minigun', thorns: 'bullethell',
 };

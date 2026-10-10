@@ -35,7 +35,7 @@ const Game = (() => {
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
-        ult: null, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
+        ult: null, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
@@ -314,7 +314,7 @@ const Game = (() => {
     const kind = { bounce: s.bounce, pierce: s.pierce, boom: s.boom };
     if (me.aimShots > 0) { me.aimShots--; kind.homing = 1; }
     if (me.wallT > 0) kind.ghost = 1;
-    let dmg = s.damage * (me.ability === 'glass' ? ABILITIES.glass.mul : 1);
+    let dmg = s.damage * (me.ability === 'glass' ? ABILITIES.glass.mul : 1) * (me.juggT > 0 ? ULTIMATES.juggernaut.mul : 1);
     if (me.overShots > 0) { me.overShots--; dmg *= ABILITIES.overcharge.mul; }
     for (const a of angles) addBullet(m.x, m.y, a, s.speed, dmg, s.knockback, 'me', G.myId, s.range, s.falloff, s.flare, kind);
     const a = me.aim;
@@ -1044,6 +1044,15 @@ const Game = (() => {
     b.life = Math.max(b.life, 0.3);
   }
 
+  // random ultimate, weighted toward the one that matches your ability (hidden)
+  function rollUlt(ability) {
+    const fav = ULT_AFFINITY[ability];
+    const pool = Object.keys(ULTIMATES).map(k => [k, k === fav ? ULT_AFFINITY.weight : 1]);
+    let r = Math.random() * pool.reduce((n, [, w]) => n + w, 0);
+    for (const [k, w] of pool) { if ((r -= w) < 0) return k; }
+    return pool[0][0];
+  }
+
   function useUlt() {
     const me = G.me, k = me.ult, U = ULTIMATES[k];
     me.ult = null;
@@ -1070,6 +1079,37 @@ const Game = (() => {
     if (k === 'aimbot') me.aimShots = U.shots;
     if (k === 'wallhack') me.wallT = U.duration;
     if (k === 'rockets') me.rocketT = U.duration;
+    if (k === 'clones') {
+      for (let i = 0; i < U.count; i++) {
+        const an = me.aim + (i - 1) * 0.9;
+        let x = me.x, y = me.y;
+        for (let d = 90; d >= 0; d -= 15) { const nx = me.x + Math.cos(an) * d, ny = me.y + Math.sin(an) * d; if (!pointInWall(nx, ny)) { x = nx; y = ny; break; } }
+        landGadget({ kind: 'decoy', x1: x, y1: y, a: an, owner: myOwnerId() });
+      }
+    }
+    if (k === 'fountain') { me.hp = me.maxHp; me.fountT = U.duration; me.fountTick = 1; burst(me.x, me.y, '#55efc4', 40, 300); }
+    if (k === 'meteors') {
+      const cx = me.x + Math.cos(me.aim) * U.dist, cy = me.y + Math.sin(me.aim) * U.dist, list = [];
+      for (let i = 0; i < U.count; i++) {
+        const an = Math.random() * Math.PI * 2, d = Math.random() * U.spread;
+        list.push([Math.round(clamp(cx + Math.cos(an) * d, 0, MAP.w)), Math.round(clamp(cy + Math.sin(an) * d, 0, MAP.h)), +(0.6 + Math.random() * 3.4).toFixed(2), U.radius, U.damage]);
+      }
+      for (const s of list) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: myOwnerId() });
+      if (G.mode === 'mp') Net.send({ t: 'ult', k, s: list });
+    }
+    if (k === 'timestop') {
+      for (const e of G.enemies) e.frozen = U.duration;
+      me.slowT = U.duration;
+      G.rings.push({ x: me.x, y: me.y, r: 900, life: 0.8, max: 0.8, color: '116,185,255' });
+      if (G.mode === 'mp') Net.send({ t: 'ult', k });
+    }
+    if (k === 'juggernaut') { me.juggT = U.duration; me.shield = U.shield; me.shieldT = U.duration; }
+    if (k === 'overdrive') me.overT = U.duration;
+    if (k === 'megaslam') {
+      slam(me.x, me.y, U.radius, U.damage, U.kb, myOwnerId());
+      if (G.mode === 'mp') Net.send({ t: 'aoe', x: Math.round(me.x), y: Math.round(me.y), r: U.radius, dmg: U.damage, kb: U.kb });
+      G.shake = 25;
+    }
     if (k === 'tracker') { me.trackT = U.duration; if (G.mode === 'mp') Net.send({ t: 'ult', k }); }
   }
 
@@ -1078,7 +1118,12 @@ const Game = (() => {
     if (Input.take('ultPress') && me.ult && me.alive) useUlt();
     me.miniT = Math.max(0, me.miniT - dt);
     me.godT = Math.max(0, me.godT - dt);
-    for (const k of ['wallT', 'rocketT', 'trackT']) me[k] = Math.max(0, me[k] - dt);
+    for (const k of ['wallT', 'rocketT', 'trackT', 'juggT', 'overT']) me[k] = Math.max(0, me[k] - dt);
+    if (me.overT > 0) { me.abCd = 0; if (me.abUses < 1) me.abUses = 1; } // overdrive: ability spam
+    if (me.fountT > 0) {
+      me.fountT -= dt; me.fountTick -= dt;
+      if (me.fountTick <= 0) { me.fountTick = 1; if (me.alive && me.hp < me.maxHp) heal(ULTIMATES.fountain.perSec); }
+    }
     if (me.hellT > 0) {
       const U = ULTIMATES.bullethell;
       me.hellT -= dt; me.hellCd -= dt;
@@ -1421,8 +1466,7 @@ const Game = (() => {
         updateWeaponBar(true);
       } else if (p.kind === 'epic') {
         if (me.ult) continue; // already holding one
-        const keys = Object.keys(ULTIMATES);
-        me.ult = keys[Math.floor(Math.random() * keys.length)];
+        me.ult = rollUlt(me.ability);
         G.banner = { text: `ULTIMATE: ${ULTIMATES[me.ult].name}! (${Settings.mobile ? 'gold button' : 'press F'})`, t: 3 };
         burst(me.x, me.y, '#ffd700', 40, 400);
       } else if (p.kind === 'ability') {
@@ -1796,9 +1840,10 @@ const Game = (() => {
   });
   Net.on('ult', m => {
     if (!inMP()) return;
-    if (m.k === 'tracker') { if (!hostileTo(m.from)) { G.me.trackT = ULTIMATES.tracker.duration; G.banner = { text: 'Teammate used Tracker!', t: 1.5 }; } }
+    if (m.k === 'timestop') { if (hostileTo(m.from)) { G.me.frozenT = 3; G.banner = { text: 'TIME STOPPED!', t: 1.5 }; } }
+    else if (m.k === 'tracker') { if (!hostileTo(m.from)) { G.me.trackT = ULTIMATES.tracker.duration; G.banner = { text: 'Teammate used Tracker!', t: 1.5 }; } }
     else if (m.k === 'laser') G.lasers.push({ x: m.x, y: m.y, a: m.a, t: ULTIMATES.laser.duration, tick: 0, owner: m.from });
-    else for (const s of m.s) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: m.from });
+    else if (m.s) for (const s of m.s) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: m.from });
   });
   Net.on('aoe', m => { if (inMP()) slam(m.x, m.y, m.r, m.dmg, m.kb, m.from); });
   Net.on('nade', m => { if (inMP()) G.nades.push({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, t: 0, owner: m.from }); });
