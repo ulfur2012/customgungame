@@ -34,15 +34,26 @@ const Game = (() => {
         x: spawn[0], y: spawn[1], r: PLAYER.r, hp: PLAYER.hp, maxHp: PLAYER.hp, aim: 0, vx: 0, vy: 0,
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
-        abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0,
+        abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
       bullets: [], fx: [], texts: [], hears: [], feed: [],
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
+      turrets: [], zones: [],
       sendT: 0, packs: [], packT: 0, nades: [], rockets: [], time: 0, lastCombat: 0, pingT: PING.every, ping: 0,
     };
+  }
+
+  // Bandolier passive: extra spare mags (and room for them)
+  function applyBandolier(me) {
+    if (me.ability !== 'bandolier') return;
+    for (const g of me.guns) {
+      if (g.stats.flare || g.stats.maxReserve === 0) continue;
+      const extra = g.stats.magSize * ABILITIES.bandolier.mags;
+      g.stats.maxReserve += extra; g.reserve += extra;
+    }
   }
 
   function startSP() {
@@ -74,6 +85,7 @@ const Game = (() => {
   }
 
   function begin() {
+    applyBandolier(G.me);
     Input.reset();
     abCache = '';
     updateWeaponBar(true);
@@ -104,7 +116,7 @@ const Game = (() => {
     G.cam.x += (me.x - G.cam.x) * Math.min(1, dt * 10);
     G.cam.y += (me.y - G.cam.y) * Math.min(1, dt * 10);
 
-    if (G.mode === 'sp') { updateWaves(dt); updateEnemies(dt); }
+    if (G.mode === 'sp') { updateWaves(dt); updateEnemies(me.slowT > 0 ? dt * ABILITIES.slowmo.factor : dt); }
     else {
       for (const r of G.remotes.values()) {
         r.x += (r.tx - r.x) * Math.min(1, dt * 15);
@@ -120,6 +132,7 @@ const Game = (() => {
     }
     updateBullets(dt);
     updateProjectiles(dt);
+    updateGadgets(dt);
     updatePacks(dt);
     G.time += dt;
     if (G.mode === 'mp') {
@@ -149,7 +162,7 @@ const Game = (() => {
   function updateMe(dt) {
     const me = G.me;
     const mv = Input.move();
-    const speed = PLAYER.speed * (me.speedT > 0 ? ABILITIES.energy.speed : 1);
+    const speed = PLAYER.speed * (me.speedT > 0 ? ABILITIES.energy.speed : 1) * (me.ability === 'sprinter' ? ABILITIES.sprinter.speed : 1);
     me.x += (mv.x * speed + me.vx) * dt;
     me.y += (mv.y * speed + me.vy) * dt;
     me.vx *= Math.exp(-10 * dt); me.vy *= Math.exp(-10 * dt);
@@ -289,7 +302,7 @@ const Game = (() => {
 
   function hurtMe(dmg, kb, angle, by) {
     const me = G.me;
-    if (!me.alive) return;
+    if (!me.alive || me.invT > 0) return;
     if (me.ability === 'armor') dmg *= ABILITIES.armor.takeMul;
     const soaked = Math.min(me.shield, dmg);
     me.shield -= soaked;
@@ -301,6 +314,12 @@ const Game = (() => {
     G.shake = Math.min(12, G.shake + 5);
     G.texts.push({ x: me.x, y: me.y - 34, text: `-${Math.round(dmg)}`, color: '#ff6b6b', life: 0.8 });
     if (G.mode === 'mp') Net.send({ t: 'hit', by, dmg });
+    if (me.hp <= 0 && me.ability === 'laststand' && !me.lastStand) {
+      me.lastStand = true;
+      me.hp = ABILITIES.laststand.hp;
+      me.invT = ABILITIES.laststand.inv;
+      G.banner = { text: 'LAST STAND!', t: 1.5 };
+    }
     if (me.hp > 0) return;
     me.alive = false;
     burst(me.x, me.y, me.color, 20, 280);
@@ -324,9 +343,10 @@ const Game = (() => {
 
   function updateBullets(dt) {
     const me = G.me;
+    const slow = me.slowT > 0 ? ABILITIES.slowmo.factor : 1;
     for (const b of G.bullets) {
-      const x1 = b.x, y1 = b.y;
-      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+      const x1 = b.x, y1 = b.y, bdt = b.team === 'me' ? dt : dt * slow;
+      b.x += b.vx * bdt; b.y += b.vy * bdt; b.life -= bdt;
       if (b.life <= 0) continue;
       const wall = MAP.walls.find(w => segmentHitsRect(x1, y1, b.x, b.y, w));
       const out = b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h;
@@ -365,7 +385,7 @@ const Game = (() => {
         } else {
           for (const r of G.remotes.values()) {
             if (r.alive && isEnemy(r) && !b.hit.has(r.id) && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r)) {
-              b.hit.add(r.id); r.flash = 0.08;
+              b.hit.add(r.id); r.flash = 0.08; vampire();
               if (!b.pierce) { b.life = 0; break; }
             }
           }
@@ -422,14 +442,16 @@ const Game = (() => {
   function updateAbility(dt) {
     const me = G.me, A = ABILITIES[me.ability];
     if (!A) return;
+    me.invT = Math.max(0, me.invT - dt);
     me.abCd = Math.max(0, me.abCd - dt);
     me.speedT = Math.max(0, me.speedT - dt);
     me.rapidT = Math.max(0, me.rapidT - dt);
+    me.slowT = Math.max(0, me.slowT - dt);
     if (me.shieldT > 0) {
       me.shieldT -= dt;
       if (me.shieldT <= 0) { me.shieldT = 0; me.shield = 0; }
     }
-    if (A.type === 'passive' && me.ability !== 'regen') return; // armor / quick hands work elsewhere
+    if (A.type === 'passive' && me.ability !== 'regen') return; // the other passives work where they apply
     if (A.type === 'passive') {
       // regen: +10 HP for every 10 seconds out of combat
       const calm = G.time - G.lastCombat, ticks = Math.floor(calm / A.every);
@@ -446,7 +468,7 @@ const Game = (() => {
     const pressed = Input.take('abPress');
     const held = Input.abilityHeld();
     const ready = me.abCd === 0 && me.abUses > 0 && me.shieldT === 0;
-    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid'].includes(me.ability);
+    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'medic', 'turret', 'resupply'].includes(me.ability);
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
     } else {
@@ -480,6 +502,99 @@ const Game = (() => {
       me.vx += Math.cos(a) * A.power;
       me.vy += Math.sin(a) * A.power;
       burst(me.x, me.y, A.color, 8, 160);
+    }
+    if (me.ability === 'blink') {
+      let tx = me.x, ty = me.y;
+      for (let d = 10; d <= A.range; d += 10) {
+        const nx = me.x + Math.cos(me.aim) * d, ny = me.y + Math.sin(me.aim) * d;
+        if (pointInWall(nx, ny)) break;
+        tx = nx; ty = ny;
+      }
+      burst(me.x, me.y, A.color, 12, 200);
+      me.x = tx; me.y = ty; collideWorld(me);
+      burst(me.x, me.y, A.color, 12, 200);
+    }
+    if (me.ability === 'nova') {
+      const angles = Array.from({ length: A.count }, (_, i) => +(i * Math.PI * 2 / A.count).toFixed(4));
+      fireBullets(me.x, me.y, angles, A.speed, A.damage, 1.5, A.range, 6 * HEAR_UNIT);
+      G.shake = Math.min(12, G.shake + 5);
+    }
+    if (me.ability === 'slowmo') { me.slowT = A.duration; G.banner = { text: 'Bullet time!', t: 1 }; }
+    if (me.ability === 'medic') G.zones.push({ x: me.x, y: me.y, t: A.duration, tick: 1 });
+    if (me.ability === 'turret') G.turrets.push({ x: me.x, y: me.y, t: A.duration, cd: 0.5, aim: me.aim });
+    if (me.ability === 'resupply') {
+      for (const g of me.guns) {
+        g.reserve = Math.min(g.stats.maxReserve, g.reserve + g.stats.magSize);
+        g.ammo = g.stats.magSize; g.reload = 0;
+      }
+      G.banner = { text: 'Resupplied!', t: 1 };
+      updateWeaponBar(true);
+    }
+  }
+
+  // Vampire passive: every hit you land heals you a little
+  function vampire() {
+    const me = G.me;
+    if (me.ability !== 'vampire' || !me.alive || me.hp >= me.maxHp) return;
+    me.hp = Math.min(me.maxHp, me.hp + ABILITIES.vampire.heal);
+  }
+
+  // bullets that don't come from your gun (nova, turret); other players see them too
+  function fireBullets(x, y, angles, speed, dmg, kb, range, loud) {
+    for (const a of angles) addBullet(x, y, a, speed, dmg, kb, 'me', G.myId, range);
+    G.lastCombat = G.time;
+    if (G.mode === 'mp') Net.send({ t: 'shot', x: Math.round(x), y: Math.round(y), as: angles, sp: speed, fl: 0, bt: {}, rng: range, fo: 0, dmg, kb, loud });
+  }
+
+  // heal zones and turrets
+  function updateGadgets(dt) {
+    const me = G.me, M = ABILITIES.medic, T = ABILITIES.turret;
+    for (const z of G.zones) {
+      z.t -= dt; z.tick -= dt;
+      if (z.tick <= 0) {
+        z.tick = 1;
+        if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - z.x, me.y - z.y) <= M.radius) heal(M.perSec);
+      }
+    }
+    G.zones = G.zones.filter(z => z.t > 0);
+    for (const t of G.turrets) {
+      t.t -= dt; t.cd -= dt;
+      let best = null, bd = T.range;
+      for (const e of targets()) {
+        const d = Math.hypot(e.x - t.x, e.y - t.y);
+        if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; }
+      }
+      if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
+      if (best && t.cd <= 0) {
+        t.cd = T.delay;
+        const sx = t.x + Math.cos(t.aim) * 20, sy = t.y + Math.sin(t.aim) * 20;
+        fireBullets(sx, sy, [+t.aim.toFixed(4)], 1300, T.damage, 0.8, T.range, 4 * HEAR_UNIT);
+        muzzleFlash(sx, sy, t.aim);
+      }
+    }
+    G.turrets = G.turrets.filter(t => t.t > 0);
+  }
+
+  function drawGadgets() {
+    const M = ABILITIES.medic;
+    for (const z of G.zones) {
+      ctx.fillStyle = 'rgba(50,255,126,0.13)';
+      ctx.strokeStyle = 'rgba(50,255,126,0.7)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(z.x, z.y, M.radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#32ff7e';
+      ctx.fillRect(z.x - 4, z.y - 14, 8, 28); ctx.fillRect(z.x - 14, z.y - 4, 28, 8);
+    }
+    for (const t of G.turrets) {
+      ctx.fillStyle = '#4b4b5a'; ctx.strokeStyle = '#cd84f1'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
+      ctx.fillStyle = '#cd84f1'; ctx.fillRect(0, -4, 24, 8);
+      ctx.restore();
+    }
+    const me = G.me;
+    if (me.invT > 0) {
+      ctx.strokeStyle = `rgba(255,63,52,${0.5 + 0.4 * Math.sin(G.time * 20)})`; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(me.x, me.y, me.r + 10, 0, Math.PI * 2); ctx.stroke();
     }
   }
 
@@ -917,6 +1032,7 @@ const Game = (() => {
 
   function hitEnemy(e, b, a) {
     const dmg = bulletDamage(b);
+    if (b.team === 'me') vampire();
     e.hp -= dmg;
     e.flash = 0.08;
     const weight = e.r / 16;
@@ -1034,6 +1150,7 @@ const Game = (() => {
     ctx.clip();
 
     drawPacks();
+    drawGadgets();
     drawProjectiles();
     ctx.lineCap = 'round';
     ctx.lineWidth = 3;
@@ -1421,6 +1538,7 @@ const Game = (() => {
       : me.abUses <= 0 ? 'Used'
       : me.shieldT > 0 ? `${Math.ceil(me.shieldT)}s`
       : me.rapidT > 0 ? `${Math.ceil(me.rapidT)}s`
+      : me.slowT > 0 ? `${Math.ceil(me.slowT)}s`
       : me.abCd > 0 ? `${Math.ceil(me.abCd)}s`
       : me.abUses === Infinity ? 'Ready' : `Ready ×${me.abUses}`;
     const key = A.name + state;
