@@ -35,7 +35,7 @@ const Game = (() => {
         kick: 0, meleeInv: 0, alive: true, color, name: Account.user.name,
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
-        ult: null, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
+        ult: null, stimT: 0, frenzyT: 0, stormN: 0, stormT: 0, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
@@ -49,7 +49,21 @@ const Game = (() => {
   }
 
   // Bandolier passive: extra spare mags (and room for them)
+  // ability boosts: change this ability's numbers (for you) while it's equipped
+  const ABILITY_BASE = JSON.parse(JSON.stringify(ABILITIES));
+  function applyPerk(me) {
+    for (const k in ABILITIES) Object.assign(ABILITIES[k], JSON.parse(JSON.stringify(ABILITY_BASE[k])));
+    const perk = (ABILITY_PERKS[me.ability] || []).find(p => p.id === Account.user.loadout.perk);
+    const A = ABILITIES[me.ability];
+    if (perk && A) {
+      for (const k in perk.add || {}) A[k] = (A[k] || 0) + perk.add[k];
+      for (const k in perk.mul || {}) A[k] *= perk.mul[k];
+    }
+    me.abUses = (A || {}).uses ?? Infinity;
+  }
+
   function applyBandolier(me) {
+    applyPerk(me);
     me.maxHp = me.ability === 'glass' ? ABILITIES.glass.hp : PLAYER.hp;
     me.hp = Math.min(me.hp, me.maxHp);
     if (me.ability !== 'bandolier') return;
@@ -197,7 +211,8 @@ const Game = (() => {
     const me = G.me;
     const mv = Input.move();
     const speed = PLAYER.speed * (me.speedT > 0 ? ABILITIES.energy.speed : 1) * (me.ability === 'sprinter' ? ABILITIES.sprinter.speed : 1)
-      * (adrenalineOn() ? ABILITIES.adrenaline.speed : 1) * (me.frozenT > 0 ? 0.2 : 1) * (me.godT > 0 ? ULTIMATES.god.speed : 1);
+      * (adrenalineOn() ? ABILITIES.adrenaline.speed : 1) * (me.frozenT > 0 ? 0.2 : 1) * (me.godT > 0 ? ULTIMATES.god.speed : 1)
+      * (me.stimT > 0 ? ABILITIES.stim.speed : 1) * (me.frenzyT > 0 ? ULTIMATES.frenzy.speed : 1);
     me.x += (mv.x * speed + me.vx) * dt;
     me.y += (mv.y * speed + me.vy) * dt;
     me.vx *= Math.exp(-10 * dt); me.vy *= Math.exp(-10 * dt);
@@ -246,6 +261,7 @@ const Game = (() => {
     if (fire && gun.reload === 0 && gun.ammo > 0 && gun.cd === 0) {
       shoot(gun);
       gun.cd = s.fireDelay * (me.rapidT > 0 ? ABILITIES.rapid.fireMul : 1) * (adrenalineOn() ? ABILITIES.adrenaline.fire : 1);
+      gun.cd *= (me.stimT > 0 ? ABILITIES.stim.fire : 1) * (me.frenzyT > 0 ? ULTIMATES.frenzy.fire : 1);
       if (me.miniT > 0) gun.cd = ULTIMATES.minigun.delay;
       if (me.rocketT > 0) gun.cd = Math.max(gun.cd, ULTIMATES.rockets.delay);
     }
@@ -326,7 +342,7 @@ const Game = (() => {
     G.shake = Math.min(6 * s.recoil, G.shake + (1 + s.knockback * 0.5) * s.recoil);
     muzzleFlash(m.x, m.y, a);
     if (G.mode === 'mp') {
-      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, fl: s.flare ? 1 : 0, bt: kind, rng: s.range, fo: s.falloff, dmg, kb: s.knockback, loud: s.hearRadius });
+      Net.send({ t: 'shot', x: Math.round(m.x), y: Math.round(m.y), as: angles, sp: s.speed, fl: s.flare ? 1 : 0, bt: kind, rng: s.range, fo: s.falloff, dmg, kb: s.knockback, loud: s.hearRadius * (me.ability === 'ninja' ? ABILITIES.ninja.quiet : 1) });
     }
   }
 
@@ -555,7 +571,7 @@ const Game = (() => {
     const pressed = Input.take('abPress');
     const held = Input.abilityHeld();
     const ready = me.abCd === 0 && me.abUses > 0 && me.shieldT === 0;
-    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'resupply', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall'].includes(me.ability);
+    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'resupply', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability);
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
     } else {
@@ -627,6 +643,12 @@ const Game = (() => {
       if (G.mode === 'mp') Net.send({ t: 'aoe', x: Math.round(me.x), y: Math.round(me.y), r: A.radius, dmg: A.damage, kb: A.kb });
       G.shake = Math.min(14, G.shake + 8);
     }
+    if (me.ability === 'stim') {
+      me.stimT = A.duration;
+      if (A.cost > 0) { me.hp = Math.max(1, me.hp - A.cost); G.texts.push({ x: me.x, y: me.y - 34, text: `-${A.cost}`, color: '#c56cf0', life: 0.8 }); }
+      G.banner = { text: 'Stimmed!', t: 1 };
+    }
+    if (me.ability === 'shadowstep' && !stepBehind(A.range)) { me.abUses++; me.abCd = 0; G.banner = { text: 'No enemy in sight', t: 1 }; }
     if (me.ability === 'resupply') {
       for (const g of me.guns) {
         g.reserve = Math.min(g.stats.maxReserve, g.reserve + g.stats.magSize);
@@ -635,6 +657,21 @@ const Game = (() => {
       G.banner = { text: 'Resupplied!', t: 1 };
       updateWeaponBar(true);
     }
+  }
+
+  // teleport right behind the closest enemy you can see. false if there's nobody
+  function stepBehind(range) {
+    const me = G.me;
+    let best = null, bd = range;
+    for (const t of targets()) { const d = Math.hypot(t.x - me.x, t.y - me.y); if (d < bd && lineOfSight(me.x, me.y, t.x, t.y)) { best = t; bd = d; } }
+    if (!best) return false;
+    const an = Math.atan2(best.y - me.y, best.x - me.x), r = (best.r || PLAYER.r) + me.r + 16;
+    burst(me.x, me.y, '#2d3436', 16, 260);
+    me.x = best.x + Math.cos(an) * r; me.y = best.y + Math.sin(an) * r;
+    collideWorld(me);
+    me.aim = an + Math.PI;
+    burst(me.x, me.y, '#636e72', 16, 260);
+    return true;
   }
 
   // Vampire passive: every hit you land heals you a little
@@ -871,6 +908,12 @@ const Game = (() => {
   // The owner keeps track of the HP and tells everyone when it breaks.
   function bulletHitsGadget(b, x1, y1) {
     for (const g of G.gadgets) {
+      if (g.kind === 'bubble') {
+        const R = ABILITIES.bubble.radius * Math.min(1, g.age / 0.25);
+        const hostile = G.mode === 'sp' ? b.team === 'e' : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
+        if (hostile && Math.hypot(b.x - g.x, b.y - g.y) < R && Math.hypot(x1 - g.x, y1 - g.y) >= R - 2) { burst(b.x, b.y, '#7ef9ff', 4, 120); return true; }
+        continue;
+      }
       if (g.hp === undefined || g.dead) continue;
       const hostile = G.mode === 'sp' ? b.team === 'e'
         : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
@@ -910,6 +953,12 @@ const Game = (() => {
         ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = 'rgba(200,140,255,0.6)'; ctx.lineWidth = 2;
         for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(g.x, g.y, r * (0.3 + 0.2 * i), G.time * (3 + i) , G.time * (3 + i) + 2); ctx.stroke(); }
+      } else if (g.kind === 'bubble') {
+        const r = A.radius * pop;
+        ctx.fillStyle = 'rgba(126,249,255,0.12)'; ctx.strokeStyle = `rgba(126,249,255,${0.5 + 0.2 * Math.sin(G.time * 6)})`; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(g.x, g.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(g.x, g.y, r * 0.8, -2.4, -1.6); ctx.stroke();
       } else if (g.kind === 'firepit') {
         ctx.fillStyle = 'rgba(255,107,26,0.25)'; ctx.strokeStyle = 'rgba(255,160,40,0.7)'; ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * pop, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -1114,6 +1163,40 @@ const Game = (() => {
       if (G.mode === 'mp') Net.send({ t: 'aoe', x: Math.round(me.x), y: Math.round(me.y), r: U.radius, dmg: U.damage, kb: U.kb });
       G.shake = 25;
     }
+    if (k === 'carpet') {
+      const list = [], px = -Math.sin(me.aim), py = Math.cos(me.aim);
+      for (let i = 0; i < U.count; i++) {
+        const along = 150 + Math.random() * U.length, side = (Math.random() - 0.5) * U.width;
+        list.push([Math.round(clamp(me.x + Math.cos(me.aim) * along + px * side, 0, MAP.w)), Math.round(clamp(me.y + Math.sin(me.aim) * along + py * side, 0, MAP.h)),
+          +(0.6 + (along / U.length) * 2 + Math.random() * 0.3).toFixed(2), U.radius, U.damage]);
+      }
+      for (const s of list) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: myOwnerId() });
+      if (G.mode === 'mp') Net.send({ t: 'ult', k, s: list });
+    }
+    if (k === 'fortress') {
+      for (let i = 0; i < U.walls; i++) {
+        const an = i * Math.PI * 2 / U.walls;
+        landGadget({ kind: 'barrier', x1: me.x + Math.cos(an) * U.ring, y1: me.y + Math.sin(an) * U.ring, a: an, owner: myOwnerId() });
+      }
+      landGadget({ kind: 'bubble', x1: me.x, y1: me.y, a: 0, owner: myOwnerId() });
+    }
+    if (k === 'blinkstorm') { me.stormN = U.jumps; me.stormT = 0; }
+    if (k === 'frenzy') { heal(U.heal); me.frenzyT = U.duration; }
+    if (k === 'turretnest') {
+      const side = me.guns[1];
+      for (let i = 0; i < U.count; i++) {
+        const an = me.aim + i * Math.PI * 2 / U.count, c = { x: me.x + Math.cos(an) * U.ring, y: me.y + Math.sin(an) * U.ring, r: 16 };
+        collideWorld(c);
+        G.turrets.push({ x: c.x, y: c.y, t: ABILITIES.turret.duration, cd: 0.3 + i * 0.1, aim: an, stats: side.stats, sprite: side.sprite });
+        burst(c.x, c.y, U.color, 12, 200);
+      }
+    }
+    if (k === 'blizzard') {
+      for (let i = 0; i < U.count; i++) {
+        const an = Math.random() * Math.PI * 2, d = 320 + Math.random() * 350;
+        G.nades.push({ x0: me.x, y0: me.y, x1: clamp(me.x + Math.cos(an) * d, 0, MAP.w), y1: clamp(me.y + Math.sin(an) * d, 0, MAP.h), t: -i * 0.3, owner: myOwnerId(), kind: 'freeze', a: an });
+      }
+    }
     if (k === 'tracker') { me.trackT = U.duration; if (G.mode === 'mp') Net.send({ t: 'ult', k }); }
   }
 
@@ -1122,7 +1205,19 @@ const Game = (() => {
     if (Input.take('ultPress') && me.ult && me.alive) useUlt();
     me.miniT = Math.max(0, me.miniT - dt);
     me.godT = Math.max(0, me.godT - dt);
-    for (const k of ['wallT', 'rocketT', 'trackT', 'juggT', 'overT']) me[k] = Math.max(0, me[k] - dt);
+    for (const k of ['wallT', 'rocketT', 'trackT', 'juggT', 'overT', 'stimT', 'frenzyT']) me[k] = Math.max(0, me[k] - dt);
+    if (me.stormN > 0) { // blink storm
+      me.stormT -= dt;
+      if (me.stormT <= 0) {
+        const U = ULTIMATES.blinkstorm;
+        me.stormT = U.every;
+        if (stepBehind(1000)) {
+          me.stormN--;
+          slam(me.x, me.y, U.radius, U.damage, 6, myOwnerId());
+          if (G.mode === 'mp') Net.send({ t: 'aoe', x: Math.round(me.x), y: Math.round(me.y), r: U.radius, dmg: U.damage, kb: 6 });
+        } else me.stormN = 0;
+      }
+    }
     if (me.overT > 0) { me.abCd = 0; if (me.abUses < 1) me.abUses = 1; } // overdrive: ability spam
     if (me.fountT > 0) {
       me.fountT -= dt; me.fountTick -= dt;
@@ -1337,6 +1432,15 @@ const Game = (() => {
         // the turret gets a copy of your sidearm
         const side = me.guns[1];
         G.turrets.push({ x: n.x1, y: n.y1, t: ABILITIES.turret.duration, cd: 0.5, aim: 0, stats: side.stats, sprite: side.sprite });
+      } else if (n.kind === 'cluster') {
+        const C = ABILITIES.cluster, list = [];
+        for (let i = 0; i < C.bombs; i++) {
+          const an = i * Math.PI * 2 / C.bombs + Math.random() * 0.5, d = 40 + Math.random() * (C.radius - 40);
+          list.push([Math.round(n.x1 + Math.cos(an) * d), Math.round(n.y1 + Math.sin(an) * d), +(0.1 + i * 0.08).toFixed(2), C.bombRadius, C.damage]);
+        }
+        burst(n.x1, n.y1, C.color, 16, 260);
+        for (const s of list) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: n.owner });
+        if (G.mode === 'mp') Net.send({ t: 'ult', k: 'cluster', s: list });
       } else if (ABILITIES[n.kind] && ABILITIES[n.kind].gadget) landGadget(n);
       else explode(n.x1, n.y1, G_.radius, G_.damage, n.owner);
     }
@@ -1378,6 +1482,7 @@ const Game = (() => {
   function drawProjectiles() {
     const A = ABILITIES.grenade;
     for (const n of G.nades) {
+      if (n.t < 0) continue; // not thrown yet
       const look = n.kind === 'medic' ? ['#32ff7e', '#0b5a2a', 'rgba(50,255,126,', ABILITIES.medic.radius]
                  : n.kind === 'turret' ? ['#cd84f1', '#4b2a5a', 'rgba(205,132,241,', 22]
                  : ['#4b7b2f', '#1d3311', 'rgba(255,80,60,', A.radius];
@@ -1447,12 +1552,16 @@ const Game = (() => {
         for (let i = 0; i < HEALTH_PACK.count && G.packs.length + fresh.length < HEALTH_PACK.max; i++) fresh.push(randomFloorSpot());
         for (let i = 0; i < AMMO.box.count; i++) fresh.push({ ...randomFloorSpot(), kind: 'ammo' });
         if (Math.random() < ABILITY_CRATE.chance) fresh.push({ ...randomFloorSpot(), kind: 'ability' });
-        if (Math.random() < EPIC_CRATE.chance) fresh.push({ ...randomFloorSpot(), kind: 'epic' });
+        if (Math.random() < EPIC_CRATE.chance * (G.me.ability === 'lucky' ? ABILITIES.lucky.epic : 1)) fresh.push({ ...randomFloorSpot(), kind: 'epic' });
         addPacks(fresh);
         if (G.mode === 'mp') Net.send({ t: 'packs', packs: fresh });
       }
     }
     if (!me.alive) return;
+    if (me.ability === 'magnet') for (const p of G.packs) {
+      const d = Math.hypot(me.x - p.x, me.y - p.y), M = ABILITIES.magnet;
+      if (d < M.range && d > 1) { p.x += (me.x - p.x) / d * M.pull * dt; p.y += (me.y - p.y) / d * M.pull * dt; }
+    }
     for (const p of G.packs) {
       if (Math.hypot(p.x - me.x, p.y - me.y) > me.r + HEALTH_PACK.r) continue;
       if (p.kind === 'ammo') {
@@ -1504,26 +1613,18 @@ const Game = (() => {
   function addPacks(list) { G.packs.push(...list); }
   function removePack(id) { G.packs = G.packs.filter(p => p.id !== id); }
 
+  // the ultimate crate looks like the ability crate, but purple
   function drawEpicCrate(p) {
-    const s = 24, t = performance.now() / 1000;
-    ctx.save();
-    // golden rays
-    ctx.translate(p.x, p.y);
-    ctx.rotate(t * 0.8);
-    ctx.fillStyle = 'rgba(255,215,0,0.25)';
-    for (let i = 0; i < 8; i++) { ctx.rotate(Math.PI / 4); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(70, -10); ctx.lineTo(70, 10); ctx.fill(); }
-    ctx.restore();
-    ctx.fillStyle = `rgba(255,215,0,${0.3 + 0.2 * Math.sin(t * 5)})`;
+    const s = 20, glow = 0.3 + 0.18 * Math.sin(performance.now() / 180);
+    ctx.fillStyle = `rgba(170,60,255,${glow})`;
     ctx.beginPath(); ctx.arc(p.x, p.y, s * 1.9, 0, Math.PI * 2); ctx.fill();
-    const grd = ctx.createLinearGradient(p.x - s, p.y - s, p.x + s, p.y + s);
-    grd.addColorStop(0, '#fff3a0'); grd.addColorStop(0.5, '#ffc300'); grd.addColorStop(1, '#b8860b');
-    ctx.fillStyle = grd; ctx.strokeStyle = '#5c3b00'; ctx.lineWidth = 3;
-    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2); ctx.strokeRect(p.x - s, p.y - s, s * 2, s * 2);
-    ctx.fillStyle = '#7a00ff'; ctx.fillRect(p.x - s, p.y - 4, s * 2, 8); ctx.fillRect(p.x - 4, p.y - s, 8, s * 2);
-    ctx.fillStyle = '#fff'; ctx.font = '900 20px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#8e44ad'; ctx.strokeStyle = '#2c0b3d'; ctx.lineWidth = 3;
+    ctx.fillRect(p.x - s, p.y - s, s * 2, s * 2);
+    ctx.strokeRect(p.x - s, p.y - s, s * 2, s * 2);
+    ctx.strokeStyle = '#d6a2ff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(p.x - s, p.y - s); ctx.lineTo(p.x + s, p.y + s); ctx.moveTo(p.x + s, p.y - s); ctx.lineTo(p.x - s, p.y + s); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = '900 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('★', p.x, p.y + 1);
-    ctx.font = '900 11px system-ui, sans-serif'; ctx.fillStyle = '#ffd700';
-    ctx.fillText('EPIC', p.x, p.y - s - 12);
   }
 
   function drawAbilityCrate(p) {
@@ -2426,6 +2527,7 @@ const Game = (() => {
       : me.slowT > 0 ? `${Math.ceil(me.slowT)}s`
       : me.phaseT > 0 ? `${Math.ceil(me.phaseT)}s`
       : me.reflectT > 0 ? `${Math.ceil(me.reflectT)}s`
+      : me.stimT > 0 ? `${Math.ceil(me.stimT)}s`
       : me.abCd > 0 ? `${Math.ceil(me.abCd)}s`
       : me.abUses === Infinity ? 'Ready' : `Ready ×${me.abUses}`;
     const key = A.name + state;

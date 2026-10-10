@@ -463,3 +463,8 @@ body.light .toast { background: #1b1f27e0; color: #fff; }
 body.light .switch::after { box-shadow: 0 1px 2px #0003; }
 body.light .preview-wrap { background-blend-mode: normal; }
 body.light .gun-btn, body.light #abilityBtn:not(.passive) { color: #fff; }
+
+/* ability boosts in the Ability tab */
+.perk-head { grid-column: 1 / -1; font-weight: 800; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+.card.perk { border-style: dashed; }
+.card.perk.equipped { border-style: solid; background: var(--panel-2); }

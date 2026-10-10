@@ -177,6 +177,27 @@
     el('slotTabs').innerHTML = '';
     const wrap = el('parts');
     wrap.innerHTML = '';
+    // boosts for the equipped ability (only shown for that ability)
+    const perks = ABILITY_PERKS[current] || [];
+    const L = Account.user.loadout;
+    if (!perks.some(p => p.id === L.perk)) L.perk = null;
+    if (perks.length) {
+      const head = document.createElement('div');
+      head.className = 'perk-head';
+      head.textContent = `⚡ Boosts for ${ABILITIES[current].name}`;
+      wrap.appendChild(head);
+      for (const p of [null, ...perks]) {
+        const card = document.createElement('button');
+        card.className = 'card perk' + ((L.perk || null) === (p ? p.id : null) ? ' equipped' : '');
+        card.innerHTML = `<div class="card-name">${p ? p.name : 'No boost'}</div><div class="card-desc">${p ? p.desc : 'Plain ability'}</div>`;
+        card.onclick = () => { L.perk = p ? p.id : null; Account.save(); renderLoadout(); };
+        wrap.appendChild(card);
+      }
+      const head2 = document.createElement('div');
+      head2.className = 'perk-head';
+      head2.textContent = 'Abilities';
+      wrap.appendChild(head2);
+    }
     for (const id in ABILITIES) {
       const A = ABILITIES[id];
       const card = document.createElement('button');
@@ -184,7 +205,7 @@
       card.innerHTML = `<div class="ab-icon" style="background:${A.color}">${A.name[0]}</div>
         <div class="card-name">${A.name} <small class="hint">${A.type}</small></div>
         <div class="card-desc">${A.desc}</div>`;
-      card.onclick = () => { Account.user.loadout.ability = id; Account.save(); renderLoadout(); };
+      card.onclick = () => { if (Account.user.loadout.ability !== id) Account.user.loadout.perk = null; Account.user.loadout.ability = id; Account.save(); renderLoadout(); };
       wrap.appendChild(card);
     }
     const A = ABILITIES[current];
