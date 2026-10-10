@@ -1088,7 +1088,22 @@ const Game = (() => {
         G.texts.push({ x: tgt.x, y: tgt.y - 34, text: `+${COMBO.supplyMags} MAGS`, color: '#fff200', life: 1 });
         burst(tgt.x, tgt.y, '#fff200', 12, 180);
       } else ({ x: mx, y: my } = buddyPath(g, tgt.x, tgt.y, dt));
-    } else if (Math.hypot(me.x - g.x, me.y - g.y) > 55) ({ x: mx, y: my } = buddyPath(g, me.x, me.y, dt)); // nobody needs ammo: cling to you
+    } else {
+      // no decoy needs anything: only come to you if YOU need ammo, then hand you mags
+      const room = gn => gn.stats.magSize + gn.stats.maxReserve - gn.ammo - gn.reserve;
+      const gun = me.guns.find(gn => room(gn) > 0 && gn.stats.boxRefill > 0);
+      const d = Math.hypot(me.x - g.x, me.y - g.y);
+      g.giveCd = Math.max(0, (g.giveCd || 0) - dt);
+      if (gun && me.alive) {
+        if (d > 55) ({ x: mx, y: my } = buddyPath(g, me.x, me.y, dt));
+        else if (g.giveCd === 0) {
+          g.giveCd = 1;
+          for (const gn of me.guns) if (room(gn) > 0 && gn.stats.boxRefill > 0) gn.reserve += Math.min(room(gn), gn.stats.boxRefill * COMBO.supplyMags);
+          G.texts.push({ x: me.x, y: me.y - 34, text: `+${COMBO.supplyMags} MAGS`, color: '#fff200', life: 1 });
+          updateWeaponBar(true);
+        }
+      }
+    }
     if (mx || my) g.aim = Math.atan2(my, mx);
     g.x += mx * ABILITIES.decoy.speed * 1.1 * dt; g.y += my * ABILITIES.decoy.speed * 1.1 * dt;
     collideWorld(g);
