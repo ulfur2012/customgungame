@@ -1246,7 +1246,7 @@ const Game = (() => {
       ctx.beginPath(); ctx.arc(r.x, r.y, r.r * (0.2 + 0.8 * k), 0, Math.PI * 2); ctx.stroke();
     }
     // frozen enemies get an ice shell
-    if (G.mode === 'sp') for (const e of G.enemies) if (e.frozen > 0) {
+    if (G.mode === 'sp') for (const e of G.enemies) if (e.frozen > 0 && canSee(e.x, e.y, e.r)) {
       ctx.fillStyle = 'rgba(126,214,255,0.45)'; ctx.strokeStyle = '#dff6ff'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
@@ -2093,7 +2093,13 @@ const Game = (() => {
         G.queue = ['boss', ...(B.id === 'gamemaster' ? [] : Array(G.wave).fill('grunt'))];
         G.banner = { text: `Wave ${G.wave} — ${B.name}!`, t: 3 };
       } else {
+        // old mix, plus the newer enemies once their wave comes up
+        const extra = Object.keys(ENEMIES).filter(k => ENEMIES[k].from && G.wave >= ENEMIES[k].from);
         G.queue = Array.from({ length: 3 + G.wave * 2 }, () => {
+          if (extra.length && Math.random() < Math.min(0.45, 0.1 + G.wave * 0.02)) {
+            let r = Math.random() * extra.reduce((n, k) => n + ENEMIES[k].weight, 0);
+            for (const k of extra) if ((r -= ENEMIES[k].weight) < 0) return k;
+          }
           const r = Math.random();
           return G.wave >= 2 && r < 0.3 ? 'shooter' : G.wave >= 2 && r < 0.55 ? 'runner' : 'grunt';
         });
@@ -2334,11 +2340,32 @@ const Game = (() => {
         e.cd -= dt;
         if (e.cd <= 0) { enemyShoot(e); e.cd = e.def.gun.delay * (0.8 + Math.random() * 0.4); }
       }
-      if (me.alive && Math.hypot(me.x - e.x, me.y - e.y) < e.r + me.r && me.meleeInv === 0) {
+      if (me.alive && e.def.melee && Math.hypot(me.x - e.x, me.y - e.y) < e.r + me.r && me.meleeInv === 0) {
         hurtMe(e.def.melee, 4, Math.atan2(dy, dx), null);
         me.meleeInv = 0.6;
       }
+      // BOMBER: blows up when it reaches you (or your buddy)
+      if (e.def.kamikaze && !e.gone && Math.hypot(tgt.x - e.x, tgt.y - e.y) < e.r + PLAYER.r + 18) {
+        e.gone = true;
+        explode(e.x, e.y, e.def.kamikaze.radius, e.def.kamikaze.damage, 'enemy');
+        if (tgt !== me && tgt.hp !== undefined) { if (tgt.kind) damageGadget(tgt, e.def.kamikaze.damage); else tgt.hp -= e.def.kamikaze.damage; }
+      }
+      // HEALER: patches up enemies around it
+      if (e.def.heal) {
+        e.healT = (e.healT || 1) - dt;
+        if (e.healT <= 0) {
+          e.healT = 1;
+          const H = e.def.heal;
+          for (const o of list) if (o.hp < o.maxHp && Math.hypot(o.x - e.x, o.y - e.y) <= H.radius) {
+            o.hp = Math.min(o.maxHp, o.hp + H.perSec);
+            G.texts.push({ x: o.x, y: o.y - o.r - 6, text: `+${H.perSec}`, color: '#2ecc71', life: 0.6 });
+          }
+          G.rings.push({ x: e.x, y: e.y, r: H.radius, life: 0.5, max: 0.5, color: '46,204,113' });
+        }
+      }
+      e.laserOn = !!(e.def.laser && sees && e.cd < 0.8); // SNIPER: red laser right before it fires
     }
+    if (list.some(e => e.gone)) G.enemies = G.enemies.filter(e => !e.gone);
     for (let i = 0; i < list.length; i++) {
       for (let j = i + 1; j < list.length; j++) {
         const a = list[i], b = list[j];
@@ -2385,6 +2412,7 @@ const Game = (() => {
     G.score += e.def.score;
     burst(e.x, e.y, e.color || e.def.color, e.type === 'boss' ? 60 : 14, e.type === 'boss' ? 500 : 260);
     G.enemies = G.enemies.filter(x => x !== e);
+    if (e.def.split) for (let i = 0; i < e.def.split.count; i++) spawnNear(e.def.split.into, e.x, e.y); // SPLITTER
     if (e.boss === 'hydra' && !e.mini) { // HYDRA splits into 3 smaller heads
       for (let i = 0; i < 3; i++) {
         const an = i * Math.PI * 2 / 3, c = { x: e.x + Math.cos(an) * 60, y: e.y + Math.sin(an) * 60, r: 30 };
@@ -2511,6 +2539,12 @@ const Game = (() => {
   }
 
   // ---------------------------------------------------------------- render
+  // can you see this thing? Only if there's a clear line to its middle (no peeking at someone hiding behind a wall)
+  function canSee(x, y, r) {
+    const me = G.me;
+    return lineOfSight(me.x, me.y, x, y) || (r > 30 && lineOfSight(me.x, me.y, x, y - r * 0.5)) || (r > 30 && lineOfSight(me.x, me.y, x, y + r * 0.5));
+  }
+
   function render() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.fillStyle = theme().bg;
@@ -2549,6 +2583,11 @@ const Game = (() => {
     }
 
     for (const e of G.enemies) {
+      if (!canSee(e.x, e.y, e.r)) continue; // no peeking at enemies around corners
+      if (e.laserOn) {
+        ctx.strokeStyle = `rgba(255,40,40,${0.35 + 0.4 * Math.sin(G.time * 30)})`; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(e.aim) * 1400, e.y + Math.sin(e.aim) * 1400); ctx.stroke();
+      }
       if (e.boss === 'phantom') ctx.globalAlpha = e.seen > 0 || e.flash > 0 ? 0.85 : 0.1;
       drawChar(e.def, e.x, e.y, e.r, e.aim, e.color || e.def.color, e.flash > 0);
       ctx.globalAlpha = 1;
@@ -2557,6 +2596,7 @@ const Game = (() => {
 
     for (const r of G.remotes.values()) {
       if (!r.alive) continue;
+      if (isEnemy(r) && !canSee(r.x, r.y, PLAYER.r)) continue; // enemy players behind walls stay hidden (teammates always show)
       const sprite = r.sprites[r.gun];
       drawPlayer(r, r.color, sprite, r.flash > 0);
       if (r.sh > 0) drawBar(r.x, r.y - PLAYER.r - 14, 54, 7, r.sh / ABILITIES.shield.hp, false, '#3b82f6');

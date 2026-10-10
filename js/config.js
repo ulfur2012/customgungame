@@ -172,6 +172,16 @@ const ENEMIES = {
   runner:  { size: 30, r: 12, color: '#f0a84e', hp: 20,   speed: 200, melee: 7,  score: 10 },
   shooter: { size: 40, r: 16, color: '#4ecdc4', hp: 35,   speed: 90,  melee: 8,  score: 15, keepDistance: 380,
              gun: { damage: 9, delay: 1.1, loudness: 7, speed: 700 } },
+  // newer enemies (from = first wave they can show up in, weight = how common)
+  tank:    { size: 58, r: 24, color: '#7f8c8d', hp: 170,  speed: 70,  melee: 22, score: 25, from: 3, weight: 1 },
+  bomber:  { size: 34, r: 14, color: '#ff3838', hp: 25,   speed: 230, melee: 0,  score: 15, from: 4, weight: 1.2,
+             kamikaze: { radius: 95, damage: 30 } },
+  splitter:{ size: 44, r: 18, color: '#c56cf0', hp: 60,   speed: 105, melee: 10, score: 20, from: 5, weight: 1,
+             split: { into: 'runner', count: 2 } },
+  sniper:  { size: 40, r: 16, color: '#3c6382', hp: 30,   speed: 80,  melee: 6,  score: 25, from: 6, weight: 0.7, keepDistance: 650, laser: true,
+             gun: { damage: 25, delay: 2.6, loudness: 9, speed: 1400 } },
+  healer:  { size: 38, r: 15, color: '#2ecc71', hp: 35,   speed: 95,  melee: 5,  score: 25, from: 8, weight: 0.6, keepDistance: 350,
+             heal: { radius: 230, perSec: 8 } },
   boss:    { size: 110, r: 46, color: '#9b59b6', hp: 1200, speed: 55, melee: 30, score: 200,
              gun: { damage: 12, delay: 1.6, loudness: 12, speed: 600 } },
 };
