@@ -725,10 +725,6 @@ const Game = (() => {
     addPacks([pack]);
     if (G.mode === 'mp') Net.send({ t: 'packs', packs: [pack] });
     burst(n.x1, n.y1, '#fff200', 20, 260);
-    if (isMine(n.owner) && (G.me.synergies || []).includes('Supply Decoy')) { // SUPPLY DECOY combo
-      const k = G.gadgets.filter(g => g.kind === 'decoy' && g.supply && !g.dead && isMine(g.owner)).length;
-      if (k < COMBO.supplyMax) { landGadget({ kind: 'decoy', x1: n.x1, y1: n.y1, a: n.a || 0, owner: n.owner, supply: true }); G.banner = { text: 'Supply Decoy out!', t: 1.2 }; }
-    }
   }
 
   // teleport right behind the closest enemy you can see. false if there's nobody
@@ -803,6 +799,15 @@ const Game = (() => {
   // ---- thrown gadgets: everyone simulates them; damage is worked out by whoever gets hit
   let gadgetSeq = 0;
   function landGadget(n) {
+    if (isMine(n.owner) && n.kind === 'decoy' && !n.supply) { // SUPPLY DECOY: a decoy thrown onto your Resupply crate
+      const crate = G.packs.find(p => p.kind === 'supply' && Math.hypot(p.x - n.x1, p.y - n.y1) <= 70);
+      if (crate) {
+        removePack(crate.id);
+        if (G.mode === 'mp') Net.send({ t: 'took', id: crate.id });
+        n.supply = true; n.x1 = crate.x; n.y1 = crate.y;
+        comboFx(crate.x, crate.y, '#fff200', 'SUPPLY DECOY');
+      }
+    }
     if (isMine(n.owner)) {
       if (n.kind === 'firepit') { // INFERNO VORTEX
         const bh = myGadget('blackhole', n.x1, n.y1, ABILITIES.blackhole.radius);
@@ -1081,7 +1086,7 @@ const Game = (() => {
         G.texts.push({ x: tgt.x, y: tgt.y - 34, text: `+${COMBO.supplyMags} MAGS`, color: '#fff200', life: 1 });
         burst(tgt.x, tgt.y, '#fff200', 12, 180);
       } else ({ x: mx, y: my } = buddyPath(g, tgt.x, tgt.y, dt));
-    } else if (Math.hypot(me.x - g.x, me.y - g.y) > 120) ({ x: mx, y: my } = buddyPath(g, me.x, me.y, dt)); // nobody needs ammo: stay with you
+    } else if (Math.hypot(me.x - g.x, me.y - g.y) > 55) ({ x: mx, y: my } = buddyPath(g, me.x, me.y, dt)); // nobody needs ammo: cling to you
     if (mx || my) g.aim = Math.atan2(my, mx);
     g.x += mx * ABILITIES.decoy.speed * 1.1 * dt; g.y += my * ABILITIES.decoy.speed * 1.1 * dt;
     collideWorld(g);
