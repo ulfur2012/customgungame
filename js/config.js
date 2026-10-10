@@ -726,3 +726,7 @@ const SHOP = {
 };
 // first 10 waves of single player are easier (fewer, weaker, slower-spawning enemies)
 const EASY = { waves: 10, hp: 0.55, count: 0.6, spawn: 1.6, damage: 0.6 };
+
+// decoy teamwork: a 2nd decoy goes for the next-nearest enemy unless the first one's target has more than `crowd`
+// enemies within crowdRadius (then it goes along to help). Spare targets further than maxSpread are skipped.
+const DECOY_AI = { crowd: 2, crowdRadius: 250, maxSpread: 1400 };

@@ -1148,8 +1148,7 @@ const Game = (() => {
 
   function updateBuddy(g, dt) {
     const A = ABILITIES.decoy;
-    let best = null, bd = Infinity;
-    for (const t of targets()) { const d = Math.hypot(t.x - g.x, t.y - g.y); if (d < bd) { best = t; bd = d; } }
+    const best = buddyTarget(g), bd = best ? Math.hypot(best.x - g.x, best.y - g.y) : Infinity;
     let mx = 0, my = 0;
     const sees = best && lineOfSight(g.x, g.y, best.x, best.y) && !smokeBlocks(g.x, g.y, best.x, best.y);
     // reload from the spare mag
@@ -1216,6 +1215,12 @@ const Game = (() => {
       if (mx || my) g.aim = Math.atan2(my, mx);
     }
     g.x += mx * A.speed * dt; g.y += my * A.speed * dt;
+    // decoys can't stand in the same spot: push apart
+    for (const o of G.gadgets) {
+      if (o === g || o.kind !== 'decoy' || o.dead || o.owner !== g.owner) continue;
+      const dx = g.x - o.x, dy = g.y - o.y, d = Math.hypot(dx, dy) || 0.01, min = PLAYER.r * 2;
+      if (d < min) { const push = (min - d) / 2; g.x += dx / d * push; g.y += dy / d * push; o.x -= dx / d * push; o.y -= dy / d * push; }
+    }
     collideWorld(g);
     g.cd -= dt;
     g.kick = Math.max(0, g.kick - 40 * dt);
@@ -1226,6 +1231,23 @@ const Game = (() => {
       g.kick = 4;
       shootFrom(g.x + Math.cos(g.aim) * 30, g.y + Math.sin(g.aim) * 30, g.aim, s);
     }
+  }
+
+  // DECOY AI: spread out. Take the nearest enemy nobody else is on; if another decoy already has it,
+  // go for the next nearest, unless that enemy has more than 2 enemies around it (then help out).
+  function buddyTarget(g) {
+    const list = targets(), D = DECOY_AI;
+    const sorted = list.map(t => ({ t, d: Math.hypot(t.x - g.x, t.y - g.y) })).sort((a, b) => a.d - b.d || a.t.x - b.t.x);
+    if (!sorted.length) return (g.target = null);
+    const crowd = t => list.filter(o => Math.hypot(o.x - t.x, o.y - t.y) < D.crowdRadius).length;
+    const others = G.gadgets.filter(o => o !== g && o.kind === 'decoy' && !o.dead && o.owner === g.owner);
+    let pick = null;
+    for (const { t, d } of sorted) {
+      if (d > D.maxSpread && pick === null && sorted[0].d < D.maxSpread) break; // don't run across the map for a spare one
+      const taken = others.some(o => o.target === t);
+      if (!taken || crowd(t) > D.crowd) { pick = t; break; }
+    }
+    return (g.target = pick || sorted[0].t);
   }
 
   // direction for the buddy to walk to reach (tx, ty) around walls (grid paths, refreshed often)
