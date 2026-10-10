@@ -1073,15 +1073,17 @@ const Game = (() => {
     }
   }
 
-  // SUPPLY DECOY: no gun, never attacks. Runs to your decoys that are low on ammo and gives each 3 mags.
+  // SUPPLY DECOY: no gun, never attacks. Goes round your decoys (new ones and low ones) giving each 3 mags.
   function updateSupply(g, dt) {
-    const me = G.me, low = b => b.kind === 'decoy' && !b.supply && !b.dead && isMine(b.owner) && b.stats && b.ammo + b.reserve <= b.stats.magSize;
+    // visits every new decoy once (then the next one), and comes back to any that run low again
+    const me = G.me, low = b => b.kind === 'decoy' && !b.supply && !b.dead && isMine(b.owner) && b.stats && (!b.supplied || b.ammo + b.reserve <= b.stats.magSize);
     let tgt = null, bd = Infinity;
     for (const b of G.gadgets) if (low(b)) { const d = Math.hypot(b.x - g.x, b.y - g.y); if (d < bd) { tgt = b; bd = d; } }
     let mx = 0, my = 0;
     if (tgt) {
       if (bd < 46) { // hand over the mags
         tgt.reserve += tgt.stats.magSize * COMBO.supplyMags;
+        tgt.supplied = true;
         if (tgt.ammo === 0) { const k = Math.min(tgt.stats.magSize, tgt.reserve); tgt.ammo = k; tgt.reserve -= k; }
         G.texts.push({ x: tgt.x, y: tgt.y - 34, text: `+${COMBO.supplyMags} MAGS`, color: '#fff200', life: 1 });
         burst(tgt.x, tgt.y, '#fff200', 12, 180);
