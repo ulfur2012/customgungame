@@ -4888,6 +4888,22 @@ const Game = (() => {
     return best;
   }
 
+  // can the enemy's whole body walk straight at the target? (both edges of its body see it, not just the middle)
+  function wideSight(e, t, d) {
+    const px = -(t.y - e.y) / d * e.r, py = (t.x - e.x) / d * e.r;
+    return lineOfSight(e.x + px, e.y + py, t.x + px, t.y + py) && lineOfSight(e.x - px, e.y - py, t.x - px, t.y - py);
+  }
+  // a gentle push away from walls right next to the enemy
+  function wallPush(e) {
+    const R = e.r + 14;
+    let x = 0, y = 0;
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4, cx = Math.cos(a), cy = Math.sin(a);
+      if (pointInWall(e.x + cx * R, e.y + cy * R)) { x -= cx; y -= cy; }
+    }
+    const l = Math.hypot(x, y);
+    return l ? { x: x / l, y: y / l } : { x: 0, y: 0 };
+  }
   function updateEnemies(dt) {
     const me = G.me, list = G.enemies;
     updateFlow(dt);
@@ -4920,10 +4936,22 @@ const Game = (() => {
       let mx = dx / d, my = dy / d;
       if (!players().length) { mx = my = 0; }
       else if (e.def.keepDistance && sees && d < e.def.keepDistance) { mx *= -0.6; my *= -0.6; }
-      else if (!sees || (e.r > MAP.grid * 0.45 && d > 250)) { // follow the path around the walls toward you (the boss always does)
+      else if (!sees || (e.r > MAP.grid * 0.45 && d > 250) || e.unstuckT > 0 || !wideSight(e, tgt, d)) { // follow the path around the walls toward you (the boss always does)
         const step = pathStep(e);
         if (step) { const l = Math.hypot(step.x - e.x, step.y - e.y) || 1; mx = (step.x - e.x) / l; my = (step.y - e.y) / l; }
       }
+      if (mx || my) { // keep a little away from walls so they don't scrape along them and get stuck
+        const w = wallPush(e);
+        if (w.x || w.y) { mx += w.x * 0.7; my += w.y * 0.7; const l = Math.hypot(mx, my) || 1; mx /= l; my /= l; }
+      }
+      // stuck check: barely moved for a while -> just follow the path for a bit
+      e.stuckT = (e.stuckT || 0) + dt;
+      if (e.stuckT >= 0.5) {
+        const moved = Math.hypot(e.x - (e.sx ?? e.x), e.y - (e.sy ?? e.y));
+        if ((mx || my) && moved < e.speed * 0.5 * 0.25) e.unstuckT = 1.5;
+        e.sx = e.x; e.sy = e.y; e.stuckT = 0;
+      }
+      if (e.unstuckT > 0) e.unstuckT -= dt;
       const spd = e.speed * (e.chill > 0 ? COMBO.iceSlow : 1) * (e.grav > 0 ? ABILITIES.gravity.slow : 1); // ice wall
       e.x += (mx * spd + e.kx) * dt;
       e.y += (my * spd + e.ky) * dt;
