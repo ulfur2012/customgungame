@@ -621,6 +621,12 @@ const COMBOS = [
   { a: 'tesla', b: 'tesla',    name: 'Storm Tower',    formation: true, how: 'Make 3 Big Teslas (3 Teslas in one square each) in an L: one corner square with a Big Tesla right next to it on one side AND one above or below it. They fuse into a Storm Tower in the corner: huge range, zaps chain to 4 more enemies and lightning falls from its storm cloud.' },
   { a: 'turret', b: 'shieldgen', name: 'Fortress',     formation: true, how: '3 Turrets in one square → Rocket Turret. Line up Rocket Turret, Shield Generator, Rocket Turret (side-by-side squares, generator in the middle). They fuse into a Fortress: 4-barrel gun + rockets, a 250 HP regenerating shield, and an overshield for you inside its dome.' },
   { a: 'hangar', b: 'radar',   name: 'Carrier',        formation: true, how: 'Throw 3 Drone Hangars into one square → Big Hangar. Make a Command Tower (throw a Decoy onto a Radar) in the square right next to it (any side). The radar is used up and the hangar becomes a Carrier: 5 big drones, double damage, longer reach.' },
+  { a: 'mortar', b: 'mortar',  name: 'Artillery Battery', formation: true, how: 'Throw 3 Mortars into one square → Big Mortar. Put a normal Mortar in the square on each side of it (left + right, or above + below). Every 4s the battery fires 5 shells at 5 enemies almost anywhere on the map (60 damage each).' },
+  { a: 'shieldgen', b: 'shieldgen', name: 'Aegis Dome', formation: true, how: '3 Shield Generators in one square → Big Shield Generator. Put a normal Shield Generator on each side of it (row or column). The dome gets twice as big, gives an 80 HP overshield every 3s, repairs your buildings inside and stops enemy bullets.' },
+  { a: 'flame', b: 'flame',    name: 'Inferno Tower',  formation: true, how: '3 Flame Towers in one square → Big Flame Tower. Put a normal Flame Tower on each side of it (row or column). It sprays fire all the way around (much stronger and further) and throws fireballs at enemies far away.' },
+  { a: 'gravity', b: 'gravity', name: 'Black Hole Generator', formation: true, how: '3 Gravity Towers in one square → Big Gravity Tower. Put a normal Gravity Tower on each side of it (row or column). It pulls enemies in from twice as far and crushes everything near its core every 3s (50 damage).' },
+  { a: 'sniper', b: 'radar',   name: 'Watchtower',     formation: true, how: '3 Sniper Nests in one square → Big Sniper Nest. Put a Radar in the square right next to it (any side). The radar is used up: every 1.2s it snipes the toughest enemy anywhere on the map, right through walls (160 damage).' },
+  { a: 'barrier', b: 'shieldgen', name: 'Citadel Wall', formation: true, how: 'Throw 3 Barriers close together → Big Barrier. Throw a Shield Generator into a square touching the wall. The generator is used up: the wall gets 1500 HP, repairs itself and grows a gun tower at each end that shoots enemies.' },
   { a: 'turret', b: 'radar',   name: 'Spotter Turret', how: 'Throw a Radar next to a Turret (or a Turret next to a Radar): the turret shoots through walls from very far away.' },
   { a: 'turret', b: 'medic',   name: 'Heal Turret',    how: 'Throw a second Heal Zone onto a Medic Turret: it shoots green heal bullets at hurt buddies (+50 HP) and you (+20 HP). Low buddies run to it.' },
   { a: 'turret', b: 'medic',   name: 'Medic Turret',   how: 'Throw a Heal Zone onto a Turret: it keeps shooting and heals you 5 HP every 3 seconds when you are near it and out of combat.' },
@@ -698,7 +704,16 @@ const FORMATIONS = {
   stormtower: { hp: 420, radius: 2.4, dmgMul: 2, chains: 4, chainRange: 300, everyMul: 0.7, boltEvery: 2.5, bolts: 3, boltDmg: 45, size: 2 },
   fortress:   { hp: 600, range: 1150, every: 0.11, damage: 9, speed: 2600, rocketEvery: 4, shield: 250, shieldRegen: 30, shieldDelay: 3, dome: 280, overshield: 40, overEvery: 5 },
   carrier:    { hp: 380, drones: 5, dmgMul: 2, droneHp: 2, range: 1.4, size: 1.8 },
+  // v85: every building has a mega upgrade. "trio" = small | BIG | small of the same building (row or column)
+  artillery:  { hp: 520, every: 4, shells: 5, range: 2600, minRange: 120, damage: 60, radius: 130, flight: 1.3, size: 1.8 },          // Mortar trio
+  aegis:      { hp: 560, radius: 2, every: 3, shield: 80, shieldTime: 6, repair: 12, size: 1.8 },                                        // Shield Generator trio
+  inferno:    { hp: 600, range: 1.7, dmgMul: 2.5, fireEvery: 2.5, fireballs: 3, fireRange: 900, fireDmg: 40, fireRadius: 110, burn: 4, size: 1.8 }, // Flame Tower trio
+  singularity:{ hp: 560, radius: 2, pull: 2.2, crushEvery: 3, crushDmg: 50, crushRadius: 0.55, size: 1.8 },                            // Gravity Tower trio
+  watchtower: { hp: 420, every: 1.2, range: 3000, damage: 160, speed: 6000, size: 1.8 },                                                 // Big Sniper Nest + Radar
+  citadel:    { hp: 1500, regen: 20, every: 0.45, damage: 18, range: 750, speed: 2200 },                                                 // Big Barrier + Shield Generator
 };
+const FORMATION_NAMES = { orbital: 'Orbital Strike', stormtower: 'Storm Tower', fortress: 'Fortress', carrier: 'Carrier', artillery: 'Artillery Battery',
+  aegis: 'Aegis Dome', inferno: 'Inferno Tower', singularity: 'Black Hole Generator', watchtower: 'Watchtower', citadel: 'Citadel Wall' };
 
 // Ability boosts: passives that only exist for one ability (you only see them once that ability is equipped).
 // add / mul change that ability's numbers for you while it's equipped.
@@ -864,6 +879,15 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 85, title: 'Mega buildings for everyone', notes: [
+    'Every building now has a MEGA version! Make a Big one (3 in one square) and put the right buddy building next to it.',
+    'Artillery Battery: Mortar | Big Mortar | Mortar. Shoots 5 shells across the map.',
+    'Aegis Dome: Shield Gen | Big Shield Gen | Shield Gen. Huge dome that stops enemy bullets.',
+    'Inferno Tower: Flame | Big Flame | Flame. Fire all around + fireballs.',
+    'Black Hole Generator: Gravity | Big Gravity | Gravity. Pulls from far and crushes.',
+    'Watchtower: Big Sniper Nest + a Radar next to it. Snipes the toughest enemy anywhere.',
+    'Citadel Wall: Big Barrier + a Shield Generator touching it. 1500 HP wall with 2 gun towers.',
+    'The Command Tower now looks like a real tall radar tower.'] },
   { v: 84, title: 'Door', notes: ['New Door ability (Movement): aim at a wall to open a doorway, press again to close it.'] },
   { v: 83, title: 'Ultimates shop + new combos', notes: [
     'Buy ultimates in the new Ultimate tab. You need the right abilities first (Rail Cannon needs Turret + Tesla).',

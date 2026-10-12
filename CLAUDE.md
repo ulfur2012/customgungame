@@ -38,6 +38,11 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
   Storm Tower (3 Big Teslas in an L), Fortress (Rocket Turret|Shield Gen|Rocket Turret), Carrier (Big Hangar beside a Command
   Tower). Gadget ones are a flag set via `upgradeGadget` (`formUp` sets HP/size on every client); turret ones (railgun,
   fortress) are local like all turrets. A Radar thrown ONTO a Big Laser = Prism; beside it = formation piece.
+  v85: every building has one. Trios (small | BIG | small, row/col): Artillery Battery (mortar), Aegis Dome (shieldgen, blocks enemy
+  bullets), Inferno Tower (flame, fireball strikes s[9]=fire), Black Hole Generator (gravity, `singularity`). Watchtower = Big Sniper
+  + Radar beside (Eagle Eye only if thrown INTO the big nest's square). Citadel Wall = Big Barrier + Shield Gen touching it (2 end
+  guns, regen; drawn after the darkness since the wall blocks its own sight). Names in config FORMATION_NAMES (inspect card).
+  Command Tower is drawn as a tall lattice comms mast (`drawCommandTower`).
 - Ability slots: 1 = E, 2 = C, 3 = V from wave 20, 4 = B from wave 30 (SP; all 4 in Test mode).
   Slot state is swapped into `me` (`swapAlt('alt'|'alt3'|'alt4')`) so ability code works for every slot.
   Passives work from any slot (`hasAb`). Weak abilities (`respawn`) get a use back every 30s.
