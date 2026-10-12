@@ -64,7 +64,17 @@
   }
 
   let testMode = false;
-  const spLoadout = () => openLoadout(testMode ? 'Start test' : 'Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); Game.startSP(testMode); }, goMenu);
+  let runBanked = 0; // score from the current run already added to your bank (boss shops bank it early)
+  function bankRun(r) {
+    if (!r || r.test) return 0;
+    const add = Math.max(0, r.score - runBanked);
+    runBanked = r.score;
+    Account.user.best = Math.max(Account.user.best || 0, r.wave);
+    Account.user.bank = (Account.user.bank || 0) + add;
+    Account.save();
+    return add;
+  }
+  const spLoadout = () => openLoadout(testMode ? 'Start test' : 'Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); runBanked = 0; Game.startSP(testMode); }, goMenu);
   // Single Player first asks: test mode on or off?
   el('spBtn').onclick = () => { el('testToggle').checked = testMode; overlay('spScreen', true); };
   el('spStart').onclick = () => { testMode = el('testToggle').checked; shopOn = !el('freeToggle').checked; overlay('spScreen', false); spLoadout(); };
@@ -452,7 +462,8 @@
     } else {
       // quitting still banks the score you earned this run (test mode doesn't count)
       const r = Game.run;
-      if (r && !r.test) { Account.user.best = Math.max(Account.user.best || 0, r.wave); Account.user.bank = (Account.user.bank || 0) + r.score; Account.save(); if (r.score) toast(`+${r.score} score to spend`); }
+      const add = bankRun(r);
+      if (add) toast(`+${add} score to spend`);
       Game.stop();
       goMenu();
     }
@@ -470,6 +481,7 @@
   Game.on('bossDown', r => {
     if (!Game.running) return;
     Game.pause();
+    bankRun(Game.run); // score earned so far this run can be spent in the boss shop
     for (const o of ['pauseScreen', 'resultScreen', 'settingsScreen']) overlay(o, false);
     if (r.unlocked3) abSlot = 2;
     if (r.unlocked4) abSlot = 3;
@@ -481,7 +493,7 @@
     el('parts').prepend(note);
   });
   Game.on('spOver', r => {
-    if (!r.test) { Account.user.best = Math.max(Account.user.best || 0, r.wave); Account.user.bank = (Account.user.bank || 0) + r.score; Account.save(); }
+    bankRun(r);
     Game.stop();
     showResult('You died', `Wave ${r.wave} · ${r.kills} kills · score ${r.score}${r.test ? ' (test mode — not counted)' : ` · +${r.score} to spend (you have ${Account.user.bank})`}`, [
       { label: 'Play again', fn: spLoadout },
