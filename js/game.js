@@ -69,11 +69,11 @@ const Game = (() => {
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
         alt: newSlot(L.ability2), alt3: newSlot(null), alt4: newSlot(null),
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
-        ult: null, stimT: 0, frenzyT: 0, stormN: 0, stormT: 0, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
+        ult: null, ultKind: ULTIMATES[L.ult] ? L.ult : null, ultCharge: 0, railT: 0, bashT: 0, stimT: 0, frenzyT: 0, stormN: 0, stormT: 0, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
-      bullets: [], fx: [], texts: [], hears: [], feed: [],
+      bullets: [], rails: [], sensed: [], fx: [], texts: [], hears: [], feed: [],
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
@@ -151,6 +151,7 @@ const Game = (() => {
     if (!G) return;
     const me = G.me, L = Account.user.loadout;
     me.ability = L.ability; me.abCd = 0; me.abWasHeld = me.abAiming = false;
+    me.ultKind = ULTIMATES[L.ult] ? L.ult : null;
     me.alt = newSlot(L.ability2);
     me.alt3 = newSlot(slot3Open() ? L.ability3 : null);
     me.alt4 = newSlot(slot4Pick());
@@ -170,6 +171,7 @@ const Game = (() => {
     me.alt3 = newSlot(slot3Open() ? L.ability3 : null); abCache3 = '';
     me.alt4 = newSlot(slot4Pick()); abCache4 = '';
     me.shield = 0; me.shieldT = 0; me.speedT = 0; me.rapidT = 0; me.slowT = 0; me.lastStand = false;
+    me.ultKind = ULTIMATES[L.ult] ? L.ult : null;
     applyBandolier(me);
     abCache = '';
     updateWeaponBar(true);
@@ -644,6 +646,11 @@ const Game = (() => {
     if (me.grapple) {
       const g = me.grapple, d = Math.hypot(g.x - me.x, g.y - me.y);
       g.t -= dt;
+      if (d < 40 && both('grapple', 'quake')) { // GROUND POUND
+        slam(me.x, me.y, COMBO.poundRadius, COMBO.poundDmg, COMBO.poundKb, myOwnerId());
+        if (G.mode === 'mp') Net.send({ t: 'aoe', x: Math.round(me.x), y: Math.round(me.y), r: COMBO.poundRadius, dmg: COMBO.poundDmg, kb: COMBO.poundKb });
+        G.shake = Math.min(14, G.shake + 8);
+      }
       if (d < 40 || g.t <= 0) me.grapple = null;
       else { me.vx = (g.x - me.x) / d * ABILITIES.grapple.pull; me.vy = (g.y - me.y) / d * ABILITIES.grapple.pull; }
     }
@@ -718,6 +725,7 @@ const Game = (() => {
       me.vx += Math.cos(a) * A.power;
       me.vy += Math.sin(a) * A.power;
       burst(me.x, me.y, A.color, 8, 160);
+      if (both('dash', 'shield') && me.shieldT > 0) { me.bashT = COMBO.bashTime; me.bashHit = new Set(); } // SHIELD BASH
     }
     if (me.ability === 'blink') {
       // goes through walls: land at full range, or the furthest free spot before it
@@ -729,6 +737,11 @@ const Game = (() => {
         if (free(nx, ny)) { tx = nx; ty = ny; break; }
       }
       burst(me.x, me.y, A.color, 12, 200);
+      if (both('blink', 'grenade')) { // PARTING GIFT: a bomb where you were
+        const s = [Math.round(me.x), Math.round(me.y), COMBO.giftDelay, COMBO.giftRadius, COMBO.giftDmg];
+        G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: myOwnerId() });
+        if (G.mode === 'mp') Net.send({ t: 'ult', k: 'gift', s: [s] });
+      }
       me.x = tx; me.y = ty; collideWorld(me);
       burst(me.x, me.y, A.color, 12, 200);
     }
@@ -737,7 +750,10 @@ const Game = (() => {
       fireBullets(me.x, me.y, angles, A.speed, A.damage, 1.5, A.range, 6 * HEAR_UNIT);
       G.shake = Math.min(12, G.shake + 5);
     }
-    if (me.ability === 'slowmo') { me.slowT = A.duration; G.banner = { text: 'Bullet time!', t: 1 }; }
+    if (me.ability === 'slowmo') {
+      me.slowT = A.duration; G.banner = { text: 'Bullet time!', t: 1 };
+      if (both('nova', 'slowmo')) { const N = ABILITIES.nova; fireBullets(me.x, me.y, Array.from({ length: N.count }, (_, i) => +(i * Math.PI * 2 / N.count).toFixed(4)), N.speed, N.damage, 1.5, N.range, 6 * HEAR_UNIT); G.banner = { text: 'COMBO: TIME BURST!', t: 1.2 }; }
+    }
     if (me.ability === 'grapple') {
       let hit = null;
       for (let d = 20; d <= A.range; d += 10) {
@@ -748,7 +764,10 @@ const Game = (() => {
       else me.grapple = { ...hit, t: 0.8 };
     }
     if (me.ability === 'phase') { me.phaseT = A.duration; G.banner = { text: 'Phase walk!', t: 1 }; }
-    if (me.ability === 'reflect') { me.reflectT = A.duration; G.banner = { text: 'Mirror up!', t: 1 }; }
+    if (me.ability === 'reflect') {
+      me.reflectT = A.duration; G.banner = { text: 'Mirror up!', t: 1 };
+      if (both('reflect', 'shield')) { me.shield = Math.max(me.shield, COMBO.mirrorShield); me.shieldT = Math.max(me.shieldT, A.duration); } // MIRROR SHIELD
+    }
     if (me.ability === 'overcharge') { me.overShots = A.shots; G.banner = { text: 'Overcharged!', t: 1 }; }
     if (me.ability === 'recall') me.recall = { x: me.x, y: me.y, hp: me.hp, t: A.delay };
     if (me.ability === 'quake') {
@@ -982,6 +1001,16 @@ const Game = (() => {
         const rd = myGadget('radar', n.x1, n.y1, COMBO.near);
         if (rd && !rd.command) { upgradeGadget(rd, 'command'); comboFx(rd.x, rd.y, '#ffd32a', 'COMMAND TOWER'); setTimeout(checkFormations, 0); }
       }
+      if (n.kind === 'freeze') { // FROST FOG / CRYO VORTEX (the freeze still goes off)
+        const sm = myGadget('smoke', n.x1, n.y1, ABILITIES.smoke.radius);
+        if (sm && !sm.frost) { upgradeGadget(sm, 'frost'); comboFx(n.x1, n.y1, '#9ee7ff', 'FROST FOG'); }
+        const bh = myGadget('blackhole', n.x1, n.y1, ABILITIES.blackhole.radius);
+        if (bh && !bh.cryoBh) { upgradeGadget(bh, 'cryoBh'); comboFx(bh.x, bh.y, '#74b9ff', 'CRYO VORTEX'); }
+      }
+      if (n.kind === 'mine') { // SPRING TRAP (mine used up)
+        const pad = myGadget('jumppad', n.x1, n.y1, COMBO.near);
+        if (pad && !pad.spring) { upgradeGadget(pad, 'spring'); comboFx(pad.x, pad.y, '#1dd1a1', 'SPRING TRAP'); return; }
+      }
       if (n.kind === 'freeze') { // CRYO MORTAR (the freeze still goes off)
         const mo = myGadget('mortar', n.x1, n.y1, COMBO.near);
         if (mo && !mo.cryo) { upgradeGadget(mo, 'cryo'); comboFx(mo.x, mo.y, '#74b9ff', 'CRYO MORTAR'); }
@@ -1038,6 +1067,7 @@ const Game = (() => {
   }
 
   // ---- ability combos (see COMBOS in config)
+  const both = (a, b) => hasAb(a) && hasAb(b);
   const comboFx = (x, y, color, text) => {
     burst(x, y, color, 45, 420);
     G.rings.push({ x, y, r: 150, life: 0.6, max: 0.6, color: '255,215,0' });
@@ -1052,6 +1082,8 @@ const Game = (() => {
   function upgradeGadget(g, what) {
     g[what] = true;
     if (what === 'vortex') g.t += COMBO.vortexTime;
+    if (what === 'napalm') g.t += COMBO.napalmTime;
+    if (what === 'cryoBh') g.t += COMBO.cryoBhTime;
     if (FORMATIONS[what]) formUp(g, what);
     if (G.mode === 'mp') Net.send({ t: 'gadc', id: g.id, w: what });
   }
@@ -1589,13 +1621,47 @@ const Game = (() => {
         const an = Math.random() * Math.PI * 2, d = A.radius * (0.3 + Math.random() * 0.6);
         G.fx.push({ x: g.x + Math.cos(an) * d, y: g.y + Math.sin(an) * d, vx: -Math.sin(an) * 200 - Math.cos(an) * 120, vy: Math.cos(an) * 200 - Math.sin(an) * 120, life: 0.5, max: 0.5, size: 7, color: Math.random() < 0.5 ? '#ff6b1a' : '#ffd32a' });
       }
+      if (g.kind === 'sensor' && isMine(g.owner) && g.age > 0.5) { // MOTION SENSOR: reveal, then self destruct
+        const t = targets().find(e => Math.hypot(e.x - g.x, e.y - g.y) <= A.radius + (e.r || PLAYER.r));
+        if (t) {
+          G.sensed.push({ tgt: t, x: t.x, y: t.y, t: A.reveal });
+          G.banner = { text: 'Motion Sensor: enemy spotted!', t: 1.5 };
+          const s = [Math.round(g.x), Math.round(g.y), 0.05, A.boomRadius, A.boomDamage];
+          G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: g.owner });
+          burst(g.x, g.y, '#ff4d4d', 20, 300);
+          removeGadget(g);
+          if (G.mode === 'mp') { Net.send({ t: 'gadx', id: g.id }); Net.send({ t: 'ult', k: 'sensor', s: [s] }); Net.send({ t: 'sens', x: Math.round(t.x), y: Math.round(t.y) }); }
+          continue;
+        }
+      }
+      if (g.kind === 'smoke' && g.frost && isMine(g.owner) && pve()) areaOf(g, A.radius, e => { e.chill = Math.max(e.chill || 0, 0.3); }, () => {});
+      if (g.kind === 'smoke' && g.mist) {
+        g.mistT = (g.mistT ?? 1) - dt;
+        if (g.mistT <= 0) {
+          g.mistT = 1;
+          if (me.alive && me.hp < me.maxHp && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius) heal(COMBO.mistHeal);
+          if (isMine(g.owner)) healBuddies(g.x, g.y, A.radius, COMBO.mistHeal);
+        }
+      }
+      if (g.kind === 'jumppad' && g.spring && isMine(g.owner) && pve()) { // SPRING TRAP
+        g.springT = (g.springT || 0) - dt;
+        if (g.springT <= 0) {
+          const e = G.enemies.find(e => Math.hypot(e.x - g.x, e.y - g.y) <= A.radius + e.r);
+          if (e) { g.springT = COMBO.springCd; hurtEnemy(e, COMBO.springDmg, COMBO.springKb, Math.atan2(e.y - g.y, e.x - g.x) || g.a); burst(g.x, g.y, '#1dd1a1', 16, 300); }
+        }
+      }
+      if (g.kind === 'blackhole' && g.cryoBh && g.t <= 0 && !g.popped) { // CRYO VORTEX: freezes everything in it when it closes
+        g.popped = true;
+        G.rings.push({ x: g.x, y: g.y, r: A.radius, life: 0.6, max: 0.6, color: '126,214,255' });
+        areaOf(g, A.radius, e => { e.frozen = Math.max(e.frozen || 0, COMBO.cryoBhFreeze); }, () => { me.frozenT = Math.max(me.frozenT, COMBO.cryoBhFreeze * 0.6); });
+      }
       if (g.kind === 'firepit' && g.tick <= 0) {
         g.tick = 0.5;
-        areaAll(g, A.radius, e => hurtEnemy(e, A.dps / 2, 0.2, Math.atan2(e.y - g.y, e.x - g.x)),
+        areaAll(g, A.radius * (g.napalm ? COMBO.napalmSize : 1), e => hurtEnemy(e, A.dps / 2, 0.2, Math.atan2(e.y - g.y, e.x - g.x)),
           () => hurtMe(A.dps / 2, 0, Math.atan2(me.y - g.y, me.x - g.x), g.owner));
       }
       if (g.kind === 'firepit' && Math.random() < 0.6) {
-        const an = Math.random() * Math.PI * 2, d = Math.random() * A.radius;
+        const an = Math.random() * Math.PI * 2, d = Math.random() * A.radius * (g.napalm ? COMBO.napalmSize : 1);
         G.fx.push({ x: g.x + Math.cos(an) * d, y: g.y + Math.sin(an) * d, vx: 0, vy: -50, life: 0.5, max: 0.5, size: 7, color: Math.random() < 0.5 ? '#ff6b1a' : '#ffd32a' });
       }
       if (g.kind === 'tesla' && g.stormtower && isMine(g.owner) && pve()) { // STORM TOWER: lightning falls from its cloud
@@ -2041,7 +2107,7 @@ const Game = (() => {
         ctx.beginPath(); ctx.arc(g.x, g.y, r * 0.8, -2.4, -1.6); ctx.stroke();
       } else if (g.kind === 'firepit') {
         ctx.fillStyle = 'rgba(255,107,26,0.25)'; ctx.strokeStyle = 'rgba(255,160,40,0.7)'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * pop, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * pop * (g.napalm ? COMBO.napalmSize : 1), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       } else if (g.kind === 'decoy') {
         if (g.medicBuddy) {
           const k = (G.time % 1.2) / 1.2;
@@ -2072,6 +2138,14 @@ const Game = (() => {
           ctx.fillStyle = g.age > A.arm && Math.sin(G.time * 10) > 0 ? '#ff3030' : '#550000';
           ctx.beginPath(); ctx.arc(g.x, g.y, 4, 0, Math.PI * 2); ctx.fill();
         }
+      } else if (g.kind === 'sensor') {
+        if (!hostileTo(g.owner)) {
+          ctx.globalAlpha = 0.35 + 0.15 * Math.sin(G.time * 4);
+          ctx.fillStyle = '#2d3436'; ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(g.x, g.y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.setLineDash([4, 8]); ctx.beginPath(); ctx.arc(g.x, g.y, ABILITIES.sensor.radius, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+          ctx.globalAlpha = 1;
+        }
       } else if (g.kind === 'jumppad') {
         ctx.translate(g.x, g.y); ctx.rotate(g.a);
         ctx.fillStyle = 'rgba(29,209,161,0.35)'; ctx.strokeStyle = '#1dd1a1'; ctx.lineWidth = 3;
@@ -2079,6 +2153,7 @@ const Game = (() => {
         ctx.fillStyle = '#1dd1a1';
         const s = (G.time * 2) % 1;
         for (let i = 0; i < 2; i++) { const o = -14 + ((s + i * 0.5) % 1) * 28; ctx.beginPath(); ctx.moveTo(o + 10, 0); ctx.lineTo(o - 4, -10); ctx.lineTo(o - 4, 10); ctx.fill(); }
+        if (g.spring) { ctx.strokeStyle = '#c0392b'; ctx.lineWidth = 3; ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.arc(0, 0, A.radius + 6, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
       } else if (g.kind === 'radar') {
         drawRadar(g);
       } else if (g.kind === 'tesla') {
@@ -2816,6 +2891,7 @@ const Game = (() => {
   function drawGadgetsTop() {
     if (Input.flags.dblAt) { inspectAt(Input.flags.dblAt.x, Input.flags.dblAt.y); Input.flags.dblAt = null; }
     drawInspect(1 / 60);
+    drawSensed(1 / 60);
     const me = G.me;
     for (const g of G.gadgets) {
       if (g.kind === 'smoke') {
@@ -2824,7 +2900,8 @@ const Game = (() => {
           const px = g.x + (p.x - g.x) * grow + Math.sin(G.time * 0.7 + p.ph) * 8, py = g.y + (p.y - g.y) * grow + Math.cos(G.time * 0.6 + p.ph) * 8;
           const r = p.r * grow * (1 + 0.05 * Math.sin(G.time + p.ph));
           const grd = ctx.createRadialGradient(px, py, 0, px, py, r);
-          grd.addColorStop(0, `rgba(158,164,174,${0.97 * fade})`); grd.addColorStop(0.65, `rgba(150,156,166,${0.9 * fade})`); grd.addColorStop(1, 'rgba(150,156,166,0)');
+          const c1 = g.frost ? '190,228,250' : g.mist ? '150,220,170' : '158,164,174', c2 = g.frost ? '170,215,245' : g.mist ? '130,210,155' : '150,156,166';
+          grd.addColorStop(0, `rgba(${c1},${0.97 * fade})`); grd.addColorStop(0.65, `rgba(${c2},${0.9 * fade})`); grd.addColorStop(1, `rgba(${c2},0)`);
           ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
         }
       }
@@ -2848,6 +2925,25 @@ const Game = (() => {
         }
       }
     }
+  }
+
+  // MOTION SENSOR reveals: a red ring on the spotted enemy (live for yours, the spot it was seen for teammates) + an arrow
+  function drawSensed(dt) {
+    const me = G.me;
+    for (const s of G.sensed) {
+      s.t -= dt;
+      const live = s.tgt && !s.tgt.dead && (s.tgt.hp === undefined || s.tgt.hp > 0) && (s.tgt.alive !== false);
+      if (live) { s.x = s.tgt.x; s.y = s.tgt.y; }
+      ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(s.x, s.y, 26 + Math.sin(G.time * 8) * 4, 0, Math.PI * 2); ctx.stroke();
+      if (!me.alive) continue;
+      const an = Math.atan2(s.y - me.y, s.x - me.x), ax = me.x + Math.cos(an) * 90, ay = me.y + Math.sin(an) * 90;
+      ctx.save(); ctx.translate(ax, ay); ctx.rotate(an);
+      ctx.fillStyle = '#ff9f43'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-9, -10); ctx.lineTo(-3, 0); ctx.lineTo(-9, 10); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    G.sensed = G.sensed.filter(s => s.t > 0);
   }
 
   // ---- ULTIMATES (from the epic crate)
@@ -2874,6 +2970,25 @@ const Game = (() => {
     return pool[0][0];
   }
 
+  // equipped (bought) ultimate charges up from damage you deal + a little every second
+  function chargeUlt(n) {
+    const me = G.me;
+    if (!me.ultKind || me.ult) return;
+    me.ultCharge += n;
+    if (me.ultCharge >= ULT_CHARGE.damage) {
+      me.ultCharge = 0; me.ult = me.ultKind;
+      G.banner = { text: `${ULTIMATES[me.ult].name.toUpperCase()} READY! (${Settings.mobile ? 'gold button' : 'press F'})`, t: 2.5 };
+    }
+  }
+  // RAIL CANNON: one giant beam that goes through walls (everyone checks themselves in MP)
+  function fireRail(x, y, a, owner) {
+    const U = ULTIMATES.railcannon, me = G.me, x2 = x + Math.cos(a) * U.length, y2 = y + Math.sin(a) * U.length;
+    G.rails.push({ x, y, x2, y2, life: 0.6, max: 0.6 });
+    G.shake = Math.max(G.shake, 18);
+    if (isMine(owner)) {
+      if (pve()) for (const e of [...G.enemies]) if (segHitsCircle(x, y, x2, y2, e.x, e.y, e.r + U.width / 2)) hurtEnemy(e, U.damage, 8, a);
+    } else if (me.alive && hostileTo(owner) && segHitsCircle(x, y, x2, y2, me.x, me.y, me.r + U.width / 2)) hurtMe(U.damage, 8, a, owner);
+  }
   function useUlt() {
     const me = G.me, k = me.ult, U = ULTIMATES[k];
     me.ult = null;
@@ -2966,11 +3081,32 @@ const Game = (() => {
       }
     }
     if (k === 'tracker') { me.trackT = U.duration; if (G.mode === 'mp') Net.send({ t: 'ult', k }); }
+    if (k === 'railcannon') { me.railT = U.delay; G.banner = { text: 'RAIL CANNON charging...', t: U.delay }; }
   }
 
   function updateUlt(dt) {
     const me = G.me;
     if (Input.take('ultPress') && me.ult && me.alive) useUlt();
+    if (me.alive) chargeUlt(ULT_CHARGE.perSec * dt);
+    if (me.railT > 0) {
+      me.railT -= dt;
+      if (Math.random() < 0.8) burst(me.x + Math.cos(me.aim) * 30, me.y + Math.sin(me.aim) * 30, '#48dbfb', 2, 160);
+      if (me.railT <= 0 && me.alive) {
+        const x = Math.round(me.x + Math.cos(me.aim) * 30), y = Math.round(me.y + Math.sin(me.aim) * 30), a = +me.aim.toFixed(3);
+        fireRail(x, y, a, myOwnerId());
+        if (G.mode === 'mp') Net.send({ t: 'ult', k: 'railcannon', x, y, a });
+      }
+    }
+    if (me.bashT > 0) { // SHIELD BASH: ram enemies while dashing with a shield
+      me.bashT -= dt;
+      if (pve()) for (const e of [...G.enemies]) {
+        if (me.bashHit.has(e) || Math.hypot(e.x - me.x, e.y - me.y) > me.r + e.r + 14) continue;
+        me.bashHit.add(e); hurtEnemy(e, COMBO.bashDmg, COMBO.bashKb, Math.atan2(e.y - me.y, e.x - me.x)); burst(e.x, e.y, '#3b82f6', 12, 240);
+        if (me.bashHit.size === 1) G.banner = { text: 'COMBO: SHIELD BASH!', t: 1 };
+      }
+    }
+    for (const r of G.rails) r.life -= dt;
+    G.rails = G.rails.filter(r => r.life > 0);
     me.miniT = Math.max(0, me.miniT - dt);
     me.godT = Math.max(0, me.godT - dt);
     for (const k of ['wallT', 'rocketT', 'trackT', 'juggT', 'overT', 'stimT', 'frenzyT']) me[k] = Math.max(0, me[k] - dt);
@@ -3058,6 +3194,20 @@ const Game = (() => {
       const grd = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, w);
       grd.addColorStop(0, 'rgba(255,255,255,0.95)'); grd.addColorStop(0.35, 'rgba(255,61,245,0.8)'); grd.addColorStop(1, 'rgba(255,61,245,0)');
       ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(l.x, l.y, w, 0, Math.PI * 2); ctx.fill();
+    }
+    for (const r of G.rails) {
+      const k = r.life / r.max, W = ULTIMATES.railcannon.width;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `rgba(72,219,251,${0.45 * k})`; ctx.lineWidth = W * (1.6 - 0.6 * k);
+      ctx.beginPath(); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x2, r.y2); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${0.95 * k})`; ctx.lineWidth = W * 0.35 * k + 2;
+      ctx.beginPath(); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x2, r.y2); ctx.stroke();
+      ctx.lineCap = 'butt';
+    }
+    if (me.railT > 0) {
+      ctx.strokeStyle = 'rgba(72,219,251,0.5)'; ctx.lineWidth = 2; ctx.setLineDash([12, 10]);
+      ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(me.x + Math.cos(me.aim) * ULTIMATES.railcannon.length, me.y + Math.sin(me.aim) * ULTIMATES.railcannon.length); ctx.stroke();
+      ctx.setLineDash([]);
     }
     if (me.godT > 0) {
       ctx.strokeStyle = `rgba(246,229,141,${0.6 + 0.3 * Math.sin(G.time * 12)})`; ctx.lineWidth = 5;
@@ -3484,7 +3634,7 @@ const Game = (() => {
   function fireRocket() {
     const me = G.me, m = gunToWorld(me, me.guns[me.cur].sprite.muzzle);
     addRocket(m.x, m.y, me.aim, myOwnerId());
-    me.abUses--;
+    me.abUses--; me.abCd = ABILITIES.rpg.cooldown || 0;
     G.lastCombat = G.time;
     G.shake = Math.min(12, G.shake + 6);
     if (G.mode === 'mp') Net.send({ t: 'rpg', x: Math.round(m.x), y: Math.round(m.y), a: +me.aim.toFixed(4) });
@@ -3523,6 +3673,8 @@ const Game = (() => {
       if (medT) { medT.healer = true; medT.beamT = 1; comboFx(medT.x, medT.y, '#32ff7e', 'HEAL TURRET'); continue; }
       const hg = n.kind === 'medic' && isMine(n.owner) && myGadget('hangar', n.x1, n.y1, COMBO.near); // MEDIC DRONES (heal zone used up)
       if (hg && !hg.medic) { upgradeGadget(hg, 'medic'); comboFx(hg.x, hg.y, '#32ff7e', 'MEDIC DRONES'); continue; }
+      const sm = n.kind === 'medic' && isMine(n.owner) && myGadget('smoke', n.x1, n.y1, ABILITIES.smoke.radius); // HEALING MIST (heal zone used up)
+      if (sm && !sm.mist) { upgradeGadget(sm, 'mist'); comboFx(n.x1, n.y1, '#32ff7e', 'HEALING MIST'); continue; }
       const dome = n.kind === 'medic' && isMine(n.owner) && myGadget('bubble', n.x1, n.y1, ABILITIES.bubble.radius);
       const bud = n.kind === 'medic' && isMine(n.owner) && myGadget('decoy', n.x1, n.y1, COMBO.near);
       if (dome && !dome.heal) { upgradeGadget(dome, 'heal'); dome.t += COMBO.domeTime; comboFx(dome.x, dome.y, '#32ff7e', 'HEALING DOME'); }
@@ -3560,6 +3712,8 @@ const Game = (() => {
           list.push([Math.round(n.x1 + Math.cos(an) * d), Math.round(n.y1 + Math.sin(an) * d), +(0.1 + i * 0.08).toFixed(2), C.bombRadius, C.damage]);
         }
         burst(n.x1, n.y1, C.color, 16, 260);
+        const fp = isMine(n.owner) && myGadget('firepit', n.x1, n.y1, ABILITIES.firepit.radius * 1.3); // NAPALM
+        if (fp && !fp.napalm) { upgradeGadget(fp, 'napalm'); comboFx(fp.x, fp.y, '#ff6b1a', 'NAPALM'); }
         for (const s of list) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: n.owner });
         if (G.mode === 'mp') Net.send({ t: 'ult', k: 'cluster', s: list });
       } else if (ABILITIES[n.kind] && ABILITIES[n.kind].gadget) landGadget(n);
@@ -3613,6 +3767,11 @@ const Game = (() => {
         const hit = [...G.remotes.values()].find(o => o.alive && o.id !== r.owner && segHitsCircle(x1, y1, r.x, r.y, o.x, o.y, PLAYER.r));
         if (hit) { r.done = true; explode(r.x, r.y, R.radius, R.damage, r.owner); }
       }
+    }
+    for (const r of G.rockets) if (r.done && isMine(r.owner) && both('rpg', 'firepit')) { // NAPALM ROCKET
+      let x = r.x, y = r.y;
+      for (let k = 0; k < 6 && pointInWall(x, y); k++) { x -= r.vx * 0.02; y -= r.vy * 0.02; }
+      landGadget({ kind: 'firepit', x1: clamp(x, 0, MAP.w), y1: clamp(y, 0, MAP.h), a: 0, owner: r.owner });
     }
     G.rockets = G.rockets.filter(r => !r.done);
   }
@@ -4237,6 +4396,7 @@ const Game = (() => {
   function hitEnemy(e, b, a) {
     const dmg = bulletDamage(b);
     if (b.team === 'me') vampire();
+    if (b.team !== 'r') chargeUlt(dmg);
     e.hp -= dmg;
     e.flash = 0.08;
     const weight = e.r / 16;
@@ -4507,10 +4667,12 @@ const Game = (() => {
     const g = G.gadgets.find(g => g.id === m.id);
     if (g) { g.x = m.x; g.y = m.y; g.aim = m.a; g.hp = m.hp; }
   });
+  Net.on('sens', m => { if (inMP() && !hostileTo(m.from)) { G.sensed.push({ x: m.x, y: m.y, t: ABILITIES.sensor.reveal }); G.banner = { text: 'Teammate\'s sensor spotted an enemy!', t: 1.5 }; } });
   Net.on('ult', m => {
     if (!inMP()) return;
     if (m.k === 'timestop') { if (hostileTo(m.from)) { G.me.frozenT = 3; G.banner = { text: 'TIME STOPPED!', t: 1.5 }; } }
     else if (m.k === 'tracker') { if (!hostileTo(m.from)) { G.me.trackT = ULTIMATES.tracker.duration; G.banner = { text: 'Teammate used Tracker!', t: 1.5 }; } }
+    else if (m.k === 'railcannon') fireRail(m.x, m.y, m.a, m.from);
     else if (m.k === 'laser') G.lasers.push({ x: m.x, y: m.y, a: m.a, t: ULTIMATES.laser.duration, tick: 0, owner: m.from });
     else if (m.s) for (const s of m.s) addStrike(s, m.from);
   });
@@ -4985,10 +5147,14 @@ const Game = (() => {
   // which timer a running ability shows on its button
   const RUNNING = { shield: 'shieldT', rapid: 'rapidT', slowmo: 'slowT', phase: 'phaseT', reflect: 'reflectT', stim: 'stimT', cls_overclock: 'clockT', cls_afterimage: 'phaseT' };
   function updateAbilityBtn() {
-    const ub = el('ultBtn'), U = G.me.ult && ULTIMATES[G.me.ult];
-    ub.classList.toggle('hidden', !U);
+    const ub = el('ultBtn'), U = G.me.ult && ULTIMATES[G.me.ult], K = G.me.ultKind && ULTIMATES[G.me.ultKind];
+    ub.classList.toggle('hidden', !U && !K);
+    ub.classList.toggle('charging', !U && !!K);
     if (U && ub.dataset.k !== G.me.ult) { ub.dataset.k = G.me.ult; ub.querySelector('.ult-name').textContent = U.name; }
-    if (!U) ub.dataset.k = '';
+    if (!U) {
+      ub.dataset.k = '';
+      if (K) { const t = `${K.name} ${Math.floor(100 * G.me.ultCharge / ULT_CHARGE.damage)}%`; if (ub.dataset.t !== t) { ub.dataset.t = t; ub.querySelector('.ult-name').textContent = t; } }
+    }
     abCache = paintAbilityBtn(el('abilityBtn'), abCache);
     swapAlt(); abCache2 = paintAbilityBtn(el('ability2Btn'), abCache2); swapAlt();
     swapAlt('alt3'); abCache3 = paintAbilityBtn(el('ability3Btn'), abCache3); swapAlt('alt3');
@@ -5031,6 +5197,7 @@ const Game = (() => {
   function resume() { if (G) { G.paused = false; last = performance.now(); } }
 
   return {
+    closeInspect() { if (!G || !G.inspect) return false; G.inspect = null; return true; },
     startSP, startMP, stop, pause, resume, applyLoadout, applyAbilities, spawnEpic, summon, killAll,
     get test() { return !!(G && G.test); },
     get infAbility() { return !!(G && G.infAbility); },

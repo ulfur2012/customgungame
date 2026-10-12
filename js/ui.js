@@ -62,7 +62,18 @@
     el('menuName').textContent = Account.user.name;
     el('menuBest').textContent = (Account.user.best ? `· best wave ${Account.user.best} ` : '') + `· ⭐ ${Account.user.bank} score to spend`;
     show('menu');
+    // WHAT'S NEW: pops up once per new version
+    let seen = 0;
+    try { seen = +localStorage.getItem('cgg.seenUpdate') || 0; } catch (e) {}
+    if (UPDATES.length && UPDATES[0].v > seen) openWhatsNew();
   }
+  function openWhatsNew() {
+    el('whatsNewBody').innerHTML = UPDATES.map((u, i) => `<div class="${i ? 'old' : ''}"><h3>v${u.v} · ${u.title}</h3><ul>${u.notes.map(n => `<li>${n}</li>`).join('')}</ul></div>`).join('');
+    overlay('whatsNew', true);
+    try { localStorage.setItem('cgg.seenUpdate', String(UPDATES[0].v)); } catch (e) {}
+  }
+  el('whatsNewBtn').onclick = openWhatsNew;
+  el('whatsNewClose').onclick = () => overlay('whatsNew', false);
 
   let testMode = false;
   let runBanked = 0; // score from the current run already added to your bank (boss shops bank it early)
@@ -105,7 +116,7 @@
       () => { show(null); Game.applyLoadout(); Game.resume(); });
   };
   el('mpBtn').onclick = () => { el('mpStatus').textContent = ''; show('mp'); };
-  el('customizeBtn').onclick = () => { shopOn = false; openLoadout('Save', goMenu, goMenu); };
+  el('customizeBtn').onclick = () => { shopOn = true; menuShop = true; openLoadout('Save', goMenu, goMenu); };
   el('settingsBtn').onclick = () => overlay('settingsScreen', true);
   el('logoutBtn').onclick = () => { Account.logout(); show('login'); };
 
@@ -195,6 +206,7 @@
     el('loadout').classList.toggle('abilities-only', abilitiesOnly);
     if (abilitiesOnly) gunKind = 'ability';
     el('loadoutDone').textContent = doneLabel;
+    if (done !== goMenu) menuShop = false;
     onDone = done; onBack = back;
     show('loadout');
     renderLoadout();
@@ -213,14 +225,17 @@
       if (p) list.push(['perk:' + p.id, p.name]);
     }
     for (const kind of ['main', 'secondary']) for (const sl in L[kind]) if (L[kind][sl]) list.push([`part:${kind}:${sl}:${L[kind][sl]}`, findPart(sl, L[kind][sl]).name]);
+    if (L.ult && ULTIMATES[L.ult]) list.push(['ult:' + L.ult, 'Ultimate: ' + ULTIMATES[L.ult].name]);
     return list.map(([key, name]) => ({ key, name, cost: priceOf(key) })).filter(x => x.cost);
   }
   let shopOn = false; // only when the single player / host settings say upgrades aren't free
+  let menuShop = false; // Customize from the main menu: you can buy, but saving never forces it
   function stripUnowned() {
     const L = Account.user.loadout;
     for (const x of unowned()) {
       const [type, a, b, c] = x.key.split(':');
       if (type === 'part') L[a][b] = null;
+      if (type === 'ult') L.ult = null;
       for (const [k, pk] of [['ability', 'perk'], ['ability2', 'perk2'], ['ability3', 'perk3'], ['ability4', 'perk4']]) {
         if (type === 'ab' && L[k] === a) { L[k] = k === 'ability' ? 'grenade' : null; L[pk] = null; }
         if (type === 'perk' && L[pk] === a) L[pk] = null;
@@ -235,6 +250,19 @@
     if (!list.length) return true;
     const total = list.reduce((n, x) => n + x.cost, 0);
     const lines = list.map(x => `• ${x.name} — ${x.cost}`).join('\n');
+    const badUlt = list.find(x => x.key.startsWith('ult:') && !ultReqsMet(x.key.slice(4), list.map(y => y.key)));
+    if (badUlt) {
+      const id = badUlt.key.slice(4), need = ULT_REQS[id].map(a => ABILITIES[a].name).join(', ');
+      if (menuShop) { toast(`Saved. ${ULTIMATES[id].name} needs: ${need} before you can buy it`); return true; }
+      alert(`${ULTIMATES[id].name} needs you to own: ${need}.\nUnequip it in the Ultimate tab or buy those first.`); return false;
+    }
+    if (menuShop) { // main menu: offer to buy, but saving always works
+      if ((u.bank || 0) < total) { toast(`Saved. Not enough score to buy it all yet (${total} needed)`); return true; }
+      if (!confirm(`Buy everything in this loadout for ${total} score?\n${lines}\n\nYou have ${u.bank}. (Cancel = just save)`)) return true;
+      u.bank -= total; u.owned.push(...list.map(x => x.key)); Account.save();
+      toast(`Bought! ${u.bank} score left`);
+      return true;
+    }
     if ((u.bank || 0) < total) { alert(`This loadout costs ${total} score:\n${lines}\n\nYou have ${u.bank || 0}. Swap something out or earn more score.`); return false; }
     if (!confirm(`This loadout costs ${total} score:\n${lines}\n\nYou have ${u.bank}. Buy it?`)) return false;
     u.bank -= total; u.owned.push(...list.map(x => x.key)); Account.save();
@@ -254,14 +282,15 @@
       el('presetTabs').appendChild(b);
     }
     el('gunTabs').innerHTML = '';
-    for (const kind of ['main', 'secondary', 'ability']) {
+    for (const kind of ['main', 'secondary', 'ability', 'ult']) {
       const b = document.createElement('button');
-      b.className = 'gun-tab' + (kind === gunKind ? ' active' : '') + (kind === 'ability' ? ' ability-tab' : '');
-      b.textContent = kind === 'ability' ? 'Ability' : GUNS[kind].name;
+      b.className = 'gun-tab' + (kind === gunKind ? ' active' : '') + (kind === 'ability' ? ' ability-tab' : '') + (kind === 'ult' ? ' ability-tab ult-tab' : '');
+      b.textContent = kind === 'ability' ? 'Ability' : kind === 'ult' ? '⚡ Ultimate' : GUNS[kind].name;
       b.onclick = () => { gunKind = kind; renderLoadout(); };
       el('gunTabs').appendChild(b);
     }
     if (gunKind === 'ability') { renderAbilities(); return; }
+    if (gunKind === 'ult') { renderUltimates(); return; }
     const build = Account.user.loadout[gunKind];
 
     const slots = SLOTS.filter(s => partsFor(gunKind, s.key).length);
@@ -313,6 +342,74 @@
     const after = box.querySelector(selector);
     box.scrollTop = scroll;
     if (top !== null && after) box.scrollTop += after.getBoundingClientRect().top - top;
+  }
+  // ULTIMATE tab: buy (score + owning its abilities) and equip one ultimate; it charges up from damage in game
+  function renderUltimates() {
+    const L = Account.user.loadout, u = Account.user;
+    el('slotTabs').innerHTML = '';
+    const tab = document.createElement('button');
+    tab.className = 'tab active';
+    tab.innerHTML = `<span class="tab-label">Ultimate (${keyName(Settings.keys.ult || 'KeyF')})</span><span class="tab-value">${ULTIMATES[L.ult] ? ULTIMATES[L.ult].name : 'None'}</span>`;
+    el('slotTabs').appendChild(tab);
+    const wrap = el('parts');
+    wrap.innerHTML = '';
+    const info = document.createElement('div');
+    info.className = 'class-banner on';
+    info.innerHTML = `<b>⚡ Ultimates</b> — equip one: it charges up when you hit enemies (and a bit every second). When it is full press <b>F</b> (gold button on phones).`
+      + (shopOn ? `<br>Each costs ⭐ ${SHOP.ultimate} and you must <b>own the abilities it needs</b> first.` : '<br><small>Upgrades are free right now.</small>')
+      + ' Gold epic crates still give a random one too.';
+    wrap.appendChild(info);
+    const none = document.createElement('button');
+    none.className = 'card' + (!ULTIMATES[L.ult] ? ' equipped' : '');
+    none.innerHTML = `<div class="ab-icon" style="background:#555c68">–</div><div class="card-name">None</div><div class="card-desc">No ultimate (crates only).</div>`;
+    none.dataset.ult = 'none';
+    none.onclick = () => { L.ult = null; Account.save(); keepInPlace('[data-ult="none"]', renderLoadout); };
+    wrap.appendChild(none);
+    for (const id of Object.keys(ULTIMATES)) {
+      const U = ULTIMATES[id], cost = shopOn ? priceOf('ult:' + id) : 0, reqs = ULT_REQS[id] || [], met = ultReqsMet(id);
+      const card = document.createElement('div');
+      card.className = 'card' + (L.ult === id ? ' equipped' : '') + (cost ? ' locked' : '');
+      card.setAttribute('role', 'button');
+      const needs = reqs.length ? `<span class="needs">Needs: ${reqs.map(a => `<span class="${!shopOn || !priceOf('ab:' + a) ? 'ok' : 'no'}">${ABILITIES[a].name}${!shopOn || !priceOf('ab:' + a) ? ' ✓' : ''}</span>`).join(', ')}</span>` : '';
+      card.innerHTML = `<div class="ult-dot" style="background:${U.color}">⚡</div>
+        <div><div class="card-name">${U.name}${priceTag(cost)}${!cost && shopOn ? ' <small class="hint">owned</small>' : ''}</div>
+        <div class="card-desc">${U.desc}${needs}</div></div>`;
+      if (cost) {
+        const buy = document.createElement('button');
+        buy.className = 'buy-btn';
+        buy.disabled = !met || (u.bank || 0) < cost;
+        buy.textContent = !met ? 'Locked' : (u.bank || 0) < cost ? `Need ⭐ ${cost}` : `Buy ⭐ ${cost}`;
+        buy.onclick = ev => { ev.stopPropagation(); buyUlt(id); };
+        card.querySelector('.card-desc').appendChild(document.createElement('br'));
+        card.querySelector('.card-desc').appendChild(buy);
+      }
+      card.dataset.ult = id;
+      card.onclick = () => {
+        if (cost && !met) { toast(`${U.name} needs: ${reqs.map(a => ABILITIES[a].name).join(', ')}`); return; }
+        L.ult = id; Account.save(); keepInPlace(`[data-ult="${id}"]`, renderLoadout);
+      };
+      wrap.appendChild(card);
+    }
+    const U = ULTIMATES[L.ult];
+    const { ctx, w, h } = fitCanvas(el('preview'));
+    if (w && h) {
+      const r = Math.min(w, h) * 0.24;
+      ctx.fillStyle = U ? U.color : '#555c68';
+      ctx.beginPath(); ctx.arc(w / 2, h / 2 - 10, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `900 ${Math.round(r)}px system-ui, sans-serif`; ctx.fillText('⚡', w / 2, h / 2 - 10);
+      ctx.font = '800 16px system-ui, sans-serif'; ctx.fillText(U ? U.name : 'No ultimate', w / 2, h - 22);
+    }
+    el('stats').innerHTML = `<p class="stat-note" style="font-size:14px">${U ? U.desc : 'Pick an ultimate to charge up in every game.'}</p><p class="stat-note">Charges from ${ULT_CHARGE.damage} damage dealt.</p>`;
+  }
+  function buyUlt(id) {
+    const u = Account.user, cost = priceOf('ult:' + id);
+    if (!cost) return;
+    if (!ultReqsMet(id)) { toast('Own the abilities it needs first'); return; }
+    if ((u.bank || 0) < cost) { toast(`You need ⭐ ${cost}`); return; }
+    u.bank -= cost; u.owned.push('ult:' + id); u.loadout.ult = id; Account.save();
+    toast(`Bought ${ULTIMATES[id].name}! ${u.bank} score left`);
+    keepInPlace(`[data-ult="${id}"]`, renderLoadout);
   }
   let abSlot = 0; // which ability slot the Ability tab is editing (0 = E, 1 = C)
   function renderAbilities() {
@@ -503,7 +600,7 @@
   }
 
   function renderPreview() {
-    if (el('loadout').classList.contains('hidden') || gunKind === 'ability') return;
+    if (el('loadout').classList.contains('hidden') || gunKind === 'ability' || gunKind === 'ult') return;
     const { ctx, w, h } = fitCanvas(el('preview'));
     if (!w || !h) return;
     const L = layoutGun(gunKind, Account.user.loadout[gunKind]);
@@ -559,6 +656,7 @@
   };
   addEventListener('keydown', e => {
     if (e.code !== 'Escape' || !Game.running) return;
+    if (el('pauseScreen').classList.contains('hidden') && Game.closeInspect()) return; // Esc closes a building's stats card first
     if (el('pauseScreen').classList.contains('hidden')) el('pauseBtn').click();
     else el('resumeBtn').click();
   });

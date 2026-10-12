@@ -63,8 +63,9 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
 - Maps must be identical in every browser (no random-comparator sorts in the generator).
 - SHOP (config `SHOP`, `priceOf` in core.js, `unowned`/`checkout` in ui.js): score from SP runs (not test) is banked
   in `Account.user.bank`; unlocks in `Account.user.owned` ('ab:id', 'perk:id', 'part:kind:slot:id'). Some abilities
-  + the first part of each slot are free. Only active when the game isn't "All upgrades free" (SP toggle on the
-  single-player screen, host setting `settings.free` in MP). Customize from the main menu is always free; on paid
+  + the first part of each slot are free; `SHOP.special` = per-ability prices (Radar 5000, Motion Sensor 200). Only active when
+  the game isn't "All upgrades free" (SP toggle on the single-player screen, host setting `settings.free` in MP). Customize from
+  the main menu shows prices and offers to buy on Save (`menuShop`, never blocks saving); on paid
   games you can pick anything but pressing Start/Done lists unowned items + total and asks to buy (MP round start
   strips unowned items if declined).
 - EASY (config): waves 1-10 in SP have fewer/weaker enemies, slower spawns, less damage taken.
@@ -74,6 +75,15 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
 - Gun parts are drawn as realistic vector art in core.js `drawPart`/`drawBody` (steel/polymer/wood materials) until
   the user's PNGs arrive (`assets/parts/<slot>/<id>.png` etc. replace them automatically). The user is making art.
 - Single player Test mode: pause menu has change loadout, spawn ultimate crate, infinite ability.
+
+- ULTIMATES are also buyable ('ult:id', `SHOP.ultimate`) in the loadout's Ultimate tab (`renderUltimates`, `L.ult`), only once
+  you own the abilities in config `ULT_REQS` (`ultReqsMet` in core.js). The equipped one charges (`chargeUlt`: damage dealt +
+  `ULT_CHARGE.perSec`) and fills `me.ult` (F). Epic crates still give random ones. Rail Cannon = `fireRail` (MP 'ult' k railcannon).
+- Non-building combos (v83): Frost Fog, Healing Mist, Spring Trap, Napalm, Cryo Vortex (throw-onto, flags via `upgradeGadget`);
+  equip-both: Napalm Rocket, Shield Bash, Parting Gift, Ground Pound, Mirror Shield, Supercharged, Time Burst (`both(a,b)`).
+- WHAT'S NEW: every update MUST add an entry at the top of config `UPDATES` (version + short kid-friendly notes); the menu
+  pops it up once per new version (localStorage `cgg.seenUpdate`).
+- Esc closes a building inspect card first (`Game.closeInspect`) before pausing.
 
 ## Testing
 Headless Edge (`C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe`) + puppeteer-core scripts

@@ -66,15 +66,19 @@ function allowedBuild(kind, build) {
   return out;
 }
 
+// buyable ultimates: do you own every ability it needs? (extra = keys being bought right now)
+function ultReqsMet(id, extra = []) { return (ULT_REQS[id] || []).every(a => !priceOf('ab:' + a) || extra.includes('ab:' + a)); }
 // what an unlock costs in banked score; 0 = free or already owned. key = 'ab:id' | 'perk:id' | 'part:kind:slot:id'
 function priceOf(key) {
   if (!Account.user || Account.user.owned.includes(key)) return 0;
   const [type, a, b, c] = key.split(':');
   if (type === 'ab') {
     const A = ABILITIES[a];
+    if (SHOP.special && SHOP.special[a]) return SHOP.freeAbilities.includes(a) ? 0 : SHOP.special[a];
     return SHOP.freeAbilities.includes(a) ? 0 : A.building || a === 'turret' ? SHOP.ability.building : A.gadget ? SHOP.ability.gadget : A.type === 'passive' ? SHOP.ability.passive : SHOP.ability.active;
   }
   if (type === 'perk') return SHOP.perk;
+  if (type === 'ult') return SHOP.ultimate;
   const i = PARTS[b].filter(p => (p.gun || 'main') === a || p.gun === 'both').findIndex(p => p.id === c);
   return i < SHOP.freeParts ? 0 : Math.min(SHOP.partMax, (i - SHOP.freeParts + 1) * SHOP.part);
 }
@@ -474,6 +478,7 @@ const ICON_SHAPES = {
   vortex:    ['M20 3a17 17 0 1 1-.01 0zM20 10a10 10 0 1 0 .01 0zM20 16a4 4 0 1 1-.01 0z', 'evenodd'],
   flame:     ['M20 2c3 8 12 12 12 22a12 12 0 0 1-24 0c0-6 4-9 6-13 1 4 3 6 5 6-1-5 0-10 1-15z'],
   snow:      ['M17 2h6v13l9-9 4 4-9 9h13v6H27l9 9-4 4-9-9v13h-6V27l-9 9-4-4 9-9H2v-6h13L6 10l4-4 7 7z'],
+  sensor:    ['M20 15a5 5 0 1 1-.01 0zM9 11a15 15 0 0 1 22 0l-3 3a11 11 0 0 0-16 0zM3 5a23 23 0 0 1 34 0l-3 3a19 19 0 0 0-28 0zM17 25h6v12h-6z'],
   person:    ['M20 3a7 7 0 1 1-.01 0zM8 37v-9a12 12 0 0 1 24 0v9z'],
   wall:      ['M3 10h16v8H3zM21 10h16v8H21zM3 20h8v8H3zM13 20h14v8H13zM29 20h8v8h-8zM3 30h16v6H3zM21 30h16v6H21z'],
   mine:      ['M20 9a11 11 0 1 1-.01 0zM18 2h4v8h-4zM18 30h4v8h-4zM2 18h8v4H2zM30 18h8v4h-8z'],

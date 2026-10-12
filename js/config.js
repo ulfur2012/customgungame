@@ -412,8 +412,8 @@ const ABILITIES = {
              desc: 'A 200 HP shield for 7 seconds. Your health bar turns blue.' },
   regen:   { name: 'Regeneration', type: 'passive', color: '#2ecc71', every: 10, heal: 10,
              desc: 'Passive: +10 HP for every 10 seconds you are out of combat.' },
-  rpg:     { name: 'RPG', type: 'active', color: '#e17055', uses: 1, damage: 70, direct: 100, radius: 120, speed: 750,
-             desc: 'ONE rocket per round. 100 damage on a direct hit, 70 in the blast. Explodes on walls.' },
+  rpg:     { name: 'RPG', type: 'active', color: '#e17055', uses: 2, cooldown: 20, damage: 80, direct: 110, radius: 130, speed: 750,
+             desc: 'TWO rockets per round. 110 damage on a direct hit, 80 in the blast. Explodes on walls.' },
   energy:  { name: 'Energy Drink', type: 'active', respawn: 30, color: '#f9ca24', cooldown: 5, uses: 2, heal: 10, speed: 1.7, duration: 6,
              desc: 'Heals 10 HP and makes you 1.7x faster for 6 seconds.' },
   burger:  { name: 'Burger', type: 'active', respawn: 30, color: '#cd6133', cooldown: 5, uses: 2, heal: 100,
@@ -428,8 +428,8 @@ const ABILITIES = {
              desc: 'Passive: reload 35% faster.' },
   blink:    { name: 'Blink', type: 'active', color: '#7d5fff', cooldown: 6, uses: 3, range: 380,
               desc: 'Teleport forward where you aim, even through walls. 3 per round.' },
-  nova:     { name: 'Bullet Nova', type: 'active', color: '#ffa801', cooldown: 15, uses: 2, count: 16, damage: 15, speed: 1100, range: 600,
-              desc: 'Shoot 16 bullets in a ring all around you, 15 damage each.' },
+  nova:     { name: 'Bullet Nova', type: 'active', color: '#ffa801', cooldown: 15, uses: 2, count: 20, damage: 18, speed: 1100, range: 650,
+              desc: 'Shoot 20 bullets in a ring all around you, 18 damage each.' },
   slowmo:   { name: 'Bullet Time', type: 'active', color: '#18dcff', cooldown: 25, uses: 2, duration: 5, factor: 0.35,
               desc: 'For 5 seconds enemy bullets (and in single player, enemies) move in slow motion.' },
   medic:    { name: 'Heal Zone', type: 'active', thrown: true, color: '#32ff7e', cooldown: 20, uses: 2, duration: 8, radius: 110, perSec: 8,
@@ -497,6 +497,9 @@ const ABILITIES = {
   tesla:     { name: 'Tesla Coil', type: 'active', thrown: true, gadget: true, color: '#48dbfb', cooldown: 25, uses: 2,
                radius: 230, duration: Infinity, every: 0.6, damage: 10, hp: 100, building: true,
                desc: 'Throw a tesla tower (100 HP, stays until destroyed) that zaps every enemy close to it with lightning (10 damage).' },
+  sensor:    { name: 'Motion Sensor', type: 'active', thrown: true, gadget: true, color: '#ff4d4d', cooldown: 8, uses: 3, duration: Infinity,
+               radius: 180, reveal: 5, boomRadius: 70, boomDamage: 20,
+               desc: 'Throw a hidden sensor (enemies can\'t see it). When an enemy comes close it shows you (and your team) where they are for 5s, then blows itself up (20 damage).' },
   smoke:     { name: 'Smoke Bomb', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#a4b0be', cooldown: 18, uses: 2,
                radius: 300, duration: 7,
                desc: 'Throw a big thick smoke cloud nobody can see through for 7s. Enemies can\'t shoot you through it.' },
@@ -510,8 +513,8 @@ const ABILITIES = {
                desc: 'For 3 seconds every bullet that hits you bounces straight back at the shooter.' },
   overcharge:{ name: 'Overcharge', type: 'active', color: '#fbc531', cooldown: 20, uses: 2, shots: 12, mul: 2,
                desc: 'Your next 12 shots do double damage.' },
-  quake:     { name: 'Ground Slam', type: 'active', color: '#b8845a', cooldown: 15, uses: 2, radius: 280, damage: 20, kb: 10,
-               desc: 'Slam the ground: 20 damage and a huge push to every enemy around you.' },
+  quake:     { name: 'Ground Slam', type: 'active', color: '#b8845a', cooldown: 15, uses: 2, radius: 280, damage: 30, kb: 10,
+               desc: 'Slam the ground: 30 damage and a huge push to every enemy around you.' },
   recall:    { name: 'Rewind', type: 'active', color: '#00a8ff', cooldown: 20, uses: 2, delay: 3,
                desc: 'Marks where you are. 3 seconds later you jump back there with the health you had then.' },
 
@@ -558,13 +561,13 @@ const ABILITY_ICONS = {
   blackhole: 'vortex', firepit: 'flame', freeze: 'snow', decoy: 'person', barrier: 'wall', mine: 'mine', jumppad: 'up',
   radar: 'dish', tesla: 'bolt', mortar: 'mortar', shieldgen: 'dome', sniper: 'scope', flame: 'flametower', laser: 'laser', hangar: 'drone', gravity: 'gravity', smoke: 'cloud', grapple: 'hook', phase: 'ghost', reflect: 'mirror', overcharge: 'battery',
   quake: 'hammer', recall: 'rewind', thorns: 'spikes', scavenger: 'bone', glass: 'gem', adrenaline: 'heartbolt',
-  cluster: 'dots', bubble: 'ring', stim: 'syringe', shadowstep: 'dagger', magnet: 'magnet', ninja: 'moon', lucky: 'clover',
+  cluster: 'dots', sensor: 'sensor', bubble: 'ring', stim: 'syringe', shadowstep: 'dagger', magnet: 'magnet', ninja: 'moon', lucky: 'clover',
 };
 
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
 const ABILITY_GROUPS = [
   { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier', 'mortar', 'shieldgen', 'sniper', 'flame', 'laser', 'hangar', 'gravity'] },
-  { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'jumppad', 'bubble', 'medic', 'smoke', 'resupply'] },
+  { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'sensor', 'jumppad', 'bubble', 'medic', 'smoke', 'resupply'] },
   { label: '💣 Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
   { label: '🔫 Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
   { label: '🏃 Movement', ids: ['dash', 'blink', 'grapple', 'phase', 'shadowstep', 'recall'] },
@@ -654,10 +657,25 @@ const COMBOS = [
   { a: 'adrenaline', b: 'stim', name: 'Racing Heart',   passive: true, how: 'Equip both: Stim Shot costs no HP and lasts 12s.', syn: { stim: { add: { cost: -10, duration: 4 } } } },
   { a: 'resupply', b: 'decoy', name: 'Supply Decoy',  how: 'Throw a Decoy onto your Resupply crate: the crate is used up and becomes a Supply Decoy (no gun, never attacks). It goes to every decoy you place, one after another, and gives each 3 mags, then comes back to any that run low. When no decoy needs ammo it only comes to you if you need ammo, and hands you 3 mags. Otherwise it tags along with the nearest decoy.' },
   { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
+  // ---- non-building combos (v83) ----
+  { a: 'smoke', b: 'freeze',   name: 'Frost Fog',      how: 'Throw a Freeze Bomb into your Smoke cloud: the smoke turns icy and enemies inside move at 40% speed until it fades (the freeze bomb still goes off).' },
+  { a: 'smoke', b: 'medic',    name: 'Healing Mist',   how: 'Throw a Heal Zone into your Smoke cloud: the heal zone is used up and the whole cloud heals you and your buddies 5 HP every second.' },
+  { a: 'jumppad', b: 'mine',   name: 'Spring Trap',    how: 'Throw a Land Mine onto your Jump Pad: the mine is used up and the pad flings enemies that step on it far away for 40 damage (every 1.5s).' },
+  { a: 'firepit', b: 'cluster', name: 'Napalm',        how: 'Throw a Cluster Bomb into your Fire Pit: the fire grows 60% bigger and burns 4s longer (the bombs still go off).' },
+  { a: 'blackhole', b: 'freeze', name: 'Cryo Vortex',  how: 'Throw a Freeze Bomb into your Black Hole: it lasts 2s longer and when it closes everyone it was pulling in is frozen for 3s.' },
+  { a: 'rpg', b: 'firepit',    name: 'Napalm Rocket',  passive: true, how: 'Equip both: every RPG rocket leaves a Fire Pit where it blows up.' },
+  { a: 'dash', b: 'shield',    name: 'Shield Bash',    passive: true, how: 'Equip both: dashing while your Shield is up rams every enemy you touch (35 damage + big push).' },
+  { a: 'blink', b: 'grenade',  name: 'Parting Gift',   passive: true, how: 'Equip both: every Blink leaves a bomb where you were. It blows up 0.6s later (60 damage).' },
+  { a: 'grapple', b: 'quake',  name: 'Ground Pound',   passive: true, how: 'Equip both: when your Grappling Hook pulls you in, you slam the ground where you land (30 damage + push).' },
+  { a: 'reflect', b: 'shield', name: 'Mirror Shield',  passive: true, how: 'Equip both: Mirror lasts 2s longer and gives you an 80 HP shield, and Shield comes back 10s sooner.', syn: { reflect: { add: { duration: 2 } }, shield: { add: { cooldown: -10 } } } },
+  { a: 'rapid', b: 'overcharge', name: 'Supercharged', passive: true, how: 'Equip both: Overcharge gives 24 shots instead of 12 and Rapid Fire lasts 2s longer.', syn: { overcharge: { add: { shots: 12 } }, rapid: { add: { duration: 2 } } } },
+  { a: 'nova', b: 'slowmo',    name: 'Time Burst',     passive: true, how: 'Equip both: using Bullet Time also fires a free Bullet Nova ring.' },
 ];
 const COMBO = { supplySpeed: 1.25, supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 1.5, healRange: 700, healShotSpeed: 900,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8,
   iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230,  cryoMortar: 1.5, shockDps: 20,
-  blazeRange: 0.8, prismBeams: 2, prismMul: 0.6, medicDroneRange: 300, implodeEvery: 5, implodeDamage: 40, implodeRadius: 180 };
+  blazeRange: 0.8, prismBeams: 2, prismMul: 0.6, medicDroneRange: 300, implodeEvery: 5, implodeDamage: 40, implodeRadius: 180,
+  fogSlow: 0.4, mistHeal: 5, springDmg: 40, springKb: 30, springCd: 1.5, napalmSize: 1.6, napalmTime: 4, cryoBhTime: 2, cryoBhFreeze: 3,
+  bashTime: 0.35, bashDmg: 35, bashKb: 16, giftDelay: 0.6, giftRadius: 130, giftDmg: 60, poundRadius: 200, poundDmg: 30, poundKb: 10, mirrorShield: 80 };
 // Building look: landing pop time, debris pieces when one is destroyed
 const BUILD_FX = { land: 0.45, debris: 12, smoke: 6 };
 
@@ -688,7 +706,7 @@ const ABILITY_PERKS = {
   shield:     [{ id: 'longshield', name: 'Long Shield', desc: 'Shield lasts 12s', add: { duration: 5 } },
                { id: 'thickshield', name: 'Thick Shield', desc: 'Shield has 300 HP', add: { hp: 100 } }],
   regen:      [{ id: 'fastregen', name: 'Fast Healer', desc: 'Heal every 6s instead of 10s', add: { every: -4 } }],
-  rpg:        [{ id: 'tworpg', name: 'Spare Rocket', desc: '2 rockets per round', add: { uses: 1 } },
+  rpg:        [{ id: 'tworpg', name: 'Spare Rocket', desc: '3 rockets per round', add: { uses: 1 } },
                { id: 'bigrpg', name: 'Warhead', desc: '+40% blast radius', mul: { radius: 1.4 } }],
   energy:     [{ id: 'bigcan', name: 'Big Can', desc: 'Speed lasts 10s', add: { duration: 4 } }],
   burger:     [{ id: 'double', name: 'Double Patty', desc: '+1 burger per round', add: { uses: 1 } }],
@@ -785,12 +803,25 @@ const ULTIMATES = {
                desc: '4 turrets with copies of your sidearm pop up around you.' },
   blizzard:  { name: 'Blizzard', color: '#74b9ff', count: 8,
                desc: '8 freeze bombs rain down around you (not on you).' },
+  railcannon:{ name: 'Rail Cannon', color: '#48dbfb', length: 2600, width: 46, damage: 400, delay: 0.6,
+               desc: 'Charge for a moment, then fire a giant rail beam where you aim. It goes through walls and everyone in the line takes 400 damage.' },
   megaslam:  { name: 'Mega Slam', color: '#b8845a', radius: 600, damage: 60, kb: 18,
                desc: 'A giant ground slam: 60 damage and a massive push to everyone around you.' },
 };
 
 // Hidden: the ability you have equipped makes some ultimates more likely from an epic crate.
 // The matching ultimate gets `weight` tickets, every other one gets 1.
+// BUYABLE ULTIMATES: buy one in the loadout's Ultimate tab (SHOP.ultimate) once you own the abilities it needs.
+// The equipped one charges up from damage you do (ULT_CHARGE) -> F / gold button when it's ready.
+const ULT_REQS = {
+  airstrike: ['grenade', 'jumppad'], nuke: ['blackhole', 'glass'], minigun: ['rapid', 'bandolier'], god: ['energy', 'laststand'],
+  laser: ['laser', 'radar'], bullethell: ['nova', 'thorns'], aimbot: ['overcharge', 'hands'], wallhack: ['phase', 'smoke'],
+  rockets: ['rpg', 'cluster'], tracker: ['radar', 'ninja'], clones: ['decoy', 'medic'], fountain: ['regen', 'medic'],
+  meteors: ['firepit', 'mine'], timestop: ['slowmo', 'recall'], juggernaut: ['shield', 'armor'], overdrive: ['resupply', 'magnet'],
+  carpet: ['cluster', 'grenade'], fortress: ['barrier', 'bubble'], blinkstorm: ['blink', 'shadowstep'], frenzy: ['stim', 'sprinter'],
+  turretnest: ['turret', 'resupply'], blizzard: ['freeze', 'smoke'], megaslam: ['quake', 'armor'], railcannon: ['turret', 'tesla'],
+};
+const ULT_CHARGE = { damage: 1800, perSec: 3 }; // charge: 1 point per damage you deal + perSec every second; full at `damage`
 const ULT_AFFINITY = {
   weight: 6,
   cluster: 'carpet', bubble: 'fortress', stim: 'frenzy', shadowstep: 'blinkstorm', magnet: 'overdrive', ninja: 'wallhack', lucky: 'overdrive',
@@ -799,7 +830,7 @@ const ULT_AFFINITY = {
   sprinter: 'frenzy', laststand: 'god', blink: 'blinkstorm', smoke: 'wallhack', grapple: 'wallhack', phase: 'wallhack',
   turret: 'turretnest', decoy: 'clones', slowmo: 'timestop', freeze: 'blizzard', recall: 'timestop',
   blackhole: 'nuke', glass: 'nuke', firepit: 'meteors', mine: 'meteors', jumppad: 'airstrike',
-  quake: 'megaslam', radar: 'tracker', tesla: 'laser', overcharge: 'aimbot', reflect: 'juggernaut',
+  quake: 'megaslam', radar: 'tracker', tesla: 'railcannon', overcharge: 'aimbot', reflect: 'juggernaut',
   armor: 'juggernaut', barrier: 'fortress', resupply: 'overdrive', hands: 'overdrive', scavenger: 'overdrive',
   bandolier: 'minigun', adrenaline: 'minigun', thorns: 'bullethell',
 };
@@ -812,6 +843,8 @@ const SHOP = {
   partMax: 2000,
   ability: { active: 1000, passive: 1200, gadget: 1500, building: 2500 },
   perk: 800,
+  special: { radar: 5000, sensor: 200 }, // abilities with their own price
+  ultimate: 4000,        // each ultimate (needs its ULT_REQS abilities owned first)
   start: 200,            // score new players start with
 };
 // first 10 waves of single player are easier (fewer, weaker, slower-spawning enemies)
@@ -825,3 +858,23 @@ const DECOY_AI = { crowd: 2, crowdRadius: 250, maxSpread: 1400 };
 const DANGER = { grunt: 5, gunslinger: 5, runner: 3, shooter: 6, tank: 15, bomber: 6, splitter: 8, sniper: 8, healer: 8, boss: 100, mini: 25,
                  attackMul: 3, attackFor: 5 }; // hit your decoy/drones = x3 danger for that one building, for 5s after the last hit
 const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
+
+// WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
+// Every update adds an entry here (short, simple words).
+const UPDATES = [
+  { v: 83, title: 'Ultimates shop + new combos', notes: [
+    'Buy ultimates in the new Ultimate tab. You need the right abilities first (Rail Cannon needs Turret + Tesla).',
+    'Your ultimate charges up when you hit enemies. Press F (or the gold button) when it is ready!',
+    'New Rail Cannon ultimate: a giant beam that goes through walls.',
+    '12 new combos for non-building abilities: Frost Fog, Healing Mist, Spring Trap, Napalm, Shield Bash and more.',
+    'RPG now has 2 rockets. Bullet Nova and Ground Slam hit harder.',
+    'You can now buy things from Customize Guns on the main menu.',
+    'New Motion Sensor (only 200 score): a hidden trap that shows you sneaky enemies, then goes boom.',
+    'Radar now costs 5000 score.',
+    'Press Esc to close a building\'s stats card.',
+  ] },
+  { v: 82, title: 'Hangar drones', notes: ['Upgrading a Drone Hangar adds drones: +1 per level, +2 on big hangars.'] },
+  { v: 81, title: 'Co-op mode', notes: ['Play together against waves and bosses in Co-op.', 'Hosts can pick 1-10 rounds per game.'] },
+  { v: 79, title: 'Controls + size', notes: ['Change your keys in Settings.', 'Make buttons and menus bigger or smaller.', 'Test mode can spawn any enemy.'] },
+  { v: 77, title: 'Inspect buildings', notes: ['Double tap or right click a building to see its stats.', 'Building upgrades now add range too.'] },
+];
