@@ -219,10 +219,11 @@
   // everything can be picked for free while customizing; locking in the loadout asks you to buy what you don't own
   function unowned() {
     const L = Account.user.loadout, list = [];
-    for (const k of ['ability', 'ability2', 'ability3', 'ability4']) if (L[k]) list.push(['ab:' + L[k], ABILITIES[L[k]].name]);
+    const skip4 = !!classOf(L); // a class fills slot 4: your own slot-4 pick isn't used, so it isn't charged
+    for (const k of ['ability', 'ability2', 'ability3', 'ability4']) if (L[k] && ABILITIES[L[k]] && !(skip4 && k === 'ability4')) list.push(['ab:' + L[k], ABILITIES[L[k]].name]);
     for (const [k, a] of [['perk', 'ability'], ['perk2', 'ability2'], ['perk3', 'ability3'], ['perk4', 'ability4']]) {
       const p = L[k] && (ABILITY_PERKS[L[a]] || []).find(x => x.id === L[k]);
-      if (p) list.push(['perk:' + p.id, p.name]);
+      if (p && !(skip4 && k === 'perk4')) list.push(['perk:' + p.id, p.name]);
     }
     for (const kind of ['main', 'secondary']) for (const sl in L[kind]) if (L[kind][sl]) list.push([`part:${kind}:${sl}:${L[kind][sl]}`, findPart(sl, L[kind][sl]).name]);
     return list.map(([key, name]) => ({ key, name, cost: priceOf(key) })).filter(x => x.cost);

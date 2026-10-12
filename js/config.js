@@ -906,6 +906,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5, hiveDrone: 
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 99, title: 'Bug fixes', notes: ['Lots of bug fixes.', 'With a class, the shop no longer makes you pay for the 4th ability you cannot use.'] },
   { v: 98, title: 'Smarter enemies', notes: ['Enemies stay away from walls and find a way around instead of getting stuck.'] },
   { v: 97, title: 'Drone speed', notes: ['Drones fly a bit slower.'] },
   { v: 96, title: 'Smarter drones', notes: ['Drones only send as many drones as they need to beat an enemy. The rest stay home and guard.'] },

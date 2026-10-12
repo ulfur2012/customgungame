@@ -201,6 +201,7 @@ const Game = (() => {
   }
 
   function begin() {
+    flow = flowBig = null; flowT = 0; // the last game's path map may be for a different map
     if (slot3Open()) G.me.alt3 = newSlot(Account.user.loadout.ability3);
     if (slot4Pick()) G.me.alt4 = newSlot(slot4Pick());
     applyBandolier(G.me);
