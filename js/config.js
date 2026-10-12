@@ -587,7 +587,7 @@ const CLASSES = {
 };
 // class abilities (cls: true = never in the normal picker). All are press-to-use (good on phones).
 Object.assign(ABILITIES, {
-  cls_upgrade:    { cls: true, name: 'Upgrade', type: 'active', color: '#f6b93b', cooldown: 30, reach: 320, maxLvl: 5, delayCut: 0.12,
+  cls_upgrade:    { cls: true, name: 'Upgrade', type: 'active', color: '#f6b93b', cooldown: 30, reach: 320, maxLvl: 5, delayCut: 0.12, rangeAdd: 0.1,
                     desc: 'Upgrades your closest building (in front of you first) one level, max 5. Each level: 12% less time between shots + healed to full.' },
   cls_restock:    { cls: true, name: 'Double Trap', type: 'active', color: '#e1b12c', cooldown: 30, window: 10,
                     desc: 'Resets your other abilities. The next placeable you throw in 10s is thrown twice.' },

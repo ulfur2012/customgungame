@@ -52,6 +52,8 @@ const Game = (() => {
   }
   // ENGINEER building levels: each level = less time between shots
   const lvlRate = b => b.lvl > 1 ? 1 / (1 - ABILITIES.cls_upgrade.delayCut * (b.lvl - 1)) : 1;
+  const lvlRange = b => 1 + ABILITIES.cls_upgrade.rangeAdd * ((b.lvl || 1) - 1); // each level = +10% range
+  const rng = g => (g.big ? MERGE.range : 1) * lvlRange(g);                      // big + level range multiplier
 
   function newState(mode, spawn, color) {
     const L = Account.user.loadout;
@@ -1197,7 +1199,7 @@ const Game = (() => {
   const myDecoy = () => G.gadgets.find(g => g.kind === 'decoy' && isMine(g.owner));
 
   // STORM COIL: a zap jumps on from enemy to enemy (nearest one not hit yet, up to stormChains more)
-  const teslaRange = (g, A) => A.radius * (g.stormtower ? FORMATIONS.stormtower.radius : g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1);
+  const teslaRange = (g, A) => A.radius * (g.stormtower ? FORMATIONS.stormtower.radius : g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1) * lvlRange(g);
   function stormChain(g, first, A, dmg) {
     const done = [first], ST = g.stormtower && FORMATIONS.stormtower;
     let from = first;
@@ -1220,7 +1222,7 @@ const Game = (() => {
   function updateMortar(g, A) {
     g.recoil = Math.max(0, (g.recoil || 0) - 0.05);
     if (!isMine(g.owner) || g.tick > 0) return;
-    const R = A.range * (g.big ? MERGE.range : 1);
+    const R = A.range * rng(g);
     let best = null, bd = A.minRange;
     for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d <= R && d > bd) { best = e; bd = d; } }
     if (!best) { g.tick = 0.4; return; }
@@ -1236,7 +1238,7 @@ const Game = (() => {
     if (g.tracer) { g.tracer.life -= dt; if (g.tracer.life <= 0) g.tracer = null; }
     g.kick = Math.max(0, (g.kick || 0) - 40 * dt);
     if (!isMine(g.owner)) return;
-    const R = A.range * (g.big ? MERGE.range : 1);
+    const R = A.range * rng(g);
     let best = null, bd = R;
     for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd && (g.spot || lineOfSight(g.x, g.y, e.x, e.y))) { best = e; bd = d; } }
     if (best) g.aim = Math.atan2(best.y - g.y, best.x - g.x);
@@ -1249,7 +1251,7 @@ const Game = (() => {
   }
   // SHIELD GENERATOR: everyone friendly inside the dome gets an overshield every few seconds (each player does it for themselves)
   function updateShieldGen(g, A) {
-    const me = G.me, R = A.radius * (g.big ? MERGE.range : 1);
+    const me = G.me, R = A.radius * rng(g);
     if (g.tick > 0) return;
     g.tick = g.shock ? 0.5 : A.every;
     g.pulse = (g.pulse || 0) - (g.shock ? 0.5 : A.every);
@@ -1271,7 +1273,7 @@ const Game = (() => {
   const turnTo = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * Math.min(1, k);
   // FLAME TOWER: a cone of fire at the closest enemy it can see (Inferno Ring: all the way around); sets them on fire
   function updateFlame(g, A, dt) {
-    const me = G.me, R = A.range * (g.big ? MERGE.range : 1) * (g.blaze ? COMBO.blazeRange : 1);
+    const me = G.me, R = A.range * rng(g) * (g.blaze ? COMBO.blazeRange : 1);
     let best = null;
     if (isMine(g.owner)) {
       let bd = Infinity;
@@ -1300,7 +1302,7 @@ const Game = (() => {
 
   // LASER TOWER: locks a beam on one enemy; the longer it holds on, the more it hurts (Prism Laser: 2 extra beams)
   function updateLaser(g, A, dt) {
-    const me = G.me, R = A.range * (g.big ? MERGE.range : 1);
+    const me = G.me, R = A.range * rng(g);
     g.uplink = Math.max(0, (g.uplink || 0) - dt);
     if (g.orbital && isMine(g.owner)) { // ORBITAL STRIKE: sky beam on the toughest enemy anywhere
       const F = FORMATIONS.orbital;
@@ -1351,7 +1353,7 @@ const Game = (() => {
   function updateHangar(g, A, dt) {
     const CF = g.carrier && FORMATIONS.carrier, me = G.me, mine = isMine(g.owner), n = CF ? CF.drones : A.drones + (g.big ? 1 : 0), dhp = A.droneHp * (CF ? CF.droneHp : 1);
     if (!g.drones) g.drones = Array.from({ length: n }, (_, i) => ({ x: g.x, y: g.y, ph: i * Math.PI * 2 / n, alive: false, back: 0.35 + i * 0.35, hp: dhp, cd: 0.5, a: 0, mf: 0 }));
-    const R = A.range * (g.big ? MERGE.range : 1) * (CF ? CF.range : 1);
+    const R = A.range * rng(g) * (CF ? CF.range : 1);
     let tgt = null;
     if (mine) { let bd = R; for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd) { tgt = e; bd = d; } } }
     // drones spin as one ring, spread perfectly evenly (3 drones = 120 degrees apart, like the nuclear symbol)
@@ -1411,7 +1413,7 @@ const Game = (() => {
 
   // GRAVITY TOWER: drags enemies toward it and slows them (Implosion: crushes them every few seconds)
   function updateGravity(g, A, dt) {
-    const me = G.me, R = A.radius * (g.big ? MERGE.range : 1), P = A.pull * (g.big ? 1.3 : 1);
+    const me = G.me, R = A.radius * rng(g), P = A.pull * (g.big ? 1.3 : 1);
     areaOf(g, R, e => {
       e.grav = 0.2;
       const d = Math.hypot(g.x - e.x, g.y - e.y) || 1, w = Math.max(1, e.r / 16);
@@ -1834,7 +1836,7 @@ const Game = (() => {
     g.cd -= dt;
     g.kick = Math.max(0, g.kick - 40 * dt);
     // COMMAND TOWER: buddies near your command radar shoot faster and harder
-    g.cmd = G.gadgets.some(r => r.kind === 'radar' && r.command && !r.dead && isMine(r.owner) && Math.hypot(r.x - g.x, r.y - g.y) <= COMBO.cmdRadius * (r.big ? MERGE.range : 1));
+    g.cmd = G.gadgets.some(r => r.kind === 'radar' && r.command && !r.dead && isMine(r.owner) && Math.hypot(r.x - g.x, r.y - g.y) <= COMBO.cmdRadius * rng(r));
     if (sees && bd < g.stats.range && g.cd <= 0 && g.ammo > 0) {
       const s = g.stats;
       g.ammo--;
@@ -1859,7 +1861,7 @@ const Game = (() => {
       if (g.dead || !isMine(g.owner)) continue;
       if (g.kind === 'decoy' && !g.supply && !g.medicBuddy && g.stats) { g.assigned = null; units.push({ u: g, x: g.x, y: g.y, str: STRENGTH.decoy, reach: DECOY_AI.maxSpread }); }
       if (g.kind === 'hangar' && g.drones) {
-        const A = ABILITIES.hangar, R = A.range * (g.big ? MERGE.range : 1) * (g.carrier ? FORMATIONS.carrier.range : 1);
+        const A = ABILITIES.hangar, R = A.range * rng(g) * (g.carrier ? FORMATIONS.carrier.range : 1);
         const str = g.carrier ? STRENGTH.carrierDrone : g.big ? STRENGTH.bigDrone : STRENGTH.drone;
         for (const d of g.drones) { d.assigned = null; if (d.alive) units.push({ u: d, x: d.x, y: d.y, str, home: g, reach: R }); }
       }
@@ -2188,7 +2190,7 @@ const Game = (() => {
     ctx.beginPath(); ctx.arc(g.x, g.y, 30 + k * 200, 0, Math.PI * 2); ctx.stroke();
     if (g.command) { // command radius
       ctx.strokeStyle = 'rgba(255,211,42,0.3)'; ctx.lineWidth = 2; ctx.setLineDash(DASH);
-      ctx.beginPath(); ctx.arc(g.x, g.y, COMBO.cmdRadius * (g.big ? MERGE.range : 1), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash(NODASH);
+      ctx.beginPath(); ctx.arc(g.x, g.y, COMBO.cmdRadius * rng(g), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash(NODASH);
     }
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
     bShadow(22, 18);
@@ -2386,7 +2388,7 @@ const Game = (() => {
   }
 
   function drawShieldGen(g, A) {
-    const T = G.time, R = A.radius * (g.big ? MERGE.range : 1), col = g.shock ? '162,155,254' : '108,92,231';
+    const T = G.time, R = A.radius * rng(g), col = g.shock ? '162,155,254' : '108,92,231';
     // soft dome
     ctx.fillStyle = `rgba(${col},${0.08 + 0.03 * Math.sin(T * 3)})`; ctx.strokeStyle = `rgba(${col},0.55)`; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -2663,7 +2665,7 @@ const Game = (() => {
     for (let i = 0; i < 6; i++) { const on = Math.floor(T * 8) % 6 === i; ctx.fillStyle = on ? '#fff' : acc; ctx.fillRect(-31 + i * 10, -20, 2, 2); if (on) glow(-30 + i * 10, -19, 7, acc, 0.9); }
   }
   function drawGravity(g, A) {
-    const T = G.time, R = A.radius * (g.big ? MERGE.range : 1), acc = g.implode ? '#ff6bcb' : '#7d5fff', rgb = rgbOf(acc);
+    const T = G.time, R = A.radius * rng(g), acc = g.implode ? '#ff6bcb' : '#7d5fff', rgb = rgbOf(acc);
     // swirling distortion: rings sliding inward + spiral arcs
     ctx.fillStyle = `rgba(${rgb},0.05)`; ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.fill();
     ctx.lineWidth = 2;
@@ -2747,7 +2749,52 @@ const Game = (() => {
   }
 
   // drawn on top of the darkness: smoke hides everything, radar shows enemies through walls
+  // INSPECT: double tap / double click a building to see its range + stats
+  function bRange(b) {
+    if (b.rail) return MERGE.railgun.range * lvlRange(b);
+    if (b.rocket) return MERGE.rocketTurret.range * lvlRange(b);
+    if (b.fort) return FORMATIONS.fortress.range * lvlRange(b);
+    if (!b.kind) return (b.spot ? COMBO.spotRange : b.stats.range) * lvlRange(b);
+    const A = ABILITIES[b.kind];
+    if (b.kind === 'tesla') return teslaRange(b, A);
+    if (b.kind === 'flame') return A.range * rng(b) * (b.blaze ? COMBO.blazeRange : 1);
+    if (b.kind === 'hangar') return A.range * rng(b) * (b.carrier ? FORMATIONS.carrier.range : 1);
+    return (A.range || A.radius || 0) * rng(b);
+  }
+  function bName(b) {
+    if (!b.kind) return b.fort ? 'Fortress' : b.rail ? 'Railgun' : b.rocket ? 'Rocket Turret' : 'Turret';
+    const f = Object.keys(FORMATIONS).find(k => b[k]);
+    return (f ? { orbital: 'Orbital Strike', stormtower: 'Storm Tower', fortress: 'Fortress', carrier: 'Carrier' }[f] || f : (b.big ? 'Big ' : '') + ABILITIES[b.kind].name);
+  }
+  function inspectAt(sx, sy) {
+    const here = buildingsInCell((sx - W / 2) / zoom + G.cam.x, (sy - H / 2) / zoom + G.cam.y);
+    G.inspect = here.length ? here[0].o : null;
+    G.inspectT = 8;
+  }
+  function drawInspect(dt) {
+    const b = G.inspect;
+    if (!b) return;
+    G.inspectT -= dt;
+    if (G.inspectT <= 0 || b.dead || b.hp <= 0) { G.inspect = null; return; }
+    const R = bRange(b), a = Math.min(1, G.inspectT);
+    ctx.save(); ctx.globalAlpha = a;
+    if (R > 0) {
+      ctx.fillStyle = 'rgba(255,215,0,0.07)'; ctx.strokeStyle = 'rgba(255,215,0,0.8)'; ctx.lineWidth = 3; ctx.setLineDash([14, 10]);
+      ctx.beginPath(); ctx.arc(b.x, b.y, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+    }
+    const lines = [bName(b), `Level ${b.lvl || 1}/5`, `HP ${Math.ceil(b.hp)}/${Math.round(b.maxHp)}`];
+    if (R > 0) lines.push(`Range ${Math.round(R)}`);
+    if ((b.lvl || 1) > 1) lines.push(`Speed x${lvlRate(b).toFixed(2)}`);
+    const fs = 15, w = 170, h = lines.length * (fs + 5) + 12, x = b.x - w / 2, y = b.y - 70 * (b.sc || 1) - h;
+    ctx.fillStyle = 'rgba(15,18,30,0.85)'; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2; ctx.strokeRect(x, y, w, h);
+    ctx.textAlign = 'center';
+    lines.forEach((l, i) => { ctx.fillStyle = i ? '#fff' : '#ffd700'; ctx.font = `${i ? 700 : 900} ${fs}px system-ui, sans-serif`; ctx.fillText(l, b.x, y + 8 + (i + 1) * (fs + 5) - 5); });
+    ctx.restore();
+  }
   function drawGadgetsTop() {
+    if (Input.flags.dblAt) { inspectAt(Input.flags.dblAt.x, Input.flags.dblAt.y); Input.flags.dblAt = null; }
+    drawInspect(1 / 60);
     const me = G.me;
     for (const g of G.gadgets) {
       if (g.kind === 'smoke') {
@@ -2773,7 +2820,7 @@ const Game = (() => {
           ctx.fillText(`${Math.round(bd / MAP.grid)}m`, ax, ay + 26);
         }
         for (const t of targets()) {
-          if (Math.hypot(t.x - g.x, t.y - g.y) > ABILITIES.radar.radius * (g.big ? MERGE.range : 1)) continue;
+          if (Math.hypot(t.x - g.x, t.y - g.y) > ABILITIES.radar.radius * rng(g)) continue;
           ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 3;
           ctx.beginPath(); ctx.arc(t.x, t.y, (t.r || PLAYER.r) + 6 + Math.sin(G.time * 8) * 3, 0, Math.PI * 2); ctx.stroke();
           ctx.fillStyle = 'rgba(255,77,77,0.35)'; ctx.fill();
@@ -3088,7 +3135,7 @@ const Game = (() => {
     const F = FORMATIONS.fortress, me = G.me;
     t.kick = Math.max(0, (t.kick || 0) - 50 * dt); t.shHit = Math.max(0, (t.shHit || 0) - dt);
     if (G.time - (t.lastHit || 0) > F.shieldDelay) t.sh = Math.min(F.shield, t.sh + F.shieldRegen * dt);
-    let best = null, bd = F.range;
+    let best = null, bd = F.range * lvlRange(t);
     for (const e of targets()) { const d = Math.hypot(e.x - t.x, e.y - t.y); if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; } }
     if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
     t.spin = (t.spin || 0) + dt * (best ? 14 : 1);
@@ -3193,7 +3240,7 @@ const Game = (() => {
         const R = MERGE.railgun;
         if (t.zap) { t.zap.life -= dt; if (t.zap.life <= 0) t.zap = null; }
         t.kick = Math.max(0, (t.kick || 0) - 60 * dt);
-        let best = null, bd = R.range;
+        let best = null, bd = R.range * lvlRange(t);
         for (const e of targets()) { const d = Math.hypot(e.x - t.x, e.y - t.y); if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; } }
         if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
         t.spin = (t.spin || 0) + dt * (best ? 4 : 1); // ring spins faster while it has a target
@@ -3212,7 +3259,7 @@ const Game = (() => {
       }
       if (t.rocket) { // ROCKET TURRET: an RPG every 5 seconds
         const R = MERGE.rocketTurret;
-        let best = null, bd = R.range;
+        let best = null, bd = R.range * lvlRange(t);
         for (const e of targets()) { const d = Math.hypot(e.x - t.x, e.y - t.y); if (d < bd && lineOfSight(t.x, t.y, e.x, e.y)) { best = e; bd = d; } }
         if (best) t.aim = Math.atan2(best.y - t.y, best.x - t.x);
         if (best && t.cd <= 0) {
@@ -3254,7 +3301,7 @@ const Game = (() => {
         }
       }
       // spotter turrets see through walls from very far away
-      let best = null, bd = t.spot ? COMBO.spotRange : t.stats.range; // otherwise as far as your sidearm shoots
+      let best = null, bd = (t.spot ? COMBO.spotRange : t.stats.range) * lvlRange(t); // otherwise as far as your sidearm shoots
       for (const e of targets()) {
         const d = Math.hypot(e.x - t.x, e.y - t.y);
         if (d < bd && (t.spot || lineOfSight(t.x, t.y, e.x, e.y))) { best = e; bd = d; }

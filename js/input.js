@@ -62,6 +62,8 @@ const Input = (() => {
     }
   });
 
+  let lastTap = null;
+  canvas.addEventListener('dblclick', e => { flags.dblAt = { x: e.clientX, y: e.clientY }; });
   const release = e => {
     if (e.pointerType === 'mouse' && e.button === 0) mouse.down = false;
     for (const k in sticks) {
@@ -69,7 +71,12 @@ const Input = (() => {
       if (!s || s.id !== e.pointerId) continue;
       // quick tap on the aim side = auto-aim at the nearest enemy and shoot
       if (k === 'aim' && performance.now() - s.t < 250 && s.far < 15) flags.tap = true;
-      if (performance.now() - s.t < 250 && s.far < 15) flags.tapAt = { x: e.clientX, y: e.clientY }; // where you tapped (picks a building to upgrade)
+      if (performance.now() - s.t < 250 && s.far < 15) {
+        flags.tapAt = { x: e.clientX, y: e.clientY }; // where you tapped (picks a building to upgrade)
+        // two quick taps in the same spot = double tap (shows a building's range + stats)
+        if (lastTap && performance.now() - lastTap.t < 350 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 40) { flags.dblAt = { x: e.clientX, y: e.clientY }; lastTap = null; }
+        else lastTap = { x: e.clientX, y: e.clientY, t: performance.now() };
+      }
       sticks[k] = null;
     }
   };
