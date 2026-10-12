@@ -886,6 +886,15 @@ const Game = (() => {
     if (id === 'cls_upgrade') {
       // PC: the building in the square under your mouse. Phone: the building you last tapped.
       const pick = upgradePick();
+      if (pick && pick.kind === 'hangar' && (pick.lvl || 1) >= A.maxLvl) { // max hangar: switch FOLLOW / STAY (free, no cooldown)
+        const on = !pick.follow;
+        for (const o of G.gadgets) if (o.kind === 'hangar') o.follow = false; // only one hangar can follow you
+        pick.follow = on;
+        me.abUses++; me.abCd = 0;
+        G.banner = { text: on ? 'Drones: FOLLOW you' : 'Drones: STAY at the hangar', t: 1.6 };
+        burst(pick.x, pick.y, '#7efcff', 16, 220);
+        return;
+      }
       const best = pick && (pick.lvl || 1) < A.maxLvl ? pick : null;
       if (!best) return refund(pick ? 'That building is max level' : Settings.mobile ? 'Tap one of your buildings first' : 'Point your mouse at a building');
       best.lvl = (best.lvl || 1) + 1;
@@ -1644,6 +1653,8 @@ const Game = (() => {
   }
 
   // DRONE HANGAR: drones orbit the hangar, fly out at enemies near it and shoot them; shot-down drones come back later
+  // ENGINEER at max level: a hangar can be set to FOLLOW you (only one at a time) or STAY at the hangar
+  const hubPos = g => g.follow && isMine(g.owner) && G.me.alive ? G.me : g;
   function updateHangar(g, A, dt) {
     const CF = hangF(g), me = G.me, mine = isMine(g.owner), n = (CF ? CF.drones : A.drones + (g.big ? 1 : 0)) + ((g.lvl || 1) - 1) * (g.big || CF ? 2 : 1), dhp = A.droneHp * (CF ? CF.droneHp : 1);
     const dk = droneKind(g), kami = dk === 'dKami' && pve(), guard = dk === 'dGuard', bomb = dk === 'dBomb' && pve(), snipe = dk === 'dSnipe', spd = A.speed * (CF && CF.speed || 1) * (kami ? COMBO.kamiSpeed : 1), dcol = dk ? DRONE_TYPES[dk][1] : g.medic ? '#32ff7e' : A.color;
@@ -1651,7 +1662,8 @@ const Game = (() => {
     while (g.drones.length < n) g.drones.push({ x: g.x, y: g.y, ph: 0, alive: false, back: 0.4, hp: dhp, cd: 0.5, a: 0, mf: 0 }); // upgrades add drones (Engineer: +1 per level, +2 if big)
     const R = A.range * rng(g) * (CF ? CF.range : 1);
     let tgt = null;
-    if (mine) { let bd = R; for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd) { tgt = e; bd = d; } } }
+    const hub = hubPos(g); // FOLLOW mode: the drones treat you as their hub
+    if (mine) { let bd = R; for (const e of targets()) { const d = Math.hypot(e.x - hub.x, e.y - hub.y); if (d < bd) { tgt = e; bd = d; } } }
     // drones spin as one ring, spread perfectly evenly (3 drones = 120 degrees apart, like the nuclear symbol)
     g.spin = ((g.spin || 0) + dt * 2.4) % (Math.PI * 2);
     const flying = g.drones.filter(d => d.alive);
@@ -1671,7 +1683,7 @@ const Game = (() => {
       const tgt = dt_, ring = (kami || bomb) && tgt ? 0 : snipe ? COMBO.snipeRing : 110; // kamikaze + bomber fly right over, snipers hang back
       const gx = guard && mine && me.alive; // GUARDIAN: circle YOU (close) and get in the way of bullets
       if (gx) d.ph = g.spin * 1.4 + flying.indexOf(d) * Math.PI * 2 / flying.length;
-      const tx = gx ? me.x + Math.cos(d.ph) * COMBO.guardRing : tgt ? tgt.x + Math.cos(d.ph) * ring : g.x + Math.cos(d.ph) * 58 * g.sc, ty = gx ? me.y + Math.sin(d.ph) * COMBO.guardRing : tgt ? tgt.y + Math.sin(d.ph) * ring : g.y + Math.sin(d.ph) * 58 * g.sc;
+      const tx = gx ? me.x + Math.cos(d.ph) * COMBO.guardRing : tgt ? tgt.x + Math.cos(d.ph) * ring : hub.x + Math.cos(d.ph) * 58 * g.sc, ty = gx ? me.y + Math.sin(d.ph) * COMBO.guardRing : tgt ? tgt.y + Math.sin(d.ph) * ring : hub.y + Math.sin(d.ph) * 58 * g.sc;
       const dx = tx - d.x, dy = ty - d.y, dl = Math.hypot(dx, dy) || 1, step = Math.min(dl, Math.max(spd * (gx ? 2 : 1), Math.min(dl * 6, spd * 2.5)) * dt);
       d.x += dx / dl * step; d.y += dy / dl * step;
       d.a = tgt ? Math.atan2(tgt.y - d.y, tgt.x - d.x) : Math.atan2(dy, dx);
@@ -2263,7 +2275,7 @@ const Game = (() => {
         for (const d of g.drones) { d.assigned = null; if (d.alive && !g.dGuard) units.push({ u: d, x: d.x, y: d.y, str, home: g, reach: R }); }
       }
     }
-    const canReach = (k, e) => Math.hypot(e.x - (k.home ? k.home.x : k.x), e.y - (k.home ? k.home.y : k.y)) <= k.reach;
+    const canReach = (k, e) => { const h = k.home ? hubPos(k.home) : k; return Math.hypot(e.x - h.x, e.y - h.y) <= k.reach; };
     const foes = G.enemies.filter(e => e.hp > 0), distMe = e => Math.hypot(e.x - G.me.x, e.y - G.me.y);
     // jobs: every enemy once, plus an extra job (danger x3) for each building it attacked, only that building's units can take it
     const jobs = foes.map(e => ({ e, danger: dangerOf(e) }));

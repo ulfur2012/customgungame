@@ -906,6 +906,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5, hiveDrone: 
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 94, title: 'Drones follow you', notes: ['Engineer: use Upgrade on a MAX level Drone Hangar to switch its drones between FOLLOW (they fly with you) and STAY.', 'Only one hangar can follow you at a time.'] },
   { v: 93, title: 'Even more drones', notes: ['5 new drone types! Throw onto a Drone Hangar:', 'Bubble Shield = Guardian Drones (fly around you and block bullets)', 'Grenade = Bomber Drones (drop bombs on groups)', 'Motion Sensor = Sniper Drones (stay far back, big hits)', 'Smoke Bomb = Ghost Drones (bullets go through them, enemies they hit take more damage)', 'Black Hole = Gravity Drones (pull enemies together)', 'Your gun is always under your player now.'] },
   { v: 92, title: 'New drone powers', notes: ['Throw a Freeze Bomb, Fire Pit, Tesla Coil or Land Mine onto a Drone Hangar to get Frost, Flame, Shock or Kamikaze Drones!', 'New mega buildings: Drone Hive (Hangar | Big Hangar | Hangar) with 10 fast drones, and Drone Uplink (Big Hangar next to a Laser Tower) whose drones shoot lasers.', 'Buy them in the 🏰 Mega tab.'] },
   { v: 91, title: 'Hex shield is back', notes: ['The Aegis Dome has its hexagon shield pattern again.'] },
