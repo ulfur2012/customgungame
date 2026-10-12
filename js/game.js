@@ -1274,7 +1274,7 @@ const Game = (() => {
       if (g.kind !== 'hangar' || g.dead || !g.drones || !isMine(g.owner)) continue;
       for (const d of g.drones) {
         if (!d.alive || !segHitsCircle(x1, y1, b.x, b.y, d.x, d.y, g.carrier ? 14 : 10)) continue;
-        d.hp -= bulletDamage(b);
+        d.hp -= bulletDamage(b); markAttack(g, b.src);
         if (d.hp <= 0) { d.alive = false; d.back = ABILITIES.hangar.respawn; buildingBoom(d.x, d.y, ABILITIES.hangar.color, 0.35); }
         else burst(b.x, b.y, '#7efcff', 4, 120);
         return true;
@@ -1721,6 +1721,8 @@ const Game = (() => {
   // go for the next nearest, unless that enemy has more than 2 enemies around it (then help out).
   // TEAMWORK: hand out your buddies and drones to enemies, most dangerous first, until strength >= danger
   const dangerOf = e => e.mini ? DANGER.mini : DANGER[e.type] ?? 5;
+  // an enemy that hits your decoy / drones counts DANGER.attackMul x as dangerous, but only for that decoy / hangar
+  function markAttack(g, e) { if (G.mode === 'sp' && e && g && isMine(g.owner)) (g.atk ||= new Map()).set(e, G.time); }
   function assignTeam(dt) {
     G.teamT = (G.teamT || 0) - dt;
     if (G.mode !== 'sp' || G.teamT > 0) return;
@@ -1736,12 +1738,23 @@ const Game = (() => {
       }
     }
     const canReach = (k, e) => Math.hypot(e.x - (k.home ? k.home.x : k.x), e.y - (k.home ? k.home.y : k.y)) <= k.reach;
-    const foes = G.enemies.filter(e => e.hp > 0).sort((a, b) => dangerOf(b) - dangerOf(a) || Math.hypot(a.x - G.me.x, a.y - G.me.y) - Math.hypot(b.x - G.me.x, b.y - G.me.y));
-    const free = new Set(units);
-    for (const e of foes) {
-      let need = dangerOf(e);
-      const near = [...free].filter(k => canReach(k, e)).sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y));
-      for (const k of near) { if (need <= 0) break; k.u.assigned = e; free.delete(k); need -= k.str; }
+    const foes = G.enemies.filter(e => e.hp > 0), distMe = e => Math.hypot(e.x - G.me.x, e.y - G.me.y);
+    // jobs: every enemy once, plus an extra job (danger x3) for each building it attacked, only that building's units can take it
+    const jobs = foes.map(e => ({ e, danger: dangerOf(e) }));
+    for (const g of G.gadgets) {
+      if (!g.atk) continue;
+      for (const [e, t] of g.atk) {
+        if (G.time - t > DANGER.attackFor || !foes.includes(e)) { g.atk.delete(e); continue; }
+        jobs.push({ e, danger: dangerOf(e) * DANGER.attackMul, only: g });
+      }
+    }
+    jobs.sort((a, b) => b.danger - a.danger || distMe(a.e) - distMe(b.e));
+    const free = new Set(units), sent = new Map(); // strength already sent at each enemy
+    for (const j of jobs) {
+      let need = j.danger - (sent.get(j.e) || 0);
+      const near = [...free].filter(k => (!j.only || k.u === j.only || k.home === j.only) && canReach(k, j.e))
+        .sort((a, b) => Math.hypot(a.x - j.e.x, a.y - j.e.y) - Math.hypot(b.x - j.e.x, b.y - j.e.y));
+      for (const k of near) { if (need <= 0) break; k.u.assigned = j.e; free.delete(k); need -= k.str; sent.set(j.e, (sent.get(j.e) || 0) + k.str); }
       if (!free.size) break;
     }
     // anyone left over helps with the closest enemy they can reach
@@ -1827,7 +1840,7 @@ const Game = (() => {
       const hostile = G.mode === 'sp' ? b.team === 'e'
         : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
       if (!hostile || !segHitsCircle(x1, y1, b.x, b.y, g.x, g.y, g.kind === 'decoy' ? PLAYER.r : 22 * (g.sc || 1))) continue;
-      damageGadget(g, bulletDamage(b));
+      markAttack(g, b.src); damageGadget(g, bulletDamage(b));
       return true;
     }
     return false;
@@ -3871,7 +3884,7 @@ const Game = (() => {
         }
       }
       e.botCd = Math.max(0, (e.botCd || 0) - dt);
-      if (e.botCd === 0 && e.def.melee) for (const bd of buddies) if (!bd.dead && Math.hypot(bd.x - e.x, bd.y - e.y) < e.r + PLAYER.r) { damageGadget(bd, e.def.melee); e.botCd = 0.6; break; }
+      if (e.botCd === 0 && e.def.melee) for (const bd of buddies) if (!bd.dead && Math.hypot(bd.x - e.x, bd.y - e.y) < e.r + PLAYER.r) { markAttack(bd, e); damageGadget(bd, e.def.melee); e.botCd = 0.6; break; }
       const dx = tgt.x - e.x, dy = tgt.y - e.y, d = Math.hypot(dx, dy) || 1;
       const sees = lineOfSight(e.x, e.y, tgt.x, tgt.y) && !smokeBlocks(e.x, e.y, tgt.x, tgt.y);
       let mx = dx / d, my = dy / d;
@@ -3910,7 +3923,7 @@ const Game = (() => {
       if (e.def.kamikaze && !e.gone && Math.hypot(tgt.x - e.x, tgt.y - e.y) < e.r + PLAYER.r + 18) {
         e.gone = true;
         explode(e.x, e.y, e.def.kamikaze.radius, e.def.kamikaze.damage, 'enemy');
-        if (tgt !== me && tgt.hp !== undefined) { if (tgt.kind) damageGadget(tgt, e.def.kamikaze.damage); else tgt.hp -= e.def.kamikaze.damage * (tgt.bunker ? COMBO.bunkerTake : 1); }
+        if (tgt !== me && tgt.hp !== undefined) { if (tgt.kind) { markAttack(tgt, e); damageGadget(tgt, e.def.kamikaze.damage); } else tgt.hp -= e.def.kamikaze.damage * (tgt.bunker ? COMBO.bunkerTake : 1); }
       }
       // HEALER: patches up enemies around it
       if (e.def.heal) {
@@ -3953,7 +3966,7 @@ const Game = (() => {
       shots.push(e.aim + (Math.random() - 0.5) * 0.12);
     }
     const sx = e.x + Math.cos(e.aim) * e.r, sy = e.y + Math.sin(e.aim) * e.r;
-    for (const a of shots) addBullet(sx, sy, a, g.speed, g.damage, 2, 'e', null);
+    for (const a of shots) { addBullet(sx, sy, a, g.speed, g.damage, 2, 'e', null); G.bullets[G.bullets.length - 1].src = e; }
     muzzleFlash(sx, sy, e.aim);
     hear(sx, sy, g.loudness * HEAR_UNIT);
   }

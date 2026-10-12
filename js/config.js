@@ -785,5 +785,6 @@ const EASY = { waves: 10, hp: 0.55, count: 0.6, spawn: 1.6, damage: 0.6 };
 const DECOY_AI = { crowd: 2, crowdRadius: 250, maxSpread: 1400 };
 // TEAMWORK (single player): every enemy has danger points, every buddy / drone has strength points.
 // The most dangerous enemies are handled first: buddies + drones are sent until their strength adds up to its danger.
-const DANGER = { grunt: 5, gunslinger: 5, runner: 3, shooter: 6, tank: 15, bomber: 6, splitter: 8, sniper: 8, healer: 8, boss: 100, mini: 25 };
+const DANGER = { grunt: 5, gunslinger: 5, runner: 3, shooter: 6, tank: 15, bomber: 6, splitter: 8, sniper: 8, healer: 8, boss: 100, mini: 25,
+                 attackMul: 3, attackFor: 5 }; // hit your decoy/drones = x3 danger for that one building, for 5s after the last hit
 const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
