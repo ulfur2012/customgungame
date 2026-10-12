@@ -225,7 +225,6 @@
       if (p) list.push(['perk:' + p.id, p.name]);
     }
     for (const kind of ['main', 'secondary']) for (const sl in L[kind]) if (L[kind][sl]) list.push([`part:${kind}:${sl}:${L[kind][sl]}`, findPart(sl, L[kind][sl]).name]);
-    if (L.ult && ULTIMATES[L.ult]) list.push(['ult:' + L.ult, 'Ultimate: ' + ULTIMATES[L.ult].name]);
     return list.map(([key, name]) => ({ key, name, cost: priceOf(key) })).filter(x => x.cost);
   }
   let shopOn = false; // only when the single player / host settings say upgrades aren't free
@@ -282,7 +281,7 @@
       el('presetTabs').appendChild(b);
     }
     el('gunTabs').innerHTML = '';
-    for (const kind of ['main', 'secondary', 'ability', 'ult']) {
+    for (const kind of ['main', 'secondary', 'ability']) { // ultimates can't be bought or picked: they only come from gold crates
       const b = document.createElement('button');
       b.className = 'gun-tab' + (kind === gunKind ? ' active' : '') + (kind === 'ability' ? ' ability-tab' : '') + (kind === 'ult' ? ' ability-tab ult-tab' : '');
       b.textContent = kind === 'ability' ? 'Ability' : kind === 'ult' ? '⚡ Ultimate' : GUNS[kind].name;
@@ -290,7 +289,7 @@
       el('gunTabs').appendChild(b);
     }
     if (gunKind === 'ability') { renderAbilities(); return; }
-    if (gunKind === 'ult') { renderUltimates(); return; }
+    if (gunKind === 'ult') gunKind = 'main';
     const build = Account.user.loadout[gunKind];
 
     const slots = SLOTS.filter(s => partsFor(gunKind, s.key).length);

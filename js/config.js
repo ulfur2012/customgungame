@@ -879,6 +879,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 86, title: 'Ultimates fixed', notes: ['Ultimates can NOT be bought anymore. They only come from gold crates again.', 'If you bought one, you got your score back.'] },
   { v: 85, title: 'Mega buildings for everyone', notes: [
     'Every building now has a MEGA version! Make a Big one (3 in one square) and put the right buddy building next to it.',
     'Artillery Battery: Mortar | Big Mortar | Mortar. Shoots 5 shells across the map.',

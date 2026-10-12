@@ -69,7 +69,7 @@ const Game = (() => {
         ability: L.ability, abCd: 0, abUses: (ABILITIES[L.ability] || {}).uses ?? Infinity,
         alt: newSlot(L.ability2), alt3: newSlot(null), alt4: newSlot(null),
         abWasHeld: false, abAiming: false, shield: 0, shieldT: 0, regenTicks: 0, speedT: 0, rapidT: 0, slowT: 0, invT: 0, lastStand: false,
-        ult: null, ultKind: ULTIMATES[L.ult] ? L.ult : null, ultCharge: 0, railT: 0, bashT: 0, stimT: 0, frenzyT: 0, stormN: 0, stormT: 0, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
+        ult: null, ultKind: null, ultCharge: 0, railT: 0, bashT: 0, stimT: 0, frenzyT: 0, stormN: 0, stormT: 0, fountT: 0, juggT: 0, overT: 0, wallT: 0, rocketT: 0, trackT: 0, miniT: 0, godT: 0, hellT: 0, hellCd: 0, aimShots: 0,
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
@@ -151,7 +151,7 @@ const Game = (() => {
     if (!G) return;
     const me = G.me, L = Account.user.loadout;
     me.ability = L.ability; me.abCd = 0; me.abWasHeld = me.abAiming = false;
-    me.ultKind = ULTIMATES[L.ult] ? L.ult : null;
+    me.ultKind = null; // no equipped ultimate: ultimates only come from gold crates
     me.alt = newSlot(L.ability2);
     me.alt3 = newSlot(slot3Open() ? L.ability3 : null);
     me.alt4 = newSlot(slot4Pick());
@@ -171,7 +171,7 @@ const Game = (() => {
     me.alt3 = newSlot(slot3Open() ? L.ability3 : null); abCache3 = '';
     me.alt4 = newSlot(slot4Pick()); abCache4 = '';
     me.shield = 0; me.shieldT = 0; me.speedT = 0; me.rapidT = 0; me.slowT = 0; me.lastStand = false;
-    me.ultKind = ULTIMATES[L.ult] ? L.ult : null;
+    me.ultKind = null; // no equipped ultimate: ultimates only come from gold crates
     applyBandolier(me);
     abCache = '';
     updateWeaponBar(true);

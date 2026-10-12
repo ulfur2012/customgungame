@@ -635,6 +635,12 @@ const Account = {
     for (const p of u.presets) if (p.ability3 && (!ABILITIES[p.ability3] || p.ability3 === p.ability || p.ability3 === p.ability2)) p.ability3 = null;
     for (const p of u.presets) if (p.ability4 && (!ABILITIES[p.ability4] || [p.ability, p.ability2, p.ability3].includes(p.ability4))) p.ability4 = null;
     // shop: banked score + what you've unlocked. Things already equipped before the shop existed stay yours.
+    // ultimates are crate-only again: give back the score for any bought ones and unequip them
+    if (Array.isArray(u.owned) && u.owned.some(k => k.startsWith('ult:'))) {
+      u.bank = (u.bank || 0) + u.owned.filter(k => k.startsWith('ult:')).length * SHOP.ultimate;
+      u.owned = u.owned.filter(k => !k.startsWith('ult:'));
+    }
+    for (const L of u.presets) L.ult = null;
     if (!Array.isArray(u.owned)) {
       u.owned = [];
       if (u.bank === undefined) u.bank = SHOP.start;
