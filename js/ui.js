@@ -251,7 +251,7 @@
     // two slot tabs, like the upgrade slots
     el('slotTabs').innerHTML = '';
     const cls = classOf(L);
-    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2'], [`Ability 3 (V) · wave ${SLOT3_WAVE}+`, 'ability3'],
+    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2'], [`Ability 3 (V) · wave ${(classOf(L) || {}).id === 'engineer' ? CLASSES.engineerSlot3 : SLOT3_WAVE}+`, 'ability3'],
      [cls ? `${cls.emoji} Class (B) · wave ${CLASSES.unlockWave}+` : `Ability 4 (B) · wave ${SLOT4_WAVE}+`, 'ability4']].forEach(([label, k], i) => {
       const b = document.createElement('button'), A = ABILITIES[k === 'ability4' && cls ? cls.ab : L[k]];
       b.className = 'tab' + (i === abSlot ? ' active' : '');

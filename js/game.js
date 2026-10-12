@@ -38,7 +38,8 @@ const Game = (() => {
   }
   // is this ability equipped in any slot? (passives work from all of them)
   const hasAb = id => G.me.ability === id || G.me.alt.ability === id || G.me.alt3.ability === id || G.me.alt4.ability === id;
-  const slot3Open = () => G.mode === 'sp' && (G.test || G.wave >= SLOT3_WAVE);
+  const slot3Wave = () => (myClass() || {}).id === 'engineer' ? CLASSES.engineerSlot3 : SLOT3_WAVE;
+  const slot3Open = () => G.mode === 'sp' && (G.test || G.wave >= slot3Wave());
   const slot4Open = () => G.mode === 'sp' && (G.test || G.wave >= SLOT4_WAVE);
   const allSlots = () => [G.me, G.me.alt, G.me.alt3, G.me.alt4];
   // CLASSES: only one section's abilities in slots 1-3 -> slot 4 is the class ability (from CLASSES.unlockWave in SP)
@@ -307,6 +308,12 @@ const Game = (() => {
     if (Settings.mobile) {
       // Brawl Stars style: hold the aim stick and it fires by itself when an enemy is in your sights
       fire = aim.aiming && !abAim && targetInSights(me.aim);
+      const tp = Input.flags.tapAt;
+      if (tp) {
+        Input.flags.tapAt = null;
+        const here = buildingsInCell((tp.x - W / 2) / zoom + G.cam.x, (tp.y - H / 2) / zoom + G.cam.y).filter(h => h.kind === 'turret' || isMine(h.o.owner));
+        if (here.length) G.selBld = here[0].o;
+      }
       if (Input.take('tap')) {
         const t = nearestVisibleTarget();
         if (t) { me.aim = Math.atan2(t.y - me.y, t.x - me.x); fire = true; }
@@ -740,21 +747,22 @@ const Game = (() => {
   // ---- CLASS abilities (slot 4 when every ability is from one section; numbers in config ABILITIES.cls_*)
   // while the class ability runs it's swapped into `me`, so the other slots sit in alt/alt3/alt4
   function slotsExcept() { const me = G.me; return [me.alt, me.alt3, me.alt4]; }
+  function upgradePick() {
+    let x, y;
+    if (!Settings.mobile && Input.mouse.active) { x = (Input.mouse.x - W / 2) / zoom + G.cam.x; y = (Input.mouse.y - H / 2) / zoom + G.cam.y; }
+    else if (G.selBld && !G.selBld.dead && G.selBld.hp > 0) return G.selBld;
+    else return null;
+    const here = buildingsInCell(x, y).filter(h => h.kind === 'turret' || isMine(h.o.owner));
+    return here.length ? here[0].o : null;
+  }
   function useClass(A) {
     const me = G.me, id = me.ability;
     const refund = msg => { me.abUses++; me.abCd = 0; G.banner = { text: msg, t: 1.2 }; };
     if (id === 'cls_upgrade') {
-      // your building closest to you (ones in front of you count as closer)
-      let best = null, bd = Infinity;
-      const blds = [...G.turrets.filter(t => t.hp > 0), ...G.gadgets.filter(g => !g.dead && isMine(g.owner) && ABILITIES[g.kind] && ABILITIES[g.kind].building)];
-      for (const b of blds) {
-        const d = Math.hypot(b.x - me.x, b.y - me.y);
-        if (d > A.reach + (b.sc || 1) * 20 || (b.lvl || 1) >= A.maxLvl) continue;
-        const off = Math.abs(((Math.atan2(b.y - me.y, b.x - me.x) - me.aim + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
-        const score = d * (1 + off / 2);
-        if (score < bd) { best = b; bd = score; }
-      }
-      if (!best) return refund(blds.length ? 'No building to upgrade nearby (or all max level)' : 'Build something first!');
+      // PC: the building in the square under your mouse. Phone: the building you last tapped.
+      const pick = upgradePick();
+      const best = pick && (pick.lvl || 1) < A.maxLvl ? pick : null;
+      if (!best) return refund(pick ? 'That building is max level' : Settings.mobile ? 'Tap one of your buildings first' : 'Point your mouse at a building');
       best.lvl = (best.lvl || 1) + 1;
       if (best.maxHp && best.maxHp !== Infinity) best.hp = best.maxHp;
       best.flash = 0.2;
@@ -969,6 +977,7 @@ const Game = (() => {
       }
     }
     if (ABILITIES[n.kind].building && !n.noMerge) ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
+    if (ABILITIES[n.kind].building && !n.noMerge && !n.big && isMine(n.owner) && cellBlocked(n.kind, n.x1, n.y1)) return refundThrow(n.kind, n.x1, n.y1);
     const id = (G.myId || 'me') + ':' + (gadgetSeq++);
     const main = G.me.guns[0];
     addGadget({ kind: n.kind, x: n.x1, y: n.y1, a: n.a || 0, owner: n.owner, id, color: G.me.color, name: G.me.name, stats: n.supply ? null : main.stats, sprite: n.supply ? null : main.sprite, hp: n.hp, dur: n.dur, big: n.big, supply: n.supply });
@@ -987,6 +996,24 @@ const Game = (() => {
     return pointInWall(cx, cy) ? { x, y } : { x: cx, y: cy };
   }
   const cellOf = o => [Math.floor(o.x / MAP.grid), Math.floor(o.y / MAP.grid)];
+  // every building (turrets + building gadgets) standing in the floor square of (x, y)
+  function buildingsInCell(x, y) {
+    const cx = Math.floor(x / MAP.grid), cy = Math.floor(y / MAP.grid), here = o => { const [a, b] = cellOf(o); return a === cx && b === cy; };
+    return [...G.turrets.filter(t => t.hp > 0 && here(t)).map(t => ({ o: t, kind: 'turret', small: !t.rocket && !t.rail && !t.fort })),
+            ...G.gadgets.filter(g => !g.dead && ABILITIES[g.kind] && ABILITIES[g.kind].building && here(g)).map(g => ({ o: g, kind: g.kind, small: !g.big && !FORMATIONS_ANY(g) }))];
+  }
+  const FORMATIONS_ANY = g => Object.keys(FORMATIONS).some(k => g[k]);
+  // ONE building per square: only up to 3 small ones of the SAME kind may share it (they merge into a big one)
+  function cellBlocked(kind, x, y) {
+    const here = buildingsInCell(x, y);
+    return here.length && !(here.every(h => h.kind === kind && h.small) && here.length < 3);
+  }
+  function refundThrow(kind, x, y) {
+    const s = allSlots().find(sl => sl.ability === kind);
+    if (s) { s.abUses++; s.abCd = 0; }
+    burst(x, y, '#ffffff', 12, 200);
+    G.banner = { text: 'Only one building per square!', t: 1.4 };
+  }
 
   // ---- ability combos (see COMBOS in config)
   const comboFx = (x, y, color, text) => {
@@ -3240,7 +3267,17 @@ const Game = (() => {
     G.turrets = G.turrets.filter(t => t.t > 0);
   }
 
+  // ENGINEER: outline the square of the building Upgrade would level up
+  function drawUpgradePick() {
+    if (!hasAb('cls_upgrade')) return;
+    const b = upgradePick();
+    if (!b) return;
+    const C = MAP.grid, [cx, cy] = cellOf(b), k = 0.5 + 0.5 * Math.sin(G.time * 6);
+    ctx.strokeStyle = `rgba(255,215,0,${0.5 + 0.4 * k})`; ctx.lineWidth = 3; ctx.setLineDash([10, 6]);
+    ctx.strokeRect(cx * C + 3, cy * C + 3, C - 6, C - 6); ctx.setLineDash([]);
+  }
   function drawGadgets() {
+    drawUpgradePick();
     const M = ABILITIES.medic;
     for (const z of G.zones) {
       // grows in with a little overshoot when it lands, then gently pulses
@@ -3435,6 +3472,7 @@ const Game = (() => {
         // the turret gets a copy of your sidearm
         const side = me.guns[1];
         ({ x: n.x1, y: n.y1 } = snapCell(n.x1, n.y1));
+        if (cellBlocked('turret', n.x1, n.y1)) { refundThrow('turret', n.x1, n.y1); continue; }
         setTimeout(() => {
           if (!G) return;
           mergeTurrets(n.x1, n.y1);
@@ -3744,7 +3782,7 @@ const Game = (() => {
       G.breakT -= dt;
       if (G.breakT > 0) return;
       G.wave++;
-      if (G.mode === 'sp' && G.wave === SLOT3_WAVE && !G.me.alt3.ability && Account.user.loadout.ability3) {
+      if (G.mode === 'sp' && G.wave === slot3Wave() && !G.me.alt3.ability && Account.user.loadout.ability3) {
         G.me.alt3 = newSlot(Account.user.loadout.ability3); applyPerk(G.me); abCache3 = '';
       }
       if (G.mode === 'sp' && slot4Pick() && G.me.alt4.ability !== slot4Pick()) {
@@ -4111,7 +4149,7 @@ const Game = (() => {
         if (A && A.type !== 'passive') { s.abUses = A.uses ?? Infinity; s.abCd = 0; }
       }
       G.banner = { text: `${e.name || 'Boss'} defeated! Ability restored`, t: 2.5 };
-      if (G.mode === 'sp') setTimeout(() => G && hooks.bossDown({ unlocked3: G.wave >= SLOT3_WAVE && G.wave - BOSS_EVERY < SLOT3_WAVE, unlocked4: G.wave >= SLOT4_WAVE && G.wave - BOSS_EVERY < SLOT4_WAVE }), 1200);
+      if (G.mode === 'sp') setTimeout(() => G && hooks.bossDown({ unlocked3: G.wave >= slot3Wave() && G.wave - BOSS_EVERY < slot3Wave(), unlocked4: G.wave >= SLOT4_WAVE && G.wave - BOSS_EVERY < SLOT4_WAVE }), 1200);
       updateWeaponBar(true);
     }
   }

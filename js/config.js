@@ -575,6 +575,7 @@ const ABILITY_GROUPS = [
 // It unlocks at `unlockWave` in single player (right away in Test mode and in multiplayer).
 const CLASSES = {
   unlockWave: 5,
+  engineerSlot3: 10,     // ENGINEER: the 3rd ability slot (V) opens at wave 10 instead of SLOT3_WAVE
   list: [
     { id: 'engineer',  group: 0, name: 'Engineer',  emoji: '🏗️', ab: 'cls_upgrade' },
     { id: 'trapper',   group: 1, name: 'Trapper',   emoji: '📦', ab: 'cls_restock' },

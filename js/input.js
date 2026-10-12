@@ -69,6 +69,7 @@ const Input = (() => {
       if (!s || s.id !== e.pointerId) continue;
       // quick tap on the aim side = auto-aim at the nearest enemy and shoot
       if (k === 'aim' && performance.now() - s.t < 250 && s.far < 15) flags.tap = true;
+      if (performance.now() - s.t < 250 && s.far < 15) flags.tapAt = { x: e.clientX, y: e.clientY }; // where you tapped (picks a building to upgrade)
       sticks[k] = null;
     }
   };
