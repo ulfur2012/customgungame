@@ -1227,6 +1227,9 @@ const Game = (() => {
     const R = A.range * (g.big ? MERGE.range : 1) * (CF ? CF.range : 1);
     let tgt = null;
     if (mine) { let bd = R; for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd) { tgt = e; bd = d; } } }
+    // drones spin as one ring, spread perfectly evenly (3 drones = 120 degrees apart, like the nuclear symbol)
+    g.spin = ((g.spin || 0) + dt * 2.4) % (Math.PI * 2);
+    const flying = g.drones.filter(d => d.alive);
     for (const d of g.drones) {
       d.mf = Math.max(0, d.mf - dt);
       if (d.hb) { d.hb.life -= dt; if (d.hb.life <= 0) d.hb = null; }
@@ -1235,9 +1238,9 @@ const Game = (() => {
         if (d.back <= 0) { d.alive = true; d.hp = dhp; d.x = g.x; d.y = g.y; burst(g.x, g.y, g.medic ? '#32ff7e' : A.color, 8, 160); }
         continue;
       }
-      d.ph += dt * 2.4;
+      d.ph = g.spin + flying.indexOf(d) * Math.PI * 2 / flying.length;
       const tx = tgt ? tgt.x + Math.cos(d.ph) * 110 : g.x + Math.cos(d.ph) * 58 * g.sc, ty = tgt ? tgt.y + Math.sin(d.ph) * 110 : g.y + Math.sin(d.ph) * 58 * g.sc;
-      const dx = tx - d.x, dy = ty - d.y, dl = Math.hypot(dx, dy) || 1, step = Math.min(dl, A.speed * dt);
+      const dx = tx - d.x, dy = ty - d.y, dl = Math.hypot(dx, dy) || 1, step = Math.min(dl, Math.max(A.speed, dl * 6) * dt);
       d.x += dx / dl * step; d.y += dy / dl * step;
       d.a = tgt ? Math.atan2(tgt.y - d.y, tgt.x - d.x) : Math.atan2(dy, dx);
       d.cd -= dt;
