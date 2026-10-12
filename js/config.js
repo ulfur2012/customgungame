@@ -472,6 +472,15 @@ const ABILITIES = {
   radar:     { name: 'Radar', type: 'active', respawn: 30, thrown: true, gadget: true, color: '#ff9ff3', cooldown: 25, uses: 2,
                radius: 1100, duration: Infinity, hp: 30, building: true,
                desc: 'Throw a radar tower (30 HP, stays until destroyed). You and your teammates get an arrow to the nearest enemy, and see enemies near it through walls.' },
+  mortar:    { name: 'Mortar', type: 'active', thrown: true, gadget: true, color: '#e67e22', cooldown: 25, uses: 2,
+               duration: Infinity, hp: 60, building: true, every: 3.5, range: 950, minRange: 160, damage: 45, radius: 110, flight: 1.1,
+               desc: 'Throw a mortar (60 HP, stays until destroyed). Every 3.5s it lobs a shell over the walls at the farthest enemy in range (45 damage blast).' },
+  shieldgen: { name: 'Shield Generator', type: 'active', thrown: true, gadget: true, color: '#6c5ce7', cooldown: 25, uses: 2,
+               duration: Infinity, hp: 80, building: true, every: 6, radius: 220, shield: 40, shieldTime: 6,
+               desc: 'Throw a shield generator (80 HP, stays until destroyed). Every 6s it gives you, teammates and your buddies inside its dome a 40 HP overshield.' },
+  sniper:    { name: 'Sniper Nest', type: 'active', thrown: true, gadget: true, color: '#20bf6b', cooldown: 25, uses: 2,
+               duration: Infinity, hp: 50, building: true, every: 2.5, range: 1800, damage: 90, speed: 4200,
+               desc: 'Throw a sniper nest (50 HP, stays until destroyed). Every 2.5s it fires one 90 damage shot at the closest enemy it can see, very far away.' },
   tesla:     { name: 'Tesla Coil', type: 'active', thrown: true, gadget: true, color: '#48dbfb', cooldown: 25, uses: 2,
                radius: 230, duration: Infinity, every: 0.6, damage: 10, hp: 100, building: true,
                desc: 'Throw a tesla tower (100 HP, stays until destroyed) that zaps every enemy close to it with lightning (10 damage).' },
@@ -534,14 +543,14 @@ const ABILITY_ICONS = {
   rapid: 'chevrons', armor: 'vest', hands: 'reload', blink: 'star', nova: 'burst', slowmo: 'hourglass', medic: 'plus',
   turret: 'turret', resupply: 'box', vampire: 'fangs', laststand: 'skull', sprinter: 'chevrons', bandolier: 'bullets',
   blackhole: 'vortex', firepit: 'flame', freeze: 'snow', decoy: 'person', barrier: 'wall', mine: 'mine', jumppad: 'up',
-  radar: 'dish', tesla: 'bolt', smoke: 'cloud', grapple: 'hook', phase: 'ghost', reflect: 'mirror', overcharge: 'battery',
+  radar: 'dish', tesla: 'bolt', mortar: 'mortar', shieldgen: 'dome', sniper: 'scope', smoke: 'cloud', grapple: 'hook', phase: 'ghost', reflect: 'mirror', overcharge: 'battery',
   quake: 'hammer', recall: 'rewind', thorns: 'spikes', scavenger: 'bone', glass: 'gem', adrenaline: 'heartbolt',
   cluster: 'dots', bubble: 'ring', stim: 'syringe', shadowstep: 'dagger', magnet: 'magnet', ninja: 'moon', lucky: 'clover',
 };
 
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
 const ABILITY_GROUPS = [
-  { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier'] },
+  { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier', 'mortar', 'shieldgen', 'sniper'] },
   { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'jumppad', 'bubble', 'medic', 'smoke', 'resupply'] },
   { label: '💣 Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
   { label: '🔫 Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
@@ -570,6 +579,9 @@ const COMBOS = [
   { a: 'barrier', b: 'freeze', name: 'Ice Wall',      how: 'Throw a Freeze Bomb onto a Barrier: the wall frosts over and enemies touching or right next to it move at 30% speed (the freeze bomb still goes off).' },
   { a: 'turret', b: 'barrier', name: 'Bunker',        how: 'Throw a Barrier onto a Turret: the barrier is used up and bolts on as armor plating. The turret takes 50% less damage.' },
   { a: 'radar', b: 'decoy',   name: 'Command Tower',  how: 'Throw a Decoy onto a Radar: the decoy stays a normal buddy and the radar becomes a Command Tower. Your buddies near it (320) shoot 30% faster and do 25% more damage.' },
+  { a: 'mortar', b: 'freeze', name: 'Cryo Mortar',    how: 'Throw a Freeze Bomb onto a Mortar: its shells also freeze everyone they hit for 1.5s (the freeze bomb still goes off).' },
+  { a: 'shieldgen', b: 'tesla', name: 'Shock Dome',   how: 'Throw a Tesla Coil onto a Shield Generator: the coil is used up and the dome shocks enemies inside it (20/s).' },
+  { a: 'sniper', b: 'radar',  name: 'Eagle Eye',      how: 'Throw a Radar onto a Sniper Nest: the radar is used up and the nest shoots through walls at anything in range.' },
   { a: 'tesla', b: 'grenade', name: 'Storm Coil',     how: 'Throw a Grenade onto a Tesla Coil: the grenade is used up and every zap chains on to up to 2 more nearby enemies.' },
   // ---- passive combos: just equip both, they power each other up ----
   { a: 'sprinter', b: 'dash',   name: 'Speedster',      passive: true, how: 'Equip both: +2 dashes and dashes go 50% further.', syn: { dash: { add: { uses: 2 }, mul: { power: 1.5 } } } },
@@ -585,7 +597,7 @@ const COMBOS = [
   { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
 ];
 const COMBO = { supplySpeed: 1.25, supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 1.5, healRange: 700, healShotSpeed: 900,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8,
-  iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230 };
+  iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230,  cryoMortar: 1.5, shockDps: 20 };
 
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.

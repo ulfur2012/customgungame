@@ -445,6 +445,9 @@ function describeMods(part) {
 // Simple shapes as SVG paths in a 40x40 box. [path, fill rule]. Used as SVG in menus and Path2D on canvas.
 const ICON_SHAPES = {
   plus:      ['M15 5h10v10h10v10H25v10H15V25H5V15h10z'],
+  mortar:    ['M6 31h28v5H6zM11 24h18v7H11zM17 24l-3-3L24 4l6 3-10 17z'],
+  dome:      ['M4 33a16 16 0 0 1 32 0zM18 9h4v8h-4zM20 3a3 3 0 1 1-.01 0z'],
+  scope:     ['M20 4a16 16 0 1 1-.01 0zM20 8a12 12 0 1 0 .01 0zM19 1h2v15h-2zM19 24h2v15h-2zM1 19h15v2H1zM24 19h15v2H24z', 'evenodd'],
   heart:     ['M20 35L6 21a8.5 8.5 0 0 1 14-11 8.5 8.5 0 0 1 14 11z'],
   heartbolt: ['M20 35L6 21a8.5 8.5 0 0 1 14-11 8.5 8.5 0 0 1 14 11zM22 12l-7 10h5l-2 8 7-11h-5z', 'evenodd'],
   shield:    ['M20 3l14 5v11c0 9-6 15-14 18C12 34 6 28 6 19V8z'],

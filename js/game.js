@@ -825,6 +825,14 @@ const Game = (() => {
         const t = G.turrets.find(t => t.hp > 0 && Math.hypot(t.x - n.x1, t.y - n.y1) <= COMBO.near);
         if (t) { t.shieldT = ABILITIES.bubble.duration; comboFx(t.x, t.y, '#7ef9ff', 'SHIELDED TURRET'); }
       }
+      if (n.kind === 'radar') { // EAGLE EYE (radar used up)
+        const sn = myGadget('sniper', n.x1, n.y1, COMBO.near);
+        if (sn && !sn.spot) { upgradeGadget(sn, 'spot'); comboFx(sn.x, sn.y, '#ff9ff3', 'EAGLE EYE'); return; }
+      }
+      if (n.kind === 'tesla' && !n.big) { // SHOCK DOME (tesla used up)
+        const sg = myGadget('shieldgen', n.x1, n.y1, COMBO.near);
+        if (sg && !sg.shock) { upgradeGadget(sg, 'shock'); comboFx(sg.x, sg.y, '#a29bfe', 'SHOCK DOME'); return; }
+      }
       if (n.kind === 'radar') { // SPOTTER TURRET
         const t = nearTurret(n.x1, n.y1);
         if (t) { t.spot = true; comboFx(t.x, t.y, '#ff9ff3', 'SPOTTER TURRET'); return; }
@@ -838,6 +846,10 @@ const Game = (() => {
       if (n.kind === 'decoy' && !n.supply) { // COMMAND TOWER (the decoy still lands as a normal buddy)
         const rd = myGadget('radar', n.x1, n.y1, COMBO.near);
         if (rd && !rd.command) { upgradeGadget(rd, 'command'); comboFx(rd.x, rd.y, '#ffd32a', 'COMMAND TOWER'); }
+      }
+      if (n.kind === 'freeze') { // CRYO MORTAR (the freeze still goes off)
+        const mo = myGadget('mortar', n.x1, n.y1, COMBO.near);
+        if (mo && !mo.cryo) { upgradeGadget(mo, 'cryo'); comboFx(mo.x, mo.y, '#74b9ff', 'CRYO MORTAR'); }
       }
       if (n.kind === 'freeze') { // ICE WALL (the freeze still goes off)
         const wall = myWall(n.x1, n.y1, 'ice');
@@ -994,6 +1006,56 @@ const Game = (() => {
     }
   }
 
+  // MORTAR: lobs a shell over walls at the farthest enemy in range (owner decides, everyone sees the strike)
+  function updateMortar(g, A) {
+    g.recoil = Math.max(0, (g.recoil || 0) - 0.05);
+    if (!isMine(g.owner) || g.tick > 0) return;
+    const R = A.range * (g.big ? MERGE.range : 1);
+    let best = null, bd = A.minRange;
+    for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d <= R && d > bd) { best = e; bd = d; } }
+    if (!best) { g.tick = 0.4; return; }
+    g.tick = A.every; g.aim = Math.atan2(best.y - g.y, best.x - g.x); g.recoil = 1;
+    const s = [Math.round(best.x), Math.round(best.y), A.flight, A.radius * (g.big ? 1.3 : 1), A.damage, g.cryo ? 1 : 0, Math.round(g.x), Math.round(g.y)];
+    addStrike(s, g.owner);
+    if (G.mode === 'mp') Net.send({ t: 'ult', k: 'mortar', s: [s] });
+    burst(g.x + Math.cos(g.aim) * 14, g.y + Math.sin(g.aim) * 14 - 10, '#ffd29a', 8, 160);
+  }
+  function addStrike(s, owner) { G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], cryo: s[5], sx: s[6], sy: s[7], owner }); }
+  // SNIPER NEST: one big shot at the closest enemy it can see (Eagle Eye: through walls)
+  function updateSniper(g, A, dt) {
+    if (g.tracer) { g.tracer.life -= dt; if (g.tracer.life <= 0) g.tracer = null; }
+    g.kick = Math.max(0, (g.kick || 0) - 40 * dt);
+    if (!isMine(g.owner)) return;
+    const R = A.range * (g.big ? MERGE.range : 1);
+    let best = null, bd = R;
+    for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd && (g.spot || lineOfSight(g.x, g.y, e.x, e.y))) { best = e; bd = d; } }
+    if (best) g.aim = Math.atan2(best.y - g.y, best.x - g.x);
+    if (!best || g.tick > 0) return;
+    g.tick = A.every;
+    const sx = g.x + Math.cos(g.aim) * 34 * g.sc, sy = g.y + Math.sin(g.aim) * 34 * g.sc;
+    fireBullets(sx, sy, [+g.aim.toFixed(4)], A.speed, A.damage * (g.big ? 1.5 : 1), 2, R + 50, 6 * HEAR_UNIT, g.spot ? { ghost: 1 } : {});
+    g.tracer = { x0: sx, y0: sy, x: best.x, y: best.y, life: 0.25 }; g.kick = 8;
+    muzzleFlash(sx, sy, g.aim);
+  }
+  // SHIELD GENERATOR: everyone friendly inside the dome gets an overshield every few seconds (each player does it for themselves)
+  function updateShieldGen(g, A) {
+    const me = G.me, R = A.radius * (g.big ? MERGE.range : 1);
+    if (g.tick > 0) return;
+    g.tick = g.shock ? 0.5 : A.every;
+    g.pulse = (g.pulse || 0) - (g.shock ? 0.5 : A.every);
+    if (g.pulse <= 0) {
+      g.pulse = A.every; g.ring = 0.5;
+      if (me.alive && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= R) {
+        me.shield = Math.max(me.shield, A.shield); me.shieldT = Math.max(me.shieldT, A.shieldTime);
+      }
+      if (isMine(g.owner)) for (const b of G.gadgets) if (b.kind === 'decoy' && !b.dead && isMine(b.owner) && Math.hypot(b.x - g.x, b.y - g.y) <= R) b.sh = A.shield;
+    }
+    if (g.shock) { // SHOCK DOME
+      if (isMine(g.owner)) { if (G.mode === 'sp') for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= R + e.r) { hurtEnemy(e, COMBO.shockDps / 2, 0.5, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); } }
+      else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= R + me.r) { hurtMe(COMBO.shockDps / 2, 0.5, Math.atan2(me.y - g.y, me.x - g.x), g.owner); g.zaps.push({ x: me.x, y: me.y, life: 0.15 }); }
+    }
+  }
+
   function updateGadgetList(dt) {
     const me = G.me;
     for (const g of G.gadgets) {
@@ -1044,6 +1106,9 @@ const Game = (() => {
           if (g.cryo) me.frozenT = Math.max(me.frozenT, COMBO.cryoFreeze * 0.6);
         }
       }
+      if (g.kind === 'mortar') updateMortar(g, A);
+      if (g.kind === 'sniper') updateSniper(g, A, dt);
+      if (g.kind === 'shieldgen') updateShieldGen(g, A);
       if (g.kind === 'mine' && g.age > A.arm) {
         let boom = false;
         if (isMine(g.owner)) boom = targets().some(e => Math.hypot(e.x - g.x, e.y - g.y) <= A.trigger + (e.r || PLAYER.r));
@@ -1358,6 +1423,7 @@ const Game = (() => {
   function damageGadget(g, dmg) {
     g.flash = 0.1;
     if (!isMine(g.owner)) return;
+    if (g.sh > 0) { const soak = Math.min(g.sh, dmg); g.sh -= soak; dmg -= soak; } // shield generator overshield
     g.hp -= dmg;
     if (g.hp <= 0) {
       burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300);
@@ -1441,6 +1507,12 @@ const Game = (() => {
         drawRadar(g);
       } else if (g.kind === 'tesla') {
         drawTesla(g, A);
+      } else if (g.kind === 'mortar') {
+        drawMortar(g);
+      } else if (g.kind === 'shieldgen') {
+        drawShieldGen(g, A);
+      } else if (g.kind === 'sniper') {
+        drawSniper(g);
       }
       ctx.restore();
     }
@@ -1607,6 +1679,89 @@ const Game = (() => {
       for (let i = 1; i < 6; i++) { const k = i / 6; ctx.lineTo(fx + (z.x - fx) * k + (Math.random() - 0.5) * 22, fy + (z.y - fy) * k + (Math.random() - 0.5) * 22); }
       ctx.lineTo(z.x, z.y); ctx.stroke();
     }
+  }
+
+  function drawMortar(g) {
+    const acc = g.cryo ? '#9ee7ff' : '#e67e22', a = g.aim ?? g.a, rc = g.recoil || 0;
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    bShadow(22, 16);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(-24, -24, 48, 48); }
+    // sandbag ring
+    for (let i = 0; i < 8; i++) {
+      const b = i * Math.PI / 4;
+      ctx.fillStyle = '#6d5a3a'; ctx.beginPath(); ctx.ellipse(Math.cos(b) * 17, Math.sin(b) * 17, 8, 5.5, b + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#a48a5c'; ctx.beginPath(); ctx.ellipse(Math.cos(b) * 17 - 1, Math.sin(b) * 17 - 1.5, 6, 3.5, b + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#3b3f46'; ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+    bBolts(4, 8, Math.PI / 4, '#7f8c8d');
+    // stubby tube pointing up-and-out toward the target
+    ctx.rotate(a);
+    ctx.fillStyle = '#1e2226'; ctx.fillRect(-6 - rc * 4, -6, 26, 12);
+    ctx.fillStyle = '#4b5259'; ctx.fillRect(-6 - rc * 4, -6, 26, 4);
+    ctx.fillStyle = acc; ctx.fillRect(16 - rc * 4, -7, 5, 14);
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(21 - rc * 4, 0, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    drawBar(g.x, g.y - 34 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
+  }
+
+  function drawShieldGen(g, A) {
+    const T = G.time, R = A.radius * (g.big ? MERGE.range : 1), col = g.shock ? '162,155,254' : '108,92,231';
+    // soft dome
+    ctx.fillStyle = `rgba(${col},${0.08 + 0.03 * Math.sin(T * 3)})`; ctx.strokeStyle = `rgba(${col},0.55)`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = `rgba(${col},0.18)`; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(g.x, g.y, R, R * 0.45, 0, 0, Math.PI * 2); ctx.moveTo(g.x + R * 0.45, g.y); ctx.ellipse(g.x, g.y, R * 0.45, R, 0, 0, Math.PI * 2); ctx.stroke();
+    if (g.ring > 0) { g.ring -= 1 / 60; ctx.strokeStyle = `rgba(200,190,255,${g.ring * 2})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(g.x, g.y, R * (1 - g.ring), 0, Math.PI * 2); ctx.stroke(); }
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    bShadow(20, 15);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; bPoly(6, 25, 0); ctx.stroke(); }
+    ctx.fillStyle = '#1b1830'; bPoly(6, 20, 0); ctx.fill();
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#3d3769'; bPoly(6, 18, 0); ctx.fill();
+    ctx.fillStyle = '#5a52a0'; bPoly(6, 12, 0); ctx.fill();
+    bBolts(6, 15, Math.PI / 6, '#a29bfe');
+    // emitter: spinning ring + core
+    ctx.strokeStyle = g.shock ? '#d6d2ff' : '#a29bfe'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.arc(0, -2, 9, T * 2, T * 2 + 4); ctx.stroke();
+    ctx.fillStyle = `rgba(${col},0.5)`; ctx.beginPath(); ctx.arc(0, -2, 7 + Math.sin(T * 6), 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#efeaff'; ctx.beginPath(); ctx.arc(0, -2, 3.5, 0, Math.PI * 2); ctx.fill();
+    if (g.shock && Math.random() < 0.6) bSpark(0, -2, 14, '#d6d2ff');
+    ctx.restore();
+    drawBar(g.x, g.y - 32 * g.sc, 44, 6, g.hp / g.maxHp, false, '#a29bfe');
+    if (g.shock) { ctx.strokeStyle = '#d6d2ff'; ctx.lineWidth = 2; for (const z of g.zaps) { ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo((g.x + z.x) / 2 + (Math.random() - 0.5) * 20, (g.y + z.y) / 2 + (Math.random() - 0.5) * 20); ctx.lineTo(z.x, z.y); ctx.stroke(); } }
+  }
+
+  function drawSniper(g) {
+    const acc = g.spot ? '#ff9ff3' : '#20bf6b', a = g.aim ?? g.a, k = g.kick || 0;
+    if (g.tracer) { // bright tracer line
+      const f = g.tracer.life / 0.25;
+      ctx.strokeStyle = `rgba(255,250,200,${f})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(g.tracer.x0, g.tracer.y0); ctx.lineTo(g.tracer.x, g.tracer.y); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,200,80,${f * 0.4})`; ctx.lineWidth = 8;
+      ctx.beginPath(); ctx.moveTo(g.tracer.x0, g.tracer.y0); ctx.lineTo(g.tracer.x, g.tracer.y); ctx.stroke();
+    }
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    bShadow(22, 17);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(-24, -24, 48, 48); }
+    // camo platform with a low wall
+    ctx.fillStyle = '#1f2a1f'; ctx.fillRect(-19, -17, 38, 38);
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#3e5233'; ctx.fillRect(-19, -19, 38, 34);
+    ctx.fillStyle = '#566e45'; ctx.fillRect(-14, -14, 28, 24);
+    ctx.fillStyle = '#2f3f27'; ctx.fillRect(-12, -10, 8, 5); ctx.fillRect(3, 2, 9, 5); ctx.fillRect(-6, 4, 6, 4); // camo blotches
+    ctx.fillStyle = '#7d9466'; ctx.fillRect(-19, -19, 38, 2);
+    // long rifle
+    ctx.rotate(a); ctx.translate(-k, 0);
+    ctx.fillStyle = '#1c1f22'; ctx.fillRect(-12, -3, 50, 6);
+    ctx.fillStyle = '#3c4247'; ctx.fillRect(-12, -3, 50, 2);
+    ctx.fillStyle = '#5b4632'; ctx.fillRect(-16, -4, 12, 8);   // stock
+    ctx.fillStyle = '#111'; ctx.fillRect(2, -8, 14, 4);         // scope
+    ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(16, -6, 2.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#2d3436'; ctx.fillRect(36, -4, 5, 8);      // muzzle brake
+    ctx.restore();
+    if (g.spot) { // radar dish on the nest
+      ctx.save(); ctx.translate(g.x - 12 * g.sc, g.y + 10 * g.sc); ctx.rotate(G.time * 3);
+      ctx.strokeStyle = '#ff9ff3'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(-3, 0, 6, -1, 1); ctx.stroke(); ctx.restore();
+    }
+    drawBar(g.x, g.y - 34 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
   }
 
   // armor plates bolted around a turret (BUNKER)
@@ -1847,6 +2002,10 @@ const Game = (() => {
       if (s.t <= 0) {
         s.done = true;
         explode(s.x, s.y, s.r, s.dmg, s.owner);
+        if (s.cryo) { // CRYO MORTAR
+          areaOf(s, s.r, e => { e.frozen = Math.max(e.frozen || 0, COMBO.cryoMortar); }, () => { G.me.frozenT = Math.max(G.me.frozenT, COMBO.cryoMortar); });
+          G.rings.push({ x: s.x, y: s.y, r: s.r, life: 0.5, max: 0.5, color: '126,214,255' });
+        }
         if (s.r > 300) { G.shake = 30; burst(s.x, s.y, '#ffffff', 60, 900); G.rings.push({ x: s.x, y: s.y, r: s.r * 1.3, life: 1, max: 1, color: '255,221,0' }); }
       }
     }
@@ -1870,6 +2029,12 @@ const Game = (() => {
     if (me.trackT > 0 && me.alive) drawEnemyArrow('#ff4d4d');
     for (const s of G.strikes) {
       const k = 1 - s.t / s.max;
+      if (s.sx !== undefined) { // mortar shell arcing through the air
+        const px = s.sx + (s.x - s.sx) * k, py = s.sy + (s.y - s.sy) * k - Math.sin(k * Math.PI) * 160;
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(s.sx + (s.x - s.sx) * k, s.sy + (s.y - s.sy) * k, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = s.cryo ? '#9ee7ff' : '#2d3436'; ctx.strokeStyle = s.cryo ? '#dff6ff' : '#e67e22'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, py, 6 + Math.sin(k * Math.PI) * 3, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
       ctx.strokeStyle = `rgba(255,${s.r > 300 ? 221 : 60},0,${0.4 + 0.5 * k})`; ctx.lineWidth = s.r > 300 ? 6 : 3;
       ctx.setLineDash([14, 10]);
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke();
@@ -2373,7 +2538,7 @@ const Game = (() => {
       ctx.quadraticCurveTo(mx + nx * bend, my + ny * bend, t.x, t.y);
       ctx.stroke();
       ctx.setLineDash([]);
-      const AA = ABILITIES[me.ability], rad = me.ability === 'radar' ? 40 : me.ability === 'barrier' ? AA.len / 2 : AA.radius || 22;
+      const AA = ABILITIES[me.ability], rad = me.ability === 'radar' || me.ability === 'mortar' || me.ability === 'sniper' ? 40 : me.ability === 'barrier' ? AA.len / 2 : AA.radius || 22;
       ctx.beginPath(); ctx.arc(t.x, t.y, rad, 0, Math.PI * 2); ctx.stroke();
     } else {
       // rocket: straight line until the first wall
@@ -3016,7 +3181,7 @@ const Game = (() => {
     if (m.k === 'timestop') { if (hostileTo(m.from)) { G.me.frozenT = 3; G.banner = { text: 'TIME STOPPED!', t: 1.5 }; } }
     else if (m.k === 'tracker') { if (!hostileTo(m.from)) { G.me.trackT = ULTIMATES.tracker.duration; G.banner = { text: 'Teammate used Tracker!', t: 1.5 }; } }
     else if (m.k === 'laser') G.lasers.push({ x: m.x, y: m.y, a: m.a, t: ULTIMATES.laser.duration, tick: 0, owner: m.from });
-    else if (m.s) for (const s of m.s) G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: m.from });
+    else if (m.s) for (const s of m.s) addStrike(s, m.from);
   });
   Net.on('aoe', m => { if (inMP()) slam(m.x, m.y, m.r, m.dmg, m.kb, m.from); });
   Net.on('nade', m => { if (inMP()) G.nades.push({ x0: m.x0, y0: m.y0, x1: m.x1, y1: m.y1, t: 0, owner: m.from }); });
