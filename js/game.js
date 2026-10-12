@@ -1037,6 +1037,7 @@ const Game = (() => {
   function formUp(g, what) {
     const F = FORMATIONS[what];
     g.hp = g.maxHp = F.hp; g.flash = 0.2; g.formAge = 0;
+    g.lvl = 1; // any level of the parts can fuse; the super building starts fresh
     if (F.size) g.sc = F.size;
     if (what === 'carrier') g.drones = null; // rebuilt with more, bigger drones
   }
@@ -1116,7 +1117,7 @@ const Game = (() => {
       if (!pair) continue;
       for (const g of pair) { removeGadget(g); if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id }); }
       const R = MERGE.railgun;
-      Object.assign(t, { rocket: false, rail: true, hp: R.hp, maxHp: R.hp, cd: 0.5, zap: null });
+      Object.assign(t, { rocket: false, rail: true, hp: R.hp, maxHp: R.hp, cd: 0.5, zap: null, lvl: 1 }); // levels of the parts don't matter: starts fresh
       burst(t.x, t.y, '#48dbfb', 60, 500);
       G.rings.push({ x: t.x, y: t.y, r: 220, life: 0.7, max: 0.7, color: '72,219,251' });
       G.banner = { text: 'RAILGUN!', t: 1.8 };
