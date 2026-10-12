@@ -886,6 +886,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 90, title: 'Cleaner mega buildings', notes: ['Artillery Battery, Aegis Dome, Inferno Tower, Black Hole Generator, Watchtower and Citadel Wall have new simple looks.', 'They all stand on a hexagon base like the Railgun, with one bright colour each. The Fortress got a hexagon base too.'] },
   { v: 89, title: 'Ability joysticks on phones', notes: ['On phones every ability button is now a little green joystick.', 'Drag it to aim where your throw lands (pull further = throw further), let go to use it.', 'Drag out and back to the middle to cancel. A quick tap still auto-aims.'] },
   { v: 88, title: 'Revive your teammates', notes: ['In Teams and Co-op, when a teammate dies they leave a ghost for 10 seconds.', 'Stand on the ghost for 3 seconds WITHOUT shooting to bring them back (abilities are OK).', 'They come back with half health in the same round. Enemies can see the ghost but cannot revive it.'] },
   { v: 87, title: 'Buy mega buildings', notes: ['Mega buildings (Railgun, Fortress, Watchtower...) are now bought with score in the new 🏰 Mega tab.', 'You must own the buildings they are made from first (Railgun needs Turret + Tesla).', 'Test mode and "All upgrades free" games still let you build them all.'] },

@@ -2447,234 +2447,130 @@ const Game = (() => {
     ctx.stroke();
   }
 
-  // ---- MEGA BUILDINGS (v85 formations): name plate + art
+  // ---- MEGA BUILDINGS (v85 formations): name plate + simple railgun-style art (dark hexagon base, one accent colour)
   function megaPlate(x, y, text, col) {
     ctx.save(); ctx.font = '900 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const w = ctx.measureText(text).width + 18;
+    const w = ctx.measureText(text).width + 16;
     ctx.fillStyle = 'rgba(12,14,22,0.82)'; ctx.fillRect(x - w / 2, y - 9, w, 18);
-    ctx.fillStyle = col; ctx.fillRect(x - w / 2, y - 9, w, 2); ctx.fillRect(x - w / 2, y + 7, w, 2);
-    ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.moveTo(x - w / 2 - 6, y); ctx.lineTo(x - w / 2, y - 9); ctx.lineTo(x - w / 2, y + 9); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(x + w / 2 + 6, y); ctx.lineTo(x + w / 2, y - 9); ctx.lineTo(x + w / 2, y + 9); ctx.fill();
+    ctx.fillStyle = col; ctx.fillRect(x - w / 2, y + 7, w, 2);
     ctx.fillStyle = '#fff'; ctx.fillText(text, x, y + 0.5);
     ctx.restore();
   }
-  // ARTILLERY BATTERY: armored octagon pad, 5 heavy tubes in a ring, ammo racks
+  // shared hexagon base plate (like the railgun): dark fill, accent outline, corner lights
+  function megaHex(r, acc, flash, lights) {
+    ctx.fillStyle = flash > 0 ? '#fff' : '#141a20'; ctx.strokeStyle = acc; ctx.lineWidth = 3;
+    bPoly(6, r, Math.PI / 6); ctx.fill(); ctx.stroke();
+    if (lights !== false) for (let i = 0; i < 6; i++) { const a = i * Math.PI / 3 + Math.PI / 6, on = Math.sin(G.time * 4 + i) > 0; megaDot(Math.cos(a) * (r - 6), Math.sin(a) * (r - 6), 2.5, on ? '#fff' : acc); }
+  }
+  function megaDot(x, y, r, col) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+  // ARTILLERY BATTERY: 3 thick tubes on a hex base
   function drawArtillery(g) {
-    const T = G.time, a = g.aim ?? g.a ?? 0, rc = g.recoil || 0, acc = g.cryo ? '#9ee7ff' : '#e67e22';
+    const a = g.aim ?? g.a ?? 0, rc = g.recoil || 0, acc = g.cryo ? '#9ee7ff' : '#e67e22';
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
-    bShadow(26, 20);
-    bGoldRing(8, 25, Math.PI / 8);
-    ctx.fillStyle = '#1d2024'; bPoly(8, 24, Math.PI / 8); ctx.fill();
-    ctx.fillStyle = g.flash > 0 ? '#fff' : '#4a4f57'; bPoly(8, 22, Math.PI / 8); ctx.fill();
-    ctx.strokeStyle = '#f9ca24'; ctx.lineWidth = 3; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(0, 0, 19, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash(NODASH);
-    ctx.fillStyle = '#5f6670'; bPoly(8, 15, Math.PI / 8); ctx.fill();
-    for (let i = 0; i < 4; i++) { // ammo racks on the corners
-      const b = Math.PI / 4 + i * Math.PI / 2;
-      ctx.save(); ctx.rotate(b); ctx.translate(19, 0);
-      ctx.fillStyle = '#3d2f1c'; ctx.fillRect(-3, -5, 6, 10);
-      ctx.fillStyle = '#c9a227'; for (let k = 0; k < 3; k++) { ctx.beginPath(); ctx.arc(0, -3 + k * 3, 1.4, 0, Math.PI * 2); ctx.fill(); }
+    megaHex(28, acc, g.flash);
+    ctx.rotate(a);
+    for (let i = -1; i <= 1; i++) {
+      ctx.save(); ctx.rotate(i * 0.45);
+      ctx.fillStyle = '#2f3640'; ctx.strokeStyle = '#0c1014'; ctx.lineWidth = 2;
+      ctx.fillRect(2 - rc * 4, -5, 28, 10); ctx.strokeRect(2 - rc * 4, -5, 28, 10);
+      ctx.fillStyle = acc; ctx.fillRect(25 - rc * 4, -5, 5, 10);
       ctx.restore();
     }
-    ctx.rotate(a + T * 0.15);
-    for (let i = 0; i < 5; i++) { // 5 tubes splayed out
-      const b = i * Math.PI * 2 / 5, r = rc * (1 - i * 0.15);
-      ctx.save(); ctx.rotate(b); ctx.scale(1, 0.75);
-      ctx.fillStyle = '#16191c'; ctx.fillRect(2 - r * 4, -5, 20, 10);
-      ctx.fillStyle = '#4b5259'; ctx.fillRect(2 - r * 4, -5, 20, 3);
-      ctx.fillStyle = '#ffd700'; ctx.fillRect(18 - r * 4, -6, 4, 12);
-      ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(22 - r * 4, 0, 3.5, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
-    ctx.fillStyle = '#2b2f35'; ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, Math.PI * 2); ctx.fill();
-    glow(0, 0, 12 + Math.sin(T * 4) * 2, acc, 0.7);
-    if (rc > 0) for (let i = 0; i < 5; i++) { const b = i * Math.PI * 2 / 5; glow(Math.cos(b) * 23, Math.sin(b) * 17, 5 + rc * 9, '#ffb347', rc * 0.7); }
+    megaDot(0, 0, 9, '#2f3640'); megaDot(0, 0, 4.5, acc);
+    if (rc > 0) glow(32, 0, 8 + rc * 14, '#ffb347', rc * 0.7);
     ctx.restore();
     megaPlate(g.x, g.y - 52 * g.sc, 'ARTILLERY BATTERY', acc);
-    drawBar(g.x, g.y - 36 * g.sc, 54, 6, g.hp / g.maxHp, false, acc);
+    drawBar(g.x, g.y - 38 * g.sc, 54, 6, g.hp / g.maxHp, false, acc);
   }
-  // AEGIS DOME: giant hex-panel dome, tall emitter spire with counter-spinning rings
+  // AEGIS DOME: flat dome circle, hex base with a glowing core
   function drawAegis(g, A) {
     const T = G.time, R = A.radius * FORMATIONS.aegis.radius * lvlRange(g), col = g.shock ? '162,155,254' : '108,92,231';
-    ctx.fillStyle = `rgba(${col},${0.09 + 0.03 * Math.sin(T * 2)})`; ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.fill();
-    ctx.save(); ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.clip(); // hex panels
-    const hs = 46, h3 = hs * Math.sqrt(3) / 2;
-    ctx.strokeStyle = `rgba(200,190,255,${0.14 + 0.05 * Math.sin(T * 1.5)})`; ctx.lineWidth = 1.5;
-    const nr = Math.ceil(R / h3 / 2) + 1, nc = Math.ceil(R / hs / 1.5) + 1;
-    for (let row = -nr; row <= nr; row++) for (let c = -nc; c <= nc; c++) {
-      const cx = g.x + c * hs * 1.5, cy = g.y + row * h3 * 2 + (c & 1) * h3;
-      if (Math.hypot(cx - g.x, cy - g.y) > R + hs) continue;
-      const lit = hash01(c * 7.3 + row * 3.1 + Math.floor(T * 2)) > 0.93;
-      ctx.beginPath(); for (let i = 0; i < 6; i++) { const b = i * Math.PI / 3; ctx.lineTo(cx + Math.cos(b) * hs * 0.97, cy + Math.sin(b) * hs * 0.97); } ctx.closePath();
-      if (lit) { ctx.fillStyle = `rgba(${col},0.18)`; ctx.fill(); }
-      ctx.stroke();
-    }
-    ctx.restore();
-    ctx.strokeStyle = `rgba(214,210,255,${0.7 + 0.2 * Math.sin(T * 4)})`; ctx.lineWidth = 3 + (g.blockFx > 0 ? 3 : 0);
-    ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = `rgba(${col},0.1)`; ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(214,210,255,0.7)'; ctx.lineWidth = 3 + (g.blockFx > 0 ? 3 : 0); ctx.stroke();
     g.blockFx = Math.max(0, (g.blockFx || 0) - 1 / 60);
-    if (g.ring > 0) { g.ring -= 1 / 60; ctx.strokeStyle = `rgba(230,225,255,${g.ring * 2})`; ctx.lineWidth = 8; ctx.beginPath(); ctx.arc(g.x, g.y, R * (1 - g.ring), 0, Math.PI * 2); ctx.stroke(); }
+    if (g.ring > 0) { g.ring -= 1 / 60; ctx.strokeStyle = `rgba(230,225,255,${g.ring * 2})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(g.x, g.y, R * (1 - g.ring), 0, Math.PI * 2); ctx.stroke(); }
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
-    bShadow(24, 18);
-    bGoldRing(6, 25, 0);
-    ctx.fillStyle = '#1b1830'; bPoly(6, 24, 0); ctx.fill();
-    ctx.fillStyle = g.flash > 0 ? '#fff' : '#3d3769'; bPoly(6, 22, 0); ctx.fill();
-    ctx.fillStyle = '#5a52a0'; bPoly(6, 15, 0); ctx.fill();
-    for (let i = 0; i < 6; i++) { // 6 emitter pylons
-      const b = i * Math.PI / 3 + Math.PI / 6, px = Math.cos(b) * 19, py = Math.sin(b) * 19;
-      ctx.fillStyle = '#2a2550'; ctx.beginPath(); ctx.arc(px, py, 3.5, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#d6d2ff'; ctx.beginPath(); ctx.arc(px, py - 1, 1.6, 0, Math.PI * 2); ctx.fill();
-    }
-    // spire
-    ctx.fillStyle = '#231f40'; ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(-2.5, -34); ctx.lineTo(2.5, -34); ctx.lineTo(6, 0); ctx.fill();
-    ctx.fillStyle = '#6c63c0'; ctx.fillRect(-1, -32, 2, 30);
-    for (let i = 0; i < 3; i++) { // rings around the spire
-      const y = -10 - i * 9, sp = (i % 2 ? -1 : 1) * T * (2 + i);
-      ctx.strokeStyle = i === 1 ? '#ffd700' : '#a29bfe'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(0, y, 13 - i * 3, 4 - i, 0, sp, sp + 4.4); ctx.stroke();
-    }
-    ctx.fillStyle = '#efeaff'; ctx.beginPath(); ctx.arc(0, -36, 4, 0, Math.PI * 2); ctx.fill();
-    glow(0, -36, 22 + Math.sin(T * 6) * 3, '#a29bfe', 0.9);
-    if (g.shock && Math.random() < 0.6) bSpark(0, -36, 16, '#d6d2ff');
+    megaHex(28, '#a29bfe', g.flash);
+    ctx.strokeStyle = '#a29bfe'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    for (let i = 0; i < 3; i++) { const b = T * 1.5 + i * Math.PI * 2 / 3; ctx.beginPath(); ctx.arc(0, 0, 15, b, b + 1.3); ctx.stroke(); }
+    ctx.lineCap = 'butt';
+    megaDot(0, 0, 7 + Math.sin(T * 4), '#d6d2ff');
     ctx.restore();
-    megaPlate(g.x, g.y - 62 * g.sc, 'AEGIS DOME', '#a29bfe');
-    drawBar(g.x, g.y - 47 * g.sc, 54, 6, g.hp / g.maxHp, false, '#a29bfe');
-    if (g.shock) { ctx.strokeStyle = '#d6d2ff'; ctx.lineWidth = 2; for (const z of g.zaps) { ctx.beginPath(); ctx.moveTo(g.x, g.y - 36 * g.sc); ctx.lineTo(z.x, z.y); ctx.stroke(); } }
+    megaPlate(g.x, g.y - 52 * g.sc, 'AEGIS DOME', '#a29bfe');
+    drawBar(g.x, g.y - 38 * g.sc, 54, 6, g.hp / g.maxHp, false, '#a29bfe');
+    if (g.shock) { ctx.strokeStyle = '#d6d2ff'; ctx.lineWidth = 2; for (const z of g.zaps) { ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(z.x, z.y); ctx.stroke(); } }
   }
-  // INFERNO TOWER: stone furnace with a glowing lava chimney and 6 spinning nozzles
+  // INFERNO TOWER: hex base, lava core, 4 spinning nozzles; fireballs are plain circles
   function drawInferno(g) {
     const T = G.time;
-    for (const p of g.flames || []) { const k = p.life / p.max; glow(p.x, p.y, p.s * (1.8 - k * 0.7), k > 0.65 ? '#ffd36b' : k > 0.3 ? '#ff7a1a' : '#d63031', Math.min(1, k * 1.5)); }
-    glow(g.x, g.y, 70 + Math.sin(T * 5) * 8, '#ff5e1a', 0.35);
+    for (const p of g.flames || []) { const k = p.life / p.max; ctx.globalAlpha = Math.min(1, k * 1.5) * 0.85; megaDot(p.x, p.y, p.s * 0.7, k > 0.6 ? '#ffd36b' : k > 0.3 ? '#ff7a1a' : '#d63031'); }
+    ctx.globalAlpha = 1;
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
-    bShadow(25, 19);
-    bGoldRing(8, 25, Math.PI / 8);
-    ctx.fillStyle = '#1a0f0a'; bPoly(8, 24, Math.PI / 8); ctx.fill();
-    ctx.fillStyle = g.flash > 0 ? '#fff' : '#4d3226'; bPoly(8, 22, Math.PI / 8); ctx.fill();
-    ctx.strokeStyle = '#2a1a12'; ctx.lineWidth = 1.5;
-    for (let r = 12; r <= 20; r += 8) { ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.stroke(); }
-    for (let i = 0; i < 16; i++) { const b = i * Math.PI / 8; ctx.beginPath(); ctx.moveTo(Math.cos(b) * 12, Math.sin(b) * 12); ctx.lineTo(Math.cos(b) * 20, Math.sin(b) * 20); ctx.stroke(); }
-    for (let i = 0; i < 6; i++) { // spinning nozzles
-      const b = T * 2.5 + i * Math.PI / 3;
-      ctx.save(); ctx.rotate(b); ctx.fillStyle = '#2d2d34'; ctx.fillRect(14, -3, 12, 6); ctx.fillStyle = '#ffd700'; ctx.fillRect(24, -3.5, 3, 7); glow(28, 0, g.firing ? 9 : 5, '#ffb347', 0.9); ctx.restore();
-    }
-    // chimney (3/4 view): rises up, lava mouth on top
-    ctx.fillStyle = '#2b1a12'; ctx.fillRect(-9, -38, 18, 38);
-    ctx.fillStyle = '#5a3a2a'; ctx.fillRect(-9, -38, 6, 38);
-    ctx.fillStyle = '#1a0f0a'; for (let y = -34; y < 0; y += 7) ctx.fillRect(-9, y, 18, 1.2);
-    ctx.fillStyle = '#ff7a1a'; for (let y = -31; y < -2; y += 7) { if (hash01(y + Math.floor(T * 6)) > 0.5) ctx.fillRect(-1 + hash01(y) * 4, y, 3, 3); } // glowing cracks
-    ctx.fillStyle = '#3a2418'; ctx.beginPath(); ctx.ellipse(0, -38, 11, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-    const lv = 0.8 + 0.2 * Math.sin(T * 9); ctx.fillStyle = '#ffb142'; ctx.beginPath(); ctx.ellipse(0, -38, 8 * lv, 3, 0, 0, Math.PI * 2); ctx.fill();
-    glow(0, -40, 22 + (g.belch || 0) * 50, '#ff7a1a', 0.95); glow(0, -40, 8, '#fff3b0', 0.9);
-    if (Math.random() < 0.4) G.fx.push({ x: g.x + (Math.random() - 0.5) * 10, y: g.y - 40 * g.sc, vx: (Math.random() - 0.5) * 20, vy: -60, life: 0.7, max: 0.7, size: 5, color: Math.random() < 0.5 ? '#ff6b1a' : '#555' });
+    megaHex(28, '#ff5e1a', g.flash);
+    ctx.save(); ctx.rotate(T * 1.5);
+    for (let i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); ctx.fillStyle = '#2f3640'; ctx.fillRect(10, -4, 14, 8); ctx.fillStyle = '#ff7a1a'; ctx.fillRect(21, -4, 3, 8); }
     ctx.restore();
-    megaPlate(g.x, g.y - 66 * g.sc, 'INFERNO TOWER', '#ff5e1a');
-    drawBar(g.x, g.y - 51 * g.sc, 54, 6, g.hp / g.maxHp, false, '#ff5e1a');
+    megaDot(0, 0, 11, '#2f3640');
+    megaDot(0, 0, 7 + Math.sin(T * 6) + (g.belch || 0) * 4, '#ff7a1a');
+    megaDot(0, 0, 3.5, '#ffd36b');
+    ctx.restore();
+    megaPlate(g.x, g.y - 52 * g.sc, 'INFERNO TOWER', '#ff5e1a');
+    drawBar(g.x, g.y - 38 * g.sc, 54, 6, g.hp / g.maxHp, false, '#ff5e1a');
   }
-  // BLACK HOLE GENERATOR: accretion disk around a black sphere, 3 containment pylons
+  // BLACK HOLE GENERATOR: hex base, black core with a spinning accent ring; pull range + crush ring
   function drawSingularity(g, A) {
     const T = G.time, R = A.radius * FORMATIONS.singularity.radius * lvlRange(g), acc = g.implode ? '#ff6bcb' : '#7d5fff', rgb = rgbOf(acc);
     ctx.fillStyle = `rgba(${rgb},0.06)`; ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.fill();
-    ctx.lineWidth = 2.5;
-    for (let i = 0; i < 6; i++) { // spiral arms sliding inward
-      const k = (T * 0.4 + i / 6) % 1, r = R * (1 - k);
-      ctx.strokeStyle = `rgba(${rgb},${1.6 * k * (1 - k)})`;
-      ctx.beginPath(); ctx.arc(g.x, g.y, r, T * 2 + i * 1.3, T * 2 + i * 1.3 + 2.6); ctx.stroke();
-    }
-    const cr = R * FORMATIONS.singularity.crushRadius;
-    ctx.strokeStyle = `rgba(${rgb},0.4)`; ctx.setLineDash([6, 8]); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(g.x, g.y, cr, -T, -T + Math.PI * 2); ctx.stroke(); ctx.setLineDash(NODASH);
+    ctx.strokeStyle = `rgba(${rgb},0.35)`; ctx.lineWidth = 2; ctx.stroke();
+    const k = (T * 0.5) % 1; ctx.strokeStyle = `rgba(${rgb},${0.5 * k})`; ctx.beginPath(); ctx.arc(g.x, g.y, R * (1 - k), 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(${rgb},0.45)`; ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.arc(g.x, g.y, R * FORMATIONS.singularity.crushRadius, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash(NODASH);
     const sq = g.squeeze > 0 ? (g.squeeze -= 1 / 60) : 0;
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc * (1 - sq * 0.3), g.sc * (1 - sq * 0.3));
-    bShadow(25, 19);
-    ctx.strokeStyle = '#7a5c0e'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.stroke(); ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.fillStyle = '#100d1c'; ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI * 2); ctx.fill();
-    for (let i = 0; i < 3; i++) { // pylons with beams into the core
-      const b = i * Math.PI * 2 / 3 - Math.PI / 2, px = Math.cos(b) * 19, py = Math.sin(b) * 19 + 4;
-      ctx.strokeStyle = `rgba(214,210,255,${0.5 + 0.4 * Math.sin(T * 8 + i)})`; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(px, py - 8); ctx.lineTo(0, -4); ctx.stroke();
-      ctx.fillStyle = '#2b2450'; ctx.fillRect(px - 3.5, py - 10, 7, 12); ctx.fillStyle = '#ffd700'; ctx.fillRect(px - 3.5, py - 10, 7, 2);
-      glow(px, py - 9, 8, acc, 0.9);
-    }
-    const disk = (from, to) => { for (let k = 0; k < 3; k++) { ctx.strokeStyle = k === 0 ? '#ffb142' : k === 1 ? acc : '#ffd6f5'; ctx.lineWidth = 3 - k * 0.7; ctx.beginPath(); ctx.ellipse(0, -4, 21 - k * 3, 7 - k, -0.25, from, to); ctx.stroke(); } };
-    disk(Math.PI, Math.PI * 2);
-    glow(0, -4, 26 + Math.sin(T * 5) * 3, acc, 0.8);
-    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(0, -4, 9, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#efeaff'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(0, -4, 9.5, T * 6, T * 6 + 2.2); ctx.stroke();
-    disk(0, Math.PI);
-    for (let i = 0; i < 5; i++) { const b = T * 3 + i * 1.256; ctx.fillStyle = '#fff3d6'; ctx.beginPath(); ctx.arc(Math.cos(b) * 19, -4 + Math.sin(b) * 6, 1.3, 0, Math.PI * 2); ctx.fill(); } // matter spinning in
+    megaHex(28, acc, g.flash);
+    ctx.strokeStyle = acc; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    for (let i = 0; i < 2; i++) { const b = T * 3 + i * Math.PI; ctx.beginPath(); ctx.arc(0, 0, 14, b, b + 2); ctx.stroke(); }
+    ctx.lineCap = 'butt';
+    megaDot(0, 0, 9, '#000');
     ctx.restore();
     megaPlate(g.x, g.y - 52 * g.sc, 'BLACK HOLE GENERATOR', acc);
-    drawBar(g.x, g.y - 37 * g.sc, 54, 6, g.hp / g.maxHp, false, acc);
+    drawBar(g.x, g.y - 38 * g.sc, 54, 6, g.hp / g.maxHp, false, acc);
   }
-  // WATCHTOWER: tall lattice tower, cabin on top with a giant rifle, sweeping searchlight
+  // WATCHTOWER: hex base, long sniper rifle with a green scope
   function drawWatchtower(g) {
-    const T = G.time, a = g.aim ?? g.a ?? 0, k = g.kick || 0, sc = g.sc, top = -34;
+    const a = g.aim ?? g.a ?? 0, k = g.kick || 0, sc = g.sc;
     if (g.tracer) { const f = g.tracer.life / 0.25;
-      ctx.strokeStyle = `rgba(160,255,200,${f * 0.45})`; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(g.tracer.x0, g.tracer.y0); ctx.lineTo(g.tracer.x, g.tracer.y); ctx.stroke();
-      ctx.strokeStyle = `rgba(255,255,255,${f})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(g.tracer.x0, g.tracer.y0); ctx.lineTo(g.tracer.x, g.tracer.y); ctx.stroke(); }
+      ctx.strokeStyle = `rgba(160,255,200,${f * 0.4})`; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(g.tracer.x0, g.tracer.y0); ctx.lineTo(g.tracer.x, g.tracer.y); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,255,255,${f})`; ctx.lineWidth = 2.5; ctx.stroke(); }
     if (g.mark && g.mark.t > 0) { g.mark.t -= 1 / 60; const m = g.mark, r = 22 + (0.6 - m.t) * 30; ctx.strokeStyle = `rgba(32,191,107,${Math.max(0, m.t / 0.6)})`; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.arc(m.x, m.y, r, 0, Math.PI * 2); ctx.moveTo(m.x - r - 8, m.y); ctx.lineTo(m.x - r + 8, m.y); ctx.moveTo(m.x + r - 8, m.y); ctx.lineTo(m.x + r + 8, m.y); ctx.moveTo(m.x, m.y - r - 8); ctx.lineTo(m.x, m.y - r + 8); ctx.moveTo(m.x, m.y + r - 8); ctx.lineTo(m.x, m.y + r + 8); ctx.stroke(); }
-    const sw = Math.sin(T * 0.7) * 1.4 + T * 0.25, L = 260; // searchlight cone on the ground
-    const grd = ctx.createRadialGradient(g.x, g.y, 10, g.x, g.y, L); grd.addColorStop(0, 'rgba(230,255,200,0.22)'); grd.addColorStop(1, 'rgba(230,255,200,0)');
-    ctx.fillStyle = grd; ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.arc(g.x, g.y, L, sw - 0.22, sw + 0.22); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.arc(m.x, m.y, r, 0, Math.PI * 2); ctx.stroke(); }
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(sc, sc);
-    bShadow(24, 18);
-    ctx.fillStyle = '#2a3326'; ctx.fillRect(-20, -4, 40, 22); ctx.fillStyle = '#3e5233'; ctx.fillRect(-20, -6, 40, 20); bGoldCorners(21);
-    ctx.strokeStyle = '#1c2219'; ctx.lineWidth = 3.5; // 4 legs
-    ctx.beginPath(); ctx.moveTo(-16, 10); ctx.lineTo(-10, top); ctx.moveTo(16, 10); ctx.lineTo(10, top); ctx.moveTo(-9, 2); ctx.lineTo(-7, top); ctx.moveTo(9, 2); ctx.lineTo(7, top); ctx.stroke();
-    ctx.strokeStyle = '#6b7c5c'; ctx.lineWidth = 1.3; ctx.beginPath(); // cross bracing
-    for (let i = 0; i < 4; i++) { const y0 = 10 - i * 11, y1 = y0 - 11, w0 = 16 - i * 1.5, w1 = 16 - (i + 1) * 1.5; ctx.moveTo(-w0, y0); ctx.lineTo(w1, y1); ctx.moveTo(w0, y0); ctx.lineTo(-w1, y1); ctx.moveTo(-w1, y1); ctx.lineTo(w1, y1); }
-    ctx.stroke();
-    ctx.fillStyle = '#1f2a1f'; ctx.fillRect(-15, top - 12, 30, 14); // cabin
-    ctx.fillStyle = g.flash > 0 ? '#fff' : '#4b6340'; ctx.fillRect(-15, top - 14, 30, 12);
-    ctx.fillStyle = '#9fd8b0'; ctx.fillRect(-12, top - 11, 24, 4);
-    ctx.fillStyle = '#ffd700'; ctx.fillRect(-16, top - 16, 32, 2.5);
-    ctx.fillStyle = '#2f3f27'; ctx.beginPath(); ctx.moveTo(-18, top - 15); ctx.lineTo(0, top - 23); ctx.lineTo(18, top - 15); ctx.fill(); // roof
-    const on = Math.sin(T * 3) > -0.5; ctx.fillStyle = on ? '#f5ffd6' : '#666'; ctx.beginPath(); ctx.arc(12, top - 18, 2.5, 0, Math.PI * 2); ctx.fill(); if (on) glow(12, top - 18, 10, '#eaffc0', 0.8);
-    ctx.save(); ctx.translate(0, top - 6); ctx.rotate(a); ctx.translate(-k, 0); // giant rifle on the cabin
-    ctx.fillStyle = '#1c1f22'; ctx.fillRect(-10, -3.5, 62, 7); ctx.fillStyle = '#3c4247'; ctx.fillRect(-10, -3.5, 62, 2);
-    ctx.fillStyle = '#5b4632'; ctx.fillRect(-15, -4.5, 10, 9);
-    ctx.fillStyle = '#b8860b'; ctx.fillRect(4, -9, 18, 5); ctx.fillStyle = '#20bf6b'; ctx.beginPath(); ctx.arc(22, -6.5, 2.4, 0, Math.PI * 2); ctx.fill(); glow(22, -6.5, 8, '#20bf6b', 0.8);
-    ctx.fillStyle = '#2d3436'; ctx.fillRect(50, -5, 7, 10); ctx.fillStyle = '#ffd700'; ctx.fillRect(56, -5, 2, 10);
+    megaHex(28, '#20bf6b', g.flash);
+    ctx.rotate(a); ctx.translate(-k, 0);
+    ctx.fillStyle = '#2f3640'; ctx.strokeStyle = '#0c1014'; ctx.lineWidth = 2;
+    ctx.fillRect(-8, -4, 56, 8); ctx.strokeRect(-8, -4, 56, 8);
+    ctx.fillStyle = '#20bf6b'; ctx.fillRect(0, -8, 14, 5);
+    megaDot(0, 0, 8, '#2f3640');
     ctx.restore();
-    ctx.restore();
-    megaPlate(g.x, g.y + (top - 42) * sc, 'WATCHTOWER', '#20bf6b');
-    drawBar(g.x, g.y + (top - 29) * sc, 54, 6, g.hp / g.maxHp, false, '#20bf6b');
+    megaPlate(g.x, g.y - 52 * sc, 'WATCHTOWER', '#20bf6b');
+    drawBar(g.x, g.y - 38 * sc, 54, 6, g.hp / g.maxHp, false, '#20bf6b');
   }
-  // CITADEL WALL: castle stone with crenellations + a round gun tower at each end
+  // CITADEL WALL: flat dark wall with a blue outline + a hex gun tower at each end
   function drawCitadel(g) {
-    const [x, y, w, h] = g.rect, horiz = w >= h, T = G.time;
+    const [x, y, w, h] = g.rect, horiz = w >= h;
     ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x + 5, y + 8, w, h);
-    ctx.fillStyle = '#3b3f4a'; ctx.fillRect(x, y, w, h);
-    const bs = 16; // stone blocks in a brick pattern
-    for (let i = -1; i * bs < (horiz ? w : h); i++) for (let j = 0; j * bs * 0.75 < (horiz ? h : w); j++) {
-      const u = i * bs + (j % 2 ? bs / 2 : 0), v = j * bs * 0.75;
-      let bx = horiz ? x + u : x + v, by = horiz ? y + v : y + u, bw = horiz ? bs - 2 : bs * 0.75 - 2, bh = horiz ? bs * 0.75 - 2 : bs - 2;
-      const x0 = Math.max(bx + 1, x + 1), y0 = Math.max(by + 1, y + 1), x1 = Math.min(bx + 1 + bw, x + w - 1), y1 = Math.min(by + 1 + bh, y + h - 1);
-      if (x1 <= x0 || y1 <= y0) continue;
-      const shade = 0.8 + 0.2 * hash01(i * 3.3 + j * 7.7);
-      ctx.fillStyle = `rgb(${Math.round(130 * shade)},${Math.round(138 * shade)},${Math.round(156 * shade)})`;
-      ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-    }
-    ctx.fillStyle = '#e6ecf5'; // crenellations along both long edges
-    const L = horiz ? w : h, n = Math.floor(L / 20);
-    for (let i = 0; i < n; i++) { const u = i * 20 + 4; if (horiz) { ctx.fillRect(x + u, y - 4, 10, 5); ctx.fillRect(x + u, y + h - 1, 10, 5); } else { ctx.fillRect(x - 4, y + u, 5, 10); ctx.fillRect(x + w - 1, y + u, 5, 10); } }
-    ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(x - 5, y - 5, w + 10, h + 10);
-    if (g.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(x, y, w, h); }
-    const mx = x + w / 2, my = y + h / 2, wave = Math.sin(T * 4) * 2; // flag in the middle
-    ctx.fillStyle = '#dfe4ea'; ctx.fillRect(mx - 1, my - 26, 2, 26);
-    ctx.fillStyle = '#54a0ff'; ctx.beginPath(); ctx.moveTo(mx + 1, my - 26); ctx.lineTo(mx + 17 + wave, my - 21); ctx.lineTo(mx + 1, my - 15); ctx.fill();
-    citadelGuns(g).forEach(([gx, gy], i) => { // round gun towers
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#2a313b'; ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#54a0ff'; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(84,160,255,0.5)'; if (horiz) ctx.fillRect(x, y + h / 2 - 1.5, w, 3); else ctx.fillRect(x + w / 2 - 1.5, y, 3, h);
+    const mx = x + w / 2;
+    citadelGuns(g).forEach(([gx, gy], i) => {
       const gun = (g.guns || [])[i] || { aim: i ? Math.PI / 2 : -Math.PI / 2, kick: 0 };
       ctx.save(); ctx.translate(gx, gy);
-      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.arc(4, 6, 22, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#2b2f38'; ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#8c95a8'; ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#d4dbe8'; for (let k = 0; k < 8; k++) { ctx.save(); ctx.rotate(k * Math.PI / 4); ctx.fillRect(15, -4, 6, 8); ctx.restore(); }
-      ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 21.5, 0, Math.PI * 2); ctx.stroke();
-      ctx.fillStyle = '#5d6577'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+      megaHex(22, '#54a0ff', 0, false);
       ctx.rotate(gun.aim); ctx.translate(-gun.kick, 0);
-      ctx.fillStyle = '#1c1f26'; ctx.fillRect(-7, -7, 14, 14); ctx.fillRect(4, -5.5, 22, 4); ctx.fillRect(4, 1.5, 22, 4);
-      ctx.fillStyle = '#ffd700'; ctx.fillRect(23, -6, 3, 12);
+      ctx.fillStyle = '#2f3640'; ctx.strokeStyle = '#0c1014'; ctx.lineWidth = 2;
+      ctx.fillRect(0, -4, 26, 8); ctx.strokeRect(0, -4, 26, 8);
+      ctx.fillStyle = '#54a0ff'; ctx.fillRect(22, -4, 4, 8);
+      megaDot(0, 0, 7, '#2f3640');
       ctx.restore();
     });
     megaPlate(mx, y - 34, 'CITADEL WALL', '#54a0ff');
@@ -3864,13 +3760,8 @@ const Game = (() => {
     if (t.ring > 0) { t.ring -= 1 / 60; ctx.strokeStyle = `rgba(200,190,255,${t.ring * 2})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(t.x, t.y, F.dome * (1 - t.ring), 0, Math.PI * 2); ctx.stroke(); }
     ctx.save(); ctx.translate(t.x, t.y);
     bShadow(44, 34);
-    if (t.bunker) { ctx.fillStyle = '#5a6670'; bPoly(8, 48, Math.PI / 8); ctx.fill(); }
-    ctx.fillStyle = '#16171d'; bPoly(8, 44, Math.PI / 8); ctx.fill();
-    ctx.fillStyle = t.flash > 0 ? '#fff' : '#3a3d4a'; bPoly(8, 41, Math.PI / 8); ctx.fill();
-    ctx.fillStyle = '#4a4e60'; bPoly(8, 30, Math.PI / 8); ctx.fill();
-    ctx.strokeStyle = '#16171d'; ctx.lineWidth = 2;
-    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4 + Math.PI / 8; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 30, Math.sin(a) * 30); ctx.lineTo(Math.cos(a) * 41, Math.sin(a) * 41); ctx.stroke(); }
-    bGoldRing(8, 41, Math.PI / 8); bBolts(8, 36, 0, '#ffd700');
+    if (t.bunker) { ctx.fillStyle = '#5a6670'; bPoly(6, 52, Math.PI / 6); ctx.fill(); }
+    megaHex(47, '#a29bfe', t.flash, false);
     for (let i = 0; i < 4; i++) { // shield pylons
       const a = i * Math.PI / 2 + Math.PI / 4, px = Math.cos(a) * 34, py = Math.sin(a) * 34;
       ctx.fillStyle = '#2a2550'; ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
