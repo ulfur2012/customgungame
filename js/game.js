@@ -320,6 +320,8 @@ const Game = (() => {
     const scr = toScreen(me.x, me.y);
     const aim = Input.aim(scr.x, scr.y);
     if (aim.angle !== null) me.aim = aim.angle;
+    const av = Settings.mobile && Input.abVec(); // dragging an ability stick aims the ability
+    if (av && !av.cancel) me.aim = av.a;
     updateAbility(dt);
     const abAim = me.abAiming || me.alt.abAiming || me.alt3.abAiming || me.alt4.abAiming;
     let fire = aim.fire && !abAim;
@@ -703,7 +705,9 @@ const Game = (() => {
     } else {
       if (held && ready) me.abAiming = true;
       if (!held && me.abWasHeld && me.abAiming && ready) {
-        if (me.ability === 'rpg') fireRocket(); else throwGrenade();
+        if (Settings.mobile && Input.abCancelled()) G.banner = { text: 'Cancelled', t: 0.8 };
+        else if (me.ability === 'rpg') fireRocket(); else throwGrenade();
+        Input.clearAb();
       }
       if (!held || !ready) me.abAiming = false;
     }
@@ -4123,8 +4127,9 @@ const Game = (() => {
       tx = (Input.mouse.x - W / 2) / zoom + G.cam.x;
       ty = (Input.mouse.y - H / 2) / zoom + G.cam.y;
     } else {
-      tx = me.x + Math.cos(me.aim) * A.range * 0.7;
-      ty = me.y + Math.sin(me.aim) * A.range * 0.7;
+      const av = Settings.mobile && Input.abVec(), f = av && !av.cancel ? Math.max(0.15, av.d) : 0.7; // ability stick: pull further = throw further
+      tx = me.x + Math.cos(me.aim) * A.range * f;
+      ty = me.y + Math.sin(me.aim) * A.range * f;
     }
     const d = Math.hypot(tx - me.x, ty - me.y);
     if (d > A.range) { tx = me.x + (tx - me.x) / d * A.range; ty = me.y + (ty - me.y) / d * A.range; }
@@ -5734,6 +5739,17 @@ const Game = (() => {
     };
     draw(Input.sticks.move, 110, 'MOVE', 'rgba(120,180,255,0.6)');
     draw(Input.sticks.aim, W / Settings.hud() - 110, 'AIM (auto-fires)', 'rgba(255,90,90,0.65)');
+    const a = Input.abStick; // small green ability stick over the button you're holding
+    if (a && a.far > 10) {
+      const u = Settings.hud(), R = 46 * u, v = Input.abVec(), cancel = v && v.cancel;
+      ctx.fillStyle = cancel ? 'rgba(255,80,80,0.25)' : 'rgba(43,217,107,0.22)';
+      ctx.strokeStyle = cancel ? '#ff6b6b' : '#2bd96b'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(a.ox, a.oy, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = cancel ? '#ff6b6b' : '#2bd96b';
+      ctx.beginPath(); ctx.arc(a.x, a.y, 17 * u, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#b8ffd0'; ctx.lineWidth = 2; ctx.stroke();
+      if (cancel) { ctx.fillStyle = '#fff'; ctx.font = '800 12px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('CANCEL', a.ox, a.oy - R - 10); }
+    }
   }
 
   // ---------------------------------------------------------------- weapon bar (DOM)

@@ -105,3 +105,4 @@ keys/mouse and read `Game.debugState`. Screenshot to check visuals.
   `hostRevive` checks `Game.reviveOk` (ui: round on, player down, re-adds to `lobby.alive`) and broadcasts 'rvd'. Back with
   50% HP + 1s inv at the body; killer keeps the kill. Enemies see the body if in sight.
 - Dead in MP = spectate (`G.spec`, a living teammate, else anyone); sight/fog/canSee use `eye()` = the spectated player.
+- Mobile ability buttons = small green joysticks (v89, input.js `abStick`/`abVec`/`abCancelled`): drag aims (`grenadeTarget` distance = pull), release uses, out-and-back = cancel, tap = auto-aim.

@@ -166,9 +166,38 @@ const Input = (() => {
     try { ab4Btn.setPointerCapture(e.pointerId); } catch (err) {}
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) ab4Btn.addEventListener(ev, () => { ability4Touch = false; });
+  // mobile: every ability button is also a small green joystick (Brawl Stars style). Drag = aim the throw
+  // (direction + distance within range), release = use, drag out then back to the middle = cancel, quick tap = auto-aim.
+  let abStick = null, abLast = null;
+  const abR = () => 46 * Settings.hud();
+  const abVecOf = s => { const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy); return { a: Math.atan2(dy, dx), d: Math.min(1, d / abR()), px: d, cancel: s.far > 24 && d < 14 }; };
+  [abBtn, ab2Btn, ab3Btn, ab4Btn].forEach((btn, slot) => {
+    btn.addEventListener('pointerdown', e => {
+      if (!Settings.mobile) return;
+      const r = btn.getBoundingClientRect();
+      abStick = { id: e.pointerId, slot, btn, ox: r.left + r.width / 2, oy: r.top + r.height / 2, x: e.clientX, y: e.clientY, far: 0 };
+      abStick.x = abStick.ox; abStick.y = abStick.oy; abLast = null;
+    });
+    btn.addEventListener('pointermove', e => {
+      if (!abStick || abStick.id !== e.pointerId) return;
+      abStick.x = e.clientX; abStick.y = e.clientY;
+      const dx = abStick.x - abStick.ox, dy = abStick.y - abStick.oy, d = Math.hypot(dx, dy), R = abR();
+      if (d > R) { abStick.x = abStick.ox + dx / d * R; abStick.y = abStick.oy + dy / d * R; }
+      abStick.far = Math.max(abStick.far, Math.min(d, R));
+      btn.classList.toggle('dragging', abStick.far > 10);
+    });
+    for (const ev of ['pointerup', 'pointercancel']) btn.addEventListener(ev, e => {
+      if (!abStick || abStick.id !== e.pointerId) return;
+      abLast = abVecOf(abStick); abLast.slot = slot;
+      btn.classList.remove('dragging');
+      abStick = null;
+    });
+  });
+  // the ability stick's aim: {a, d (0-1), cancel} while dragging or right after release (null = no drag / auto-aim)
+  const abVec = () => { const v = abStick ? abVecOf(abStick) : abLast; return v && v.px >= 10 ? v : null; };
   const abilityHeld = slot => slot === 3 ? keys.has(Settings.keys.ab4) || ability4Touch : slot === 2 ? keys.has(Settings.keys.ab3) || ability3Touch : slot ? keys.has(Settings.keys.ab2) || ability2Touch : keys.has(Settings.keys.ab1) || abilityTouch;
 
   function take(name) { const v = flags[name]; flags[name] = name === 'select' ? -1 : false; return v; }
 
-  return { move, aim, reset, take, flags, sticks, mouse, get STICK_R() { sizeSticks(); return STICK_R; }, abilityHeld };
+  return { move, aim, reset, take, flags, sticks, mouse, get STICK_R() { sizeSticks(); return STICK_R; }, abilityHeld, abVec, get abStick() { return abStick; }, abCancelled: () => !abStick && !!(abLast && abLast.cancel), clearAb() { abLast = null; } };
 })();

@@ -591,3 +591,6 @@ body.mobile #ability4Btn .ab-state { color: #062b12; font-weight: 800; font-size
 #whatsNew h2 { margin: 0 0 4px; } #whatsNew h3 { margin: 14px 0 4px; font-size: 15px; color: #ffd700; }
 #whatsNew ul { margin: 0; padding-left: 20px; } #whatsNew li { margin: 4px 0; line-height: 1.35; }
 #whatsNew .old h3 { color: #aab; } #whatsNew .old { opacity: 0.8; font-size: 14px; }
+
+/* mobile ability joystick: the button fades while you drag its green stick (drawn on the canvas) */
+body.mobile #abilityBtn.dragging, body.mobile #ability2Btn.dragging, body.mobile #ability3Btn.dragging, body.mobile #ability4Btn.dragging { opacity: 0.25; }
