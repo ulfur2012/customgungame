@@ -662,6 +662,7 @@ const COMBOS = [
   { a: 'hangar', b: 'mine',    name: 'Kamikaze Drones', how: 'Throw a Land Mine onto a Drone Hangar: the mine is used up and the drones turn red. They dive into the most dangerous enemies and blow up, then a new one launches after 3s. (A hangar can only have ONE drone type.)' },
   // v93: five more drone types (still one per hangar)
   { a: 'hangar', b: 'bubble',  name: 'Guardian Drones', how: 'Throw a Bubble Shield onto a Drone Hangar: the bubble is used up and the drones turn light blue. They fly in a circle around YOU, block enemy bullets (taking only half damage) and shoot anything close.' },
+  { a: 'hangar', b: 'radar',   name: 'Seeker Drones', how: 'Throw a Radar onto a Drone Hangar: the radar is used up and the drones turn pink. They hunt anything in a big 12x12 square around the hangar (or around you in Follow mode).' },
   { a: 'hangar', b: 'grenade', name: 'Bomber Drones',   how: 'Throw a Grenade onto a Drone Hangar: the grenade is used up and the drones turn green. They fly over enemies and drop a bomb every 2.5s (35 damage in a circle), great on groups.' },
   { a: 'hangar', b: 'sensor',  name: 'Sniper Drones',   how: 'Throw a Motion Sensor onto a Drone Hangar: the sensor is used up and the drones get long barrels. They stay far back and fire slow, very strong shots (4x damage) from twice as far.' },
   { a: 'hangar', b: 'smoke',   name: 'Ghost Drones',    how: 'Throw a Smoke Bomb onto a Drone Hangar: the smoke is used up and the drones go see-through. Enemy bullets fly right through them, and every enemy they hit is marked and takes 20% more damage from everything for 4s.' },
@@ -698,7 +699,7 @@ const COMBO = { supplySpeed: 1.25, supplyMags: 3, supplyMax: 2,  healBeam: 50, h
   iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230,  cryoMortar: 1.5, shockDps: 20,
   blazeRange: 0.8, prismBeams: 2, prismMul: 0.6, medicDroneRange: 300, droneChill: 1.5, droneFreezeHits: 4, droneFreeze: 0.8, droneBurn: 3, droneChains: 2, droneChainRange: 170, droneChainMul: 0.6,
   guardRing: 52, guardBlock: 16, guardTake: 0.5, bombEvery: 2.5, bombRadius: 110, bombDmg: 35, snipeRange: 520, snipeRing: 330, snipeEvery: 3, snipeMul: 4,
-  ghostMark: 4, ghostMul: 1.2, gravDroneRange: 170, gravDronePull: 7,
+  seekCells: 6, ghostMark: 4, ghostMul: 1.2, gravDroneRange: 170, gravDronePull: 7,
   kamiRadius: 95, kamiDmg: 55, kamiBack: 3, kamiSpeed: 1.7, implodeEvery: 5, implodeDamage: 40, implodeRadius: 180,
   fogSlow: 0.4, mistHeal: 5, springDmg: 40, springKb: 30, springCd: 1.5, napalmSize: 1.6, napalmTime: 4, cryoBhTime: 2, cryoBhFreeze: 3,
   bashTime: 0.35, bashDmg: 35, bashKb: 16, giftDelay: 0.6, giftRadius: 130, giftDmg: 60, poundRadius: 200, poundDmg: 30, poundKb: 10, mirrorShield: 80 };
@@ -906,6 +907,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5, hiveDrone: 
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 100, title: 'Seeker Drones', notes: ['Throw a Radar onto a Drone Hangar to get pink Seeker Drones. They hunt enemies in a big 12x12 square around the hangar!'] },
   { v: 99, title: 'Bug fixes', notes: ['Lots of bug fixes.', 'With a class, the shop no longer makes you pay for the 4th ability you cannot use.'] },
   { v: 98, title: 'Smarter enemies', notes: ['Enemies stay away from walls and find a way around instead of getting stuck.'] },
   { v: 97, title: 'Drone speed', notes: ['Drones fly a bit slower.'] },

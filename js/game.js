@@ -1154,7 +1154,10 @@ const Game = (() => {
   // v92 drone types: thrown ability -> [flag, colour, name]; a hangar holds only one
   const DRONE_KINDS = { freeze: ['dFrost', '#74b9ff', 'FROST DRONES'], firepit: ['dFlame', '#ff6b1a', 'FLAME DRONES'], tesla: ['dShock', '#ffd32a', 'SHOCK DRONES'], mine: ['dKami', '#ff3838', 'KAMIKAZE DRONES'],
     // v93: more drone types
-    bubble: ['dGuard', '#7ef9ff', 'GUARDIAN DRONES'], grenade: ['dBomb', '#6ab04c', 'BOMBER DRONES'], sensor: ['dSnipe', '#20bf6b', 'SNIPER DRONES'], smoke: ['dGhost', '#c8d6e5', 'GHOST DRONES'], blackhole: ['dGrav', '#a55eea', 'GRAVITY DRONES'] };
+    bubble: ['dGuard', '#7ef9ff', 'GUARDIAN DRONES'], grenade: ['dBomb', '#6ab04c', 'BOMBER DRONES'], sensor: ['dSnipe', '#20bf6b', 'SNIPER DRONES'], smoke: ['dGhost', '#c8d6e5', 'GHOST DRONES'], blackhole: ['dGrav', '#a55eea', 'GRAVITY DRONES'],
+    // v100: seeker drones reach a 12x12 square around the hangar (or you, in FOLLOW mode)
+    radar: ['dSeek', '#ff9ff3', 'SEEKER DRONES'] };
+  const seekIn = (h, e) => Math.max(Math.abs(e.x - h.x), Math.abs(e.y - h.y)) <= COMBO.seekCells * MAP.grid;
   const DRONE_TYPES = Object.fromEntries(Object.values(DRONE_KINDS).map(v => [v[0], v]));
   const droneKind = g => Object.keys(DRONE_TYPES).find(k => g[k]) || null;
   // a drone's shot hit an enemy (single player / co-op): frost slows + freezes, flame burns, shock chains
@@ -1163,6 +1166,7 @@ const Game = (() => {
     const dk = DRONE_KINDS[n.kind];
     const dh = dk && !n.noDrone && isMine(n.owner) && !(n.kind === 'tesla' && n.big) && myGadget('hangar', n.x1, n.y1, COMBO.near);
     if (!dh) return false;
+    if (n.kind === 'radar') { const c = snapCell(n.x1, n.y1); if (Math.hypot(dh.x - c.x, dh.y - c.y) > MAP.grid * 0.5) return false; } // seeker: INTO the hangar's square (beside it = Carrier piece)
     const has = droneKind(dh);
     if (!has) { upgradeGadget(dh, dk[0]); comboFx(dh.x, dh.y, dk[1], dk[2]); return true; }
     G.banner = { text: `This hangar already has ${DRONE_TYPES[has][2]}`, t: 1.8 };
@@ -1664,7 +1668,7 @@ const Game = (() => {
     const R = A.range * rng(g) * (CF ? CF.range : 1);
     let tgt = null;
     const hub = hubPos(g); // FOLLOW mode: the drones treat you as their hub
-    if (mine) { let bd = R; for (const e of targets()) { const d = Math.hypot(e.x - hub.x, e.y - hub.y); if (d < bd) { tgt = e; bd = d; } } }
+    if (mine) { let bd = g.dSeek ? Infinity : R; for (const e of targets()) { const d = Math.hypot(e.x - hub.x, e.y - hub.y); if (d < bd && (!g.dSeek || seekIn(hub, e))) { tgt = e; bd = d; } } }
     // drones spin as one ring, spread perfectly evenly (3 drones = 120 degrees apart, like the nuclear symbol)
     g.spin = ((g.spin || 0) + dt * 2.4) % (Math.PI * 2);
     const flying = g.drones.filter(d => d.alive);
@@ -2273,10 +2277,10 @@ const Game = (() => {
       if (g.kind === 'hangar' && g.drones) {
         const A = ABILITIES.hangar, HF = hangF(g), R = A.range * rng(g) * (HF ? HF.range : 1);
         const str = g.carrier ? STRENGTH.carrierDrone : g.hive ? STRENGTH.hiveDrone : g.uplink ? STRENGTH.uplinkDrone : g.big ? STRENGTH.bigDrone : STRENGTH.drone;
-        for (const d of g.drones) { d.assigned = null; if (d.alive && !g.dGuard) units.push({ u: d, x: d.x, y: d.y, str, home: g, reach: R }); }
+        for (const d of g.drones) { d.assigned = null; if (d.alive && !g.dGuard) units.push({ u: d, x: d.x, y: d.y, str, home: g, reach: R, sq: !!g.dSeek }); }
       }
     }
-    const canReach = (k, e) => { const h = k.home ? hubPos(k.home) : k; return Math.hypot(e.x - h.x, e.y - h.y) <= k.reach; };
+    const canReach = (k, e) => { const h = k.home ? hubPos(k.home) : k; if (k.sq) return seekIn(h, e); return Math.hypot(e.x - h.x, e.y - h.y) <= k.reach; };
     const foes = G.enemies.filter(e => e.hp > 0), distMe = e => Math.hypot(e.x - G.me.x, e.y - G.me.y);
     // jobs: every enemy once, plus an extra job (danger x3) for each building it attacked, only that building's units can take it
     const jobs = foes.map(e => ({ e, danger: dangerOf(e) }));
@@ -3286,6 +3290,7 @@ const Game = (() => {
       else if (dk === 'dGuard') { ctx.strokeStyle = 'rgba(126,249,255,0.8)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.stroke(); }
       else if (dk === 'dBomb') { ctx.fillStyle = '#2d3436'; ctx.beginPath(); ctx.arc(-1, 0, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#6ab04c'; ctx.fillRect(-3, -1, 4, 2); }
       else if (dk === 'dSnipe') { ctx.fillStyle = '#20bf6b'; ctx.fillRect(4, -1, 12, 2); ctx.fillRect(14, -2.5, 2, 5); }
+      else if (dk === 'dSeek') { ctx.strokeStyle = '#ff9ff3'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(-2, 0, 4, -1.1, 1.1); ctx.stroke(); ctx.fillStyle = '#ff9ff3'; ctx.fillRect(-2, -0.75, 4, 1.5); }
       else if (dk === 'dGrav') { ctx.strokeStyle = '#d6a8ff'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 3.5, T * 8, T * 8 + 4.5); ctx.stroke(); }
       glow(0, 0, 7, acc, 0.9);
       if (d.mf > 0) glow(12, 0, 10, '#fff3b0', 1);
@@ -3410,6 +3415,7 @@ const Game = (() => {
     if (b.citadel) return FORMATIONS.citadel.range * lvlRange(b);
     if (b.kind === 'tesla') return teslaRange(b, A);
     if (b.kind === 'flame') return A.range * rng(b) * (b.blaze ? COMBO.blazeRange : 1);
+    if (b.kind === 'hangar' && b.dSeek) return COMBO.seekCells * MAP.grid;
     if (b.kind === 'hangar') return A.range * rng(b) * (hangF(b) ? hangF(b).range : 1);
     return (A.range || A.radius || 0) * rng(b);
   }
@@ -3479,10 +3485,13 @@ const Game = (() => {
     ctx.save(); ctx.globalAlpha = a;
     if (R > 0) {
       ctx.fillStyle = 'rgba(255,215,0,0.07)'; ctx.strokeStyle = 'rgba(255,215,0,0.8)'; ctx.lineWidth = 3; ctx.setLineDash([14, 10]);
-      ctx.beginPath(); ctx.arc(b.x, b.y, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath();
+      if (b.kind === 'hangar' && b.dSeek) { const h = hubPos(b), S = COMBO.seekCells * MAP.grid; ctx.rect(h.x - S, h.y - S, S * 2, S * 2); } // SEEKER: a 12x12 square
+      else ctx.arc(b.x, b.y, R, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
     }
-    const lines = [bName(b), `Level ${b.lvl || 1}/5`, `HP ${Math.ceil(b.hp)}/${Math.round(b.maxHp)}`];
-    if (R > 0) lines.push(`Range ${Math.round(R)}`);
+    const lines = [b.kind === 'hangar' ? fullName(b) : bName(b), `Level ${b.lvl || 1}/5`, `HP ${Math.ceil(b.hp)}/${Math.round(b.maxHp)}`];
+    if (R > 0) lines.push(b.kind === 'hangar' && b.dSeek ? `Area ${COMBO.seekCells * 2}x${COMBO.seekCells * 2} squares` : `Range ${Math.round(R)}`);
     if ((b.lvl || 1) > 1) lines.push(`Speed x${lvlRate(b).toFixed(2)}`);
     const fs = 15, w = 170, h = lines.length * (fs + 5) + 12, x = b.x - w / 2, y = b.y - 70 * (b.sc || 1) - h;
     ctx.fillStyle = 'rgba(15,18,30,0.85)'; ctx.fillRect(x, y, w, h);
