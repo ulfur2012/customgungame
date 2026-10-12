@@ -906,6 +906,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5, hiveDrone: 
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 96, title: 'Smarter drones', notes: ['Drones only send as many drones as they need to beat an enemy. The rest stay home and guard.'] },
   { v: 95, title: 'Hover names', notes: ['On PC, rest your mouse on a building or placeable for 5 seconds to see its full name (like "Bomber Drone Hangar").'] },
   { v: 94, title: 'Drones follow you', notes: ['Engineer: use Upgrade on a MAX level Drone Hangar to switch its drones between FOLLOW (they fly with you) and STAY.', 'Only one hangar can follow you at a time.'] },
   { v: 93, title: 'Even more drones', notes: ['5 new drone types! Throw onto a Drone Hangar:', 'Bubble Shield = Guardian Drones (fly around you and block bullets)', 'Grenade = Bomber Drones (drop bombs on groups)', 'Motion Sensor = Sniper Drones (stay far back, big hits)', 'Smoke Bomb = Ghost Drones (bullets go through them, enemies they hit take more damage)', 'Black Hole = Gravity Drones (pull enemies together)', 'Your gun is always under your player now.'] },

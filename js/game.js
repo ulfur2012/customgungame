@@ -2295,8 +2295,9 @@ const Game = (() => {
       for (const k of near) { if (need <= 0) break; k.u.assigned = j.e; free.delete(k); need -= k.str; sent.set(j.e, (sent.get(j.e) || 0) + k.str); }
       if (!free.size) break;
     }
-    // anyone left over helps with the closest enemy they can reach
+    // decoys left over help with the closest enemy; spare DRONES stay home (only as many fly out as are needed)
     for (const k of free) {
+      if (k.home) { k.u.assigned = null; continue; }
       let best = null, bd = Infinity;
       for (const e of foes) { const d = Math.hypot(e.x - k.x, e.y - k.y); if (d < bd && canReach(k, e)) { best = e; bd = d; } }
       k.u.assigned = best;
