@@ -1009,8 +1009,9 @@ const Game = (() => {
   const FORMATIONS_ANY = g => Object.keys(FORMATIONS).some(k => g[k]);
   // ONE building per square: only up to 3 small ones of the SAME kind may share it (they merge into a big one)
   function cellBlocked(kind, x, y) {
+    // building level (Engineer upgrades) never matters: 1-2 small ones of the same kind always accept another
     const here = buildingsInCell(x, y);
-    return here.length && !(here.every(h => h.kind === kind && h.small) && here.length < 3);
+    return here.length > 0 && !(here.every(h => h.kind === kind && h.small) && here.length < 3);
   }
   function refundThrow(kind, x, y) {
     const s = allSlots().find(sl => sl.ability === kind);
@@ -1142,6 +1143,8 @@ const Game = (() => {
     G.rings.push({ x: cx, y: cy, r: 160, life: 0.6, max: 0.6, color: '255,215,0' });
     G.banner = { text: `BIG ${ABILITIES[kind].name.toUpperCase()}!`, t: 1.5 };
     landGadget({ kind, x1: cx, y1: cy, a: three[0].a || 0, owner: myOwnerId(), big: true });
+    const big = G.gadgets[G.gadgets.length - 1];
+    if (big && big.big && big.kind === kind) big.lvl = 1; // levels of the parts don't carry over
   }
 
   // 3 of your turrets in the same floor square -> ROCKET TURRET
@@ -1152,7 +1155,7 @@ const Game = (() => {
     for (const t of three) t.t = 0;
     const { x: cx, y: cy } = snapCell(three.reduce((s, t) => s + t.x, 0) / 3, three.reduce((s, t) => s + t.y, 0) / 3);
     G.turrets = G.turrets.filter(t => t.t > 0);
-    G.turrets.push({ x: cx, y: cy, t: Infinity, hp: R.hp, maxHp: R.hp, cd: 1, aim: 0, rocket: true, stats: three[0].stats, sprite: three[0].sprite });
+    G.turrets.push({ x: cx, y: cy, t: Infinity, hp: R.hp, maxHp: R.hp, cd: 1, aim: 0, rocket: true, lvl: 1, stats: three[0].stats, sprite: three[0].sprite });
     burst(cx, cy, '#e17055', 50, 420);
     G.rings.push({ x: cx, y: cy, r: 160, life: 0.6, max: 0.6, color: '225,112,85' });
     G.banner = { text: 'ROCKET TURRET!', t: 1.5 };
