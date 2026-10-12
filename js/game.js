@@ -2486,7 +2486,20 @@ const Game = (() => {
   function drawAegis(g, A) {
     const T = G.time, R = A.radius * FORMATIONS.aegis.radius * lvlRange(g), col = g.shock ? '162,155,254' : '108,92,231';
     ctx.fillStyle = `rgba(${col},0.1)`; ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = 'rgba(214,210,255,0.7)'; ctx.lineWidth = 3 + (g.blockFx > 0 ? 3 : 0); ctx.stroke();
+    ctx.save(); ctx.clip(); // hexagon shield panels (the user likes these)
+    const hs = 46, h3 = hs * Math.sqrt(3) / 2;
+    ctx.strokeStyle = `rgba(200,190,255,${0.14 + 0.05 * Math.sin(T * 1.5)})`; ctx.lineWidth = 1.5;
+    const nr = Math.ceil(R / h3 / 2) + 1, nc = Math.ceil(R / hs / 1.5) + 1;
+    for (let row = -nr; row <= nr; row++) for (let c = -nc; c <= nc; c++) {
+      const cx = g.x + c * hs * 1.5, cy = g.y + row * h3 * 2 + (c & 1) * h3;
+      if (Math.hypot(cx - g.x, cy - g.y) > R + hs) continue;
+      ctx.beginPath(); for (let i = 0; i < 6; i++) { const b = i * Math.PI / 3; ctx.lineTo(cx + Math.cos(b) * hs * 0.97, cy + Math.sin(b) * hs * 0.97); } ctx.closePath();
+      if (hash01(c * 7.3 + row * 3.1 + Math.floor(T * 2)) > 0.93) { ctx.fillStyle = `rgba(${col},0.18)`; ctx.fill(); }
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(214,210,255,0.7)'; ctx.lineWidth = 3 + (g.blockFx > 0 ? 3 : 0);
+    ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.stroke();
     g.blockFx = Math.max(0, (g.blockFx || 0) - 1 / 60);
     if (g.ring > 0) { g.ring -= 1 / 60; ctx.strokeStyle = `rgba(230,225,255,${g.ring * 2})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(g.x, g.y, R * (1 - g.ring), 0, Math.PI * 2); ctx.stroke(); }
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
