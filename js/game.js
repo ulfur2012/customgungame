@@ -3421,6 +3421,53 @@ const Game = (() => {
     G.inspect = here.length ? here[0].o : null;
     G.inspectT = 8;
   }
+  // HOVER NAMES (PC): rest the mouse on a building / placeable for 5s to see its full name, e.g. "Bomber Drone Hangar"
+  const COMBO_NAMES = {
+    tesla: { storm: 'Storm Coil', plasma: 'Plasma Coil', cryo: 'Cryo Coil', seeker: 'Seeker Coil' },
+    radar: { command: 'Command Tower' }, laser: { prism: 'Prism Laser' }, flame: { blaze: 'Inferno Ring' },
+    gravity: { implode: 'Implosion Tower' }, shieldgen: { shock: 'Shock Dome' }, sniper: { spot: 'Eagle Eye Nest' },
+    mortar: { cryo: 'Cryo Mortar' }, mine: { cryo: 'Cryo Mine' }, jumppad: { spring: 'Spring Trap' },
+    smoke: { frost: 'Frost Fog', mist: 'Healing Mist' }, bubble: { heal: 'Healing Dome' }, decoy: { medicBuddy: 'Medic Buddy', supply: 'Supply Decoy' },
+    barrier: { electric: 'Electric Fence', fire: 'Wall of Fire', ice: 'Ice Wall' },
+  };
+  function fullName(b) {
+    if (!b.kind) { // turrets
+      if (b.fort || b.rail || b.rocket) return bName(b);
+      return (b.bunker ? 'Bunker ' : '') + (b.healer ? 'Heal Turret' : b.medic ? 'Medic Turret' : b.spot ? 'Spotter Turret' : b.flame ? 'Flame Turret' : 'Turret');
+    }
+    if (Object.keys(FORMATIONS).some(k => b[k])) return bName(b);
+    const A = ABILITIES[b.kind], big = b.big ? 'Big ' : '';
+    if (b.kind === 'hangar') {
+      const dk = droneKind(b), t = dk ? DRONE_TYPES[dk][2].replace(' DRONES', '') : '';
+      const nice = t ? t[0] + t.slice(1).toLowerCase() + ' Drone Hangar' : 'Drone Hangar';
+      return big + (b.medic ? 'Medic ' : '') + nice;
+    }
+    const names = COMBO_NAMES[b.kind] || {}, f = Object.keys(names).find(k => b[k]);
+    return big + (f ? names[f] : A.name);
+  }
+  function hoverTarget() {
+    if (Settings.mobile || !Input.mouse.active) return null;
+    const x = (Input.mouse.x - W / 2) / zoom + G.cam.x, y = (Input.mouse.y - H / 2) / zoom + G.cam.y;
+    let best = null, bd = Infinity;
+    for (const o of [...G.turrets.filter(t => t.hp > 0), ...G.gadgets.filter(g => !g.dead && ABILITIES[g.kind] && (isMine(g.owner) || g.kind !== 'sensor'))]) {
+      const d = Math.hypot(o.x - x, o.y - y);
+      if (d < 34 * (o.sc || 1) && d < bd) { best = o; bd = d; }
+    }
+    return best;
+  }
+  function drawHoverName(dt) {
+    const o = hoverTarget();
+    if (o !== G.hoverObj) { G.hoverObj = o; G.hoverT = 0; }
+    if (!o) return;
+    G.hoverT += dt;
+    if (G.hoverT < 5) return;
+    const text = fullName(o), y = o.y - 46 * (o.sc || 1) - 30;
+    ctx.font = '800 15px system-ui, sans-serif'; ctx.textAlign = 'center';
+    const w = ctx.measureText(text).width + 18;
+    ctx.fillStyle = 'rgba(15,18,30,0.85)'; ctx.fillRect(o.x - w / 2, y - 16, w, 24);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.strokeRect(o.x - w / 2, y - 16, w, 24);
+    ctx.fillStyle = '#fff'; ctx.fillText(text, o.x, y + 1);
+  }
   function drawInspect(dt) {
     const b = G.inspect;
     if (!b) return;
@@ -3445,6 +3492,7 @@ const Game = (() => {
   function drawGadgetsTop() {
     if (Input.flags.dblAt) { inspectAt(Input.flags.dblAt.x, Input.flags.dblAt.y); Input.flags.dblAt = null; }
     drawInspect(1 / 60);
+    drawHoverName(1 / 60);
     drawSensed(1 / 60);
     drawDoors();
     const me = G.me;
