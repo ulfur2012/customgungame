@@ -73,7 +73,7 @@ const Game = (() => {
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
-      bullets: [], rails: [], sensed: [], fx: [], texts: [], hears: [], feed: [],
+      bullets: [], rails: [], sensed: [], doors: [], fx: [], texts: [], hears: [], feed: [],
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
@@ -690,8 +690,8 @@ const Game = (() => {
     }
     const pressed = Input.take(['abPress', 'ab2Press', 'ab3Press', 'ab4Press'][slot]);
     const held = Input.abilityHeld(slot);
-    const ready = me.abCd === 0 && me.abUses > 0 && (me.ability !== 'shield' || me.shieldT === 0 || G.infAbility);
-    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability) || !!A.cls;
+    const ready = (me.ability === 'door' && me.door) || me.abCd === 0 && me.abUses > 0 && (me.ability !== 'shield' || me.shieldT === 0 || G.infAbility);
+    const instant = ['door', 'shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability) || !!A.cls;
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
     } else {
@@ -715,6 +715,7 @@ const Game = (() => {
     const me = G.me;
     me.abCd = A.cooldown;
     me.abUses--;
+    if (me.ability === 'door') useDoor(A);
     if (me.ability === 'shield') { me.shield = A.hp; me.shieldT = A.duration; G.banner = { text: 'Shield up!', t: 1 }; }
     if (me.ability === 'energy') { heal(A.heal); me.speedT = A.duration; G.banner = { text: 'Speed boost!', t: 1 }; }
     if (me.ability === 'burger') heal(A.heal);
@@ -782,6 +783,80 @@ const Game = (() => {
     }
     if (me.ability === 'shadowstep' && !stepBehind(A.range)) { me.abUses++; me.abCd = 0; G.banner = { text: 'No enemy in sight', t: 1 }; }
     if (A.cls) useClass(A);
+  }
+
+  // ---- DOOR: open a 2x2 hole in a grid wall where you aim, press again to close it (cooldown starts on close)
+  function rebuildWalls() {
+    const C = MAP.grid, cols = MAP.cols, rows = MAP.solid.length / cols, S = MAP.solid, rects = [];
+    let open = new Map();
+    for (let y = 0; y < rows; y++) {
+      const next = new Map();
+      for (let x = 0; x < cols; x++) {
+        if (!S[y * cols + x]) continue;
+        const x0 = x;
+        while (x + 1 < cols && S[y * cols + x + 1]) x++;
+        const key = x0 + ',' + x;
+        let r = open.get(key);
+        if (r) r.h++; else { r = { x: x0, y, w: x - x0 + 1, h: 1 }; rects.push(r); }
+        next.set(key, r);
+      }
+      open = next;
+    }
+    MAP.walls = [...rects.map(r => [r.x * C, r.y * C, r.w * C, r.h * C]), ...G.gadgets.filter(g => g.rect && !g.dead).map(g => g.rect)];
+    flowT = 0;
+  }
+  // set wall squares (v = 1 solid, 0 open) on every client
+  function setCells(cells, v, owner) {
+    for (const i of cells) MAP.solid[i] = v;
+    if (v) G.doors = G.doors.filter(d => d.cells[0] !== cells[0]);
+    else G.doors.push({ cells, owner });
+    rebuildWalls();
+  }
+  function useDoor(A) {
+    const me = G.me, C = MAP.grid, cols = MAP.cols, rows = MAP.solid.length / cols;
+    const fail = msg => { me.abUses++; me.abCd = 0; G.banner = { text: msg, t: 1.2 }; };
+    if (G.arena) return fail('No doors in the arena');
+    if (me.door) { // CLOSE: nobody may be standing in the doorway
+      const rects = me.door.cells.map(i => [(i % cols) * C, Math.floor(i / cols) * C, C, C]);
+      const inside = (x, y, r) => rects.some(w => x + r > w[0] && x - r < w[0] + w[2] && y + r > w[1] && y - r < w[1] + w[3]);
+      const bodies = [me, ...G.enemies, ...[...G.remotes.values()].filter(o => o.alive), ...G.gadgets.filter(g => g.kind === 'decoy' && !g.dead)];
+      if (bodies.some(o => inside(o.x, o.y, o.r || PLAYER.r))) return fail('Someone is in the doorway!');
+      me.abUses++; // closing is free; the cooldown starts now
+      setCells(me.door.cells, 1);
+      if (G.mode === 'mp') Net.send({ t: 'door', c: me.door.cells, v: 1 });
+      me.door = null; me.abCd = A.cooldown;
+      burst(me.x + Math.cos(me.aim) * 60, me.y + Math.sin(me.aim) * 60, A.color, 12, 200);
+      return;
+    }
+    let hx = -1, hy = -1;
+    for (let d = 10; d <= A.reach + me.r; d += 8) {
+      const x = me.x + Math.cos(me.aim) * d, y = me.y + Math.sin(me.aim) * d, cx = Math.floor(x / C), cy = Math.floor(y / C);
+      if (cx >= 0 && cy >= 0 && cx < cols && cy < rows && MAP.solid[cy * cols + cx]) { hx = cx; hy = cy; break; }
+    }
+    if (hx < 0) return fail('Aim at a wall');
+    const ok = (x, y) => x > 0 && y > 0 && x < cols - 1 && y < rows - 1 && MAP.solid[y * cols + x];
+    let best = null, bn = 0;
+    for (const [ox, oy] of [[0, 0], [-1, 0], [0, -1], [-1, -1]]) {
+      const cells = [];
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) { const x = hx + ox + dx, y = hy + oy + dy; if (ok(x, y)) cells.push(y * cols + x); }
+      if (cells.includes(hy * cols + hx) && cells.length > bn) { best = cells; bn = cells.length; }
+    }
+    if (!best) return fail('Can\'t open the edge of the map');
+    me.door = { cells: best };
+    me.abCd = 0;
+    setCells(best, 0, myOwnerId());
+    if (G.mode === 'mp') Net.send({ t: 'door', c: best, v: 0 });
+    G.banner = { text: 'Door open! Press again to close', t: 1.5 };
+  }
+  function drawDoors() {
+    const C = MAP.grid, cols = MAP.cols;
+    for (const d of G.doors) {
+      const xs = d.cells.map(i => i % cols), ys = d.cells.map(i => Math.floor(i / cols));
+      const x = Math.min(...xs) * C, y = Math.min(...ys) * C, w = (Math.max(...xs) + 1) * C - x, h = (Math.max(...ys) + 1) * C - y;
+      ctx.strokeStyle = '#c8a165'; ctx.lineWidth = 4; ctx.setLineDash([10, 6]);
+      ctx.strokeRect(x + 2, y + 2, w - 4, h - 4); ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(200,161,101,0.10)'; ctx.fillRect(x, y, w, h);
+    }
   }
 
   // ---- CLASS abilities (slot 4 when every ability is from one section; numbers in config ABILITIES.cls_*)
@@ -2892,6 +2967,7 @@ const Game = (() => {
     if (Input.flags.dblAt) { inspectAt(Input.flags.dblAt.x, Input.flags.dblAt.y); Input.flags.dblAt = null; }
     drawInspect(1 / 60);
     drawSensed(1 / 60);
+    drawDoors();
     const me = G.me;
     for (const g of G.gadgets) {
       if (g.kind === 'smoke') {
@@ -4667,6 +4743,7 @@ const Game = (() => {
     const g = G.gadgets.find(g => g.id === m.id);
     if (g) { g.x = m.x; g.y = m.y; g.aim = m.a; g.hp = m.hp; }
   });
+  Net.on('door', m => { if (inMP() && Array.isArray(m.c) && m.c.length <= 4 && m.c.every(i => Number.isInteger(i) && i >= 0 && i < MAP.solid.length)) setCells(m.c, m.v ? 1 : 0, m.from); });
   Net.on('sens', m => { if (inMP() && !hostileTo(m.from)) { G.sensed.push({ x: m.x, y: m.y, t: ABILITIES.sensor.reveal }); G.banner = { text: 'Teammate\'s sensor spotted an enemy!', t: 1.5 }; } });
   Net.on('ult', m => {
     if (!inMP()) return;
@@ -5173,7 +5250,8 @@ const Game = (() => {
     const me = G.me, A = ABILITIES[me.ability];
     if (!A) { btn.classList.add('hidden'); return ''; }
     const run = RUNNING[me.ability] && me[RUNNING[me.ability]];
-    const state = A.type === 'passive' ? 'Passive'
+    const state = me.ability === 'door' && me.door ? 'Close door'
+      : A.type === 'passive' ? 'Passive'
       : me.abUses <= 0 && A.respawn ? `+1 in ${Math.ceil(me.refillT ?? A.respawn)}s`
       : me.abUses <= 0 ? 'Used'
       : run > 0 ? `${Math.ceil(run)}s`
@@ -5183,7 +5261,7 @@ const Game = (() => {
     if (key === cache) return cache;
     btn.classList.remove('hidden');
     btn.classList.toggle('passive', A.type === 'passive');
-    btn.classList.toggle('cooling', A.type !== 'passive' && !state.startsWith('Ready'));
+    btn.classList.toggle('cooling', A.type !== 'passive' && !state.startsWith('Ready') && state !== 'Close door');
     btn.querySelector('.ab-name').innerHTML = `${abilityIconSVG(me.ability, 16, '#fff')} ${A.name}`;
     btn.querySelector('.ab-state').textContent = state;
     return key;

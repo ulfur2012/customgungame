@@ -504,6 +504,8 @@ const ABILITIES = {
                radius: 300, duration: 7,
                desc: 'Throw a big thick smoke cloud nobody can see through for 7s. Enemies can\'t shoot you through it.' },
 
+  door:      { name: 'Door', type: 'active', color: '#c8a165', cooldown: 20, uses: 3, reach: 200,
+               desc: 'Aim at a wall and press: it opens a 2x2 doorway. Press again to close it (the 20s cooldown starts when you close it).' },
   // ---- instant actives ----
   grapple:   { name: 'Grappling Hook', type: 'active', color: '#e1b12c', cooldown: 5, uses: 4, range: 700, pull: 1500,
                desc: 'Shoot a hook at a wall where you aim and zip over to it.' },
@@ -561,7 +563,7 @@ const ABILITY_ICONS = {
   blackhole: 'vortex', firepit: 'flame', freeze: 'snow', decoy: 'person', barrier: 'wall', mine: 'mine', jumppad: 'up',
   radar: 'dish', tesla: 'bolt', mortar: 'mortar', shieldgen: 'dome', sniper: 'scope', flame: 'flametower', laser: 'laser', hangar: 'drone', gravity: 'gravity', smoke: 'cloud', grapple: 'hook', phase: 'ghost', reflect: 'mirror', overcharge: 'battery',
   quake: 'hammer', recall: 'rewind', thorns: 'spikes', scavenger: 'bone', glass: 'gem', adrenaline: 'heartbolt',
-  cluster: 'dots', sensor: 'sensor', bubble: 'ring', stim: 'syringe', shadowstep: 'dagger', magnet: 'magnet', ninja: 'moon', lucky: 'clover',
+  cluster: 'dots', sensor: 'sensor', door: 'door', bubble: 'ring', stim: 'syringe', shadowstep: 'dagger', magnet: 'magnet', ninja: 'moon', lucky: 'clover',
 };
 
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
@@ -570,7 +572,7 @@ const ABILITY_GROUPS = [
   { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'sensor', 'jumppad', 'bubble', 'medic', 'smoke', 'resupply'] },
   { label: '💣 Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
   { label: '🔫 Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
-  { label: '🏃 Movement', ids: ['dash', 'blink', 'grapple', 'phase', 'shadowstep', 'recall'] },
+  { label: '🏃 Movement', ids: ['dash', 'blink', 'grapple', 'phase', 'shadowstep', 'recall', 'door'] },
   { label: '🛡️ Support', ids: ['shield', 'burger', 'energy', 'stim', 'reflect', 'slowmo'] },
 ];
 
@@ -862,6 +864,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 84, title: 'Door', notes: ['New Door ability (Movement): aim at a wall to open a doorway, press again to close it.'] },
   { v: 83, title: 'Ultimates shop + new combos', notes: [
     'Buy ultimates in the new Ultimate tab. You need the right abilities first (Rail Cannon needs Turret + Tesla).',
     'Your ultimate charges up when you hit enemies. Press F (or the gold button) when it is ready!',

@@ -83,6 +83,9 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
   equip-both: Napalm Rocket, Shield Bash, Parting Gift, Ground Pound, Mirror Shield, Supercharged, Time Burst (`both(a,b)`).
 - WHAT'S NEW: every update MUST add an entry at the top of config `UPDATES` (version + short kid-friendly notes); the menu
   pops it up once per new version (localStorage `cgg.seenUpdate`).
+- DOOR ability (`useDoor`): opens a 2x2 of interior wall squares (MAP.solid -> `rebuildWalls`, keeps barrier rects, resets flow);
+  press again to close (refused if anyone stands there), cooldown starts on close. MP msg `door` {c: cells, v}.
+- Motion Sensor (`sensor`): hidden from enemies, reveals (`G.sensed`, MP `sens`) then self-destructs (small strike).
 - Esc closes a building inspect card first (`Game.closeInspect`) before pausing.
 
 ## Testing
