@@ -767,14 +767,14 @@ const ULT_AFFINITY = {
   bandolier: 'minigun', adrenaline: 'minigun', thorns: 'bullethell',
 };
 
-// SHOP: unlocks cost banked score (earned in single player, not test mode). Free things never need buying.
+// SHOP: unlocks cost banked score. Bought = yours forever (Account.user.owned) (earned in single player, not test mode). Free things never need buying.
 const SHOP = {
   freeAbilities: ['grenade', 'shield', 'regen', 'dash', 'energy', 'burger', 'armor', 'hands', 'medic', 'resupply'],
   freeParts: 1,          // the first part of each slot (per gun) is free
-  part: 150,             // each later part in a slot costs +150 more (150, 300, ...) up to partMax
-  partMax: 900,
-  ability: { active: 400, passive: 500, gadget: 600 },
-  perk: 300,
+  part: 300,             // each later part in a slot costs +300 more (300, 600, ...) up to partMax
+  partMax: 2000,
+  ability: { active: 1000, passive: 1200, gadget: 1500, building: 2500 },
+  perk: 800,
   start: 200,            // score new players start with
 };
 // first 10 waves of single player are easier (fewer, weaker, slower-spawning enemies)

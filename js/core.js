@@ -72,7 +72,7 @@ function priceOf(key) {
   const [type, a, b, c] = key.split(':');
   if (type === 'ab') {
     const A = ABILITIES[a];
-    return SHOP.freeAbilities.includes(a) ? 0 : A.gadget ? SHOP.ability.gadget : A.type === 'passive' ? SHOP.ability.passive : SHOP.ability.active;
+    return SHOP.freeAbilities.includes(a) ? 0 : A.building ? SHOP.ability.building : A.gadget ? SHOP.ability.gadget : A.type === 'passive' ? SHOP.ability.passive : SHOP.ability.active;
   }
   if (type === 'perk') return SHOP.perk;
   const i = PARTS[b].filter(p => (p.gun || 'main') === a || p.gun === 'both').findIndex(p => p.id === c);
