@@ -246,6 +246,8 @@ const Game = (() => {
     updateProjectiles(dt);
     updateGadgets(dt);
     assignTeam(dt);
+    G.formT = (G.formT || 0) - dt; // safety net: look for finished formations every second
+    if (G.formT <= 0) { G.formT = 1; checkFormations(); }
     updateGadgetList(dt);
     updateUlt(dt);
     updatePacks(dt);
@@ -3477,6 +3479,7 @@ const Game = (() => {
         setTimeout(() => {
           if (!G) return;
           mergeTurrets(n.x1, n.y1);
+          checkFormations(); // a new rocket turret can complete a railgun / fortress
           const rd = myGadget('radar', n.x1, n.y1, COMBO.near), t = nearTurret(n.x1, n.y1);
           if (rd && t) { removeGadget(rd); if (G.mode === 'mp') Net.send({ t: 'gadx', id: rd.id }); t.spot = true; comboFx(t.x, t.y, '#ff9ff3', 'SPOTTER TURRET'); }
         }, 0);
