@@ -347,7 +347,7 @@
         if (!on) {
           if (L.ability !== c.a) L.perk = null;
           if (L.ability2 !== c.b) L.perk2 = null;
-          L.ability = c.a; L.ability2 = c.b;
+          L.ability = c.a; if (c.b !== c.a) L.ability2 = c.b;
           toast(`Equipped ${A1.name} (E) + ${A2.name} (C)`);
         }
         Account.save(); keepInPlace(`[data-combo="${c.name}"]`, renderLoadout);

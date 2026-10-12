@@ -574,6 +574,11 @@ const ABILITY_GROUPS = [
 // Ability combos: throw one ability's thing onto another's (needs both, e.g. one in each ability slot).
 const COMBOS = [
   { a: 'turret', b: 'tesla',   name: 'Railgun',        how: '3 Turrets → Rocket Turret, 3 Teslas → Big Tesla. Line up Big Tesla, Rocket Turret, Big Tesla.' },
+  // ---- FORMATIONS: buildings in side-by-side floor squares fuse into one super building (numbers in FORMATIONS) ----
+  { a: 'laser', b: 'radar',    name: 'Orbital Strike', formation: true, how: 'Throw 3 Laser Towers into the same square → Big Laser. Put a Radar in the square on each side of it (left + right, or above + below; a Radar thrown right ONTO the Big Laser makes it a Prism instead). Every 6s it calls a sky beam down on the toughest enemy anywhere on the map (140 damage).' },
+  { a: 'tesla', b: 'tesla',    name: 'Storm Tower',    formation: true, how: 'Make 3 Big Teslas (3 Teslas in one square each) in an L: one corner square with a Big Tesla right next to it on one side AND one above or below it. They fuse into a Storm Tower in the corner: huge range, zaps chain to 4 more enemies and lightning falls from its storm cloud.' },
+  { a: 'turret', b: 'shieldgen', name: 'Fortress',     formation: true, how: '3 Turrets in one square → Rocket Turret. Line up Rocket Turret, Shield Generator, Rocket Turret (side-by-side squares, generator in the middle). They fuse into a Fortress: 4-barrel gun + rockets, a 250 HP regenerating shield, and an overshield for you inside its dome.' },
+  { a: 'hangar', b: 'radar',   name: 'Carrier',        formation: true, how: 'Throw 3 Drone Hangars into one square → Big Hangar. Make a Command Tower (throw a Decoy onto a Radar) in the square right next to it (any side). The radar is used up and the hangar becomes a Carrier: 5 big drones, double damage, longer reach.' },
   { a: 'turret', b: 'radar',   name: 'Spotter Turret', how: 'Throw a Radar next to a Turret (or a Turret next to a Radar): the turret shoots through walls from very far away.' },
   { a: 'turret', b: 'medic',   name: 'Heal Turret',    how: 'Throw a second Heal Zone onto a Medic Turret: it shoots green heal bullets at hurt buddies (+50 HP) and you (+20 HP). Low buddies run to it.' },
   { a: 'turret', b: 'medic',   name: 'Medic Turret',   how: 'Throw a Heal Zone onto a Turret: it keeps shooting and heals you 5 HP every 3 seconds when you are near it and out of combat.' },
@@ -626,6 +631,17 @@ const MERGE = { near: 160, size: 1.5, range: 1.5, hp: 3, turretNear: 40,
                 rocketTurret: { hp: 300, every: 5, range: 1300 },
 // BIG TESLA + ROCKET TURRET + BIG TESLA in a row (side by side squares, rocket turret in the middle) = RAILGUN
                 railgun: { hp: 300, every: 0.15, range: 2000, damage: 8, speed: 5000 } };
+// FORMATIONS: specific arrangements in side-by-side grid squares fuse into a super building (see COMBOS for how-to).
+//   orbital    = Radar | Big Laser | Radar (row or column)      -> sky beam on the toughest enemy anywhere
+//   stormtower = 3 Big Teslas in an L (corner + 2 neighbours)    -> lives in the corner square
+//   fortress   = Rocket Turret | Shield Generator | Rocket Turret -> lives in the generator's square
+//   carrier    = Big Hangar next to a Command Tower (any side)   -> lives in the hangar's square
+const FORMATIONS = {
+  orbital:    { hp: 360, every: 6, delay: 1.1, radius: 120, damage: 140, size: 1.8 },
+  stormtower: { hp: 420, radius: 2.4, dmgMul: 2, chains: 4, chainRange: 300, everyMul: 0.7, boltEvery: 2.5, bolts: 3, boltDmg: 45, size: 2 },
+  fortress:   { hp: 600, range: 1150, every: 0.11, damage: 9, speed: 2600, rocketEvery: 4, shield: 250, shieldRegen: 30, shieldDelay: 3, dome: 280, overshield: 40, overEvery: 5 },
+  carrier:    { hp: 380, drones: 5, dmgMul: 2, droneHp: 2, range: 1.4, size: 1.8 },
+};
 
 // Ability boosts: passives that only exist for one ability (you only see them once that ability is equipped).
 // add / mul change that ability's numbers for you while it's equipped.

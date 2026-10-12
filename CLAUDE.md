@@ -31,6 +31,13 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
   flag set via `upgradeGadget` so MP syncs with `gadc`); list + `how` text in config COMBOS, numbers in COMBO.
   Building looks: glow = pre-rendered additive sprites (`glow()`, no shadowBlur), `popIn`/`buildBrackets`/`landFx` on landing,
   `buildingBoom` debris on destruction, `flashAt` muzzle blooms (G.blooms / G.debris, tuning in BUILD_FX).
+  Big (merged) buildings get their own details (gold corners/rings, twin barrels/tubes/nozzles, extra dish/rings/pylons).
+  Tesla = 3/4-view tower (plinth, copper primary, insulator stack, toroid, hash-flickered arcs `teslaArc`).
+- FORMATIONS (config FORMATIONS, `checkFormations` in game.js, runs after any of your buildings lands/merges): grid-square
+  arrangements fuse into a super building. Railgun (Big Tesla|Rocket Turret|Big Tesla), Orbital Strike (Radar|Big Laser|Radar),
+  Storm Tower (3 Big Teslas in an L), Fortress (Rocket Turret|Shield Gen|Rocket Turret), Carrier (Big Hangar beside a Command
+  Tower). Gadget ones are a flag set via `upgradeGadget` (`formUp` sets HP/size on every client); turret ones (railgun,
+  fortress) are local like all turrets. A Radar thrown ONTO a Big Laser = Prism; beside it = formation piece.
 - Ability slots: 1 = E, 2 = C, 3 = V from wave 20, 4 = B from wave 30 (SP; all 4 in Test mode).
   Slot state is swapped into `me` (`swapAlt('alt'|'alt3'|'alt4')`) so ability code works for every slot.
   Passives work from any slot (`hasAb`). Weak abilities (`respawn`) get a use back every 30s.
