@@ -553,7 +553,7 @@ const ABILITY_GROUPS = [
 const COMBOS = [
   { a: 'turret', b: 'tesla',   name: 'Railgun',        how: '3 Turrets → Rocket Turret, 3 Teslas → Big Tesla. Line up Big Tesla, Rocket Turret, Big Tesla.' },
   { a: 'turret', b: 'radar',   name: 'Spotter Turret', how: 'Throw a Radar next to a Turret (or a Turret next to a Radar): the turret shoots through walls from very far away.' },
-  { a: 'turret', b: 'medic',   name: 'Heal Turret',    how: 'Throw a second Heal Zone onto a Medic Turret: it shoots green healing beams at hurt buddies (+50 HP) and you (+20 HP). Low buddies run to it.' },
+  { a: 'turret', b: 'medic',   name: 'Heal Turret',    how: 'Throw a second Heal Zone onto a Medic Turret: it shoots green heal bullets at hurt buddies (+50 HP) and you (+20 HP). Low buddies run to it.' },
   { a: 'turret', b: 'medic',   name: 'Medic Turret',   how: 'Throw a Heal Zone onto a Turret: it keeps shooting and heals you 5 HP every 3 seconds when you are near it and out of combat.' },
   { a: 'blackhole', b: 'firepit', name: 'Inferno Vortex', how: 'Throw a Fire Pit into your Black Hole: it burns enemies it pulls in (20/s) and lasts 3s longer.' },
   { a: 'tesla', b: 'freeze',   name: 'Cryo Coil',      how: 'Throw a Freeze Bomb onto a Tesla Coil: its zaps freeze enemies for a moment.' },
