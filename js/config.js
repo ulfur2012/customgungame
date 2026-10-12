@@ -491,7 +491,7 @@ const ABILITIES = {
                desc: 'Throw a laser tower (60 HP, stays until destroyed). It locks a beam onto one enemy: 8 damage/s, ramping up to 70/s the longer it holds on.' },
   hangar:    { name: 'Drone Hangar', type: 'active', thrown: true, gadget: true, color: '#00d2d3', cooldown: 25, uses: 2,
                duration: Infinity, hp: 70, building: true, drones: 2, respawn: 6, droneHp: 20, range: 420, shootRange: 260,
-               every: 0.45, damage: 9, speed: 420, healEvery: 2, heal: 6,
+               every: 0.45, damage: 9, speed: 340, healEvery: 2, heal: 6,
                desc: 'Throw a drone hangar (70 HP, stays until destroyed). It launches 2 drones that fly out and shoot enemies near it. Shot-down drones come back after 6s.' },
   gravity:   { name: 'Gravity Tower', type: 'active', thrown: true, gadget: true, color: '#7d5fff', cooldown: 25, uses: 2,
                duration: Infinity, hp: 80, building: true, radius: 260, pull: 110, slow: 0.55,
@@ -906,6 +906,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5, hiveDrone: 
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 97, title: 'Drone speed', notes: ['Drones fly a bit slower.'] },
   { v: 96, title: 'Smarter drones', notes: ['Drones only send as many drones as they need to beat an enemy. The rest stay home and guard.'] },
   { v: 95, title: 'Hover names', notes: ['On PC, rest your mouse on a building or placeable for 5 seconds to see its full name (like "Bomber Drone Hangar").'] },
   { v: 94, title: 'Drones follow you', notes: ['Engineer: use Upgrade on a MAX level Drone Hangar to switch its drones between FOLLOW (they fly with you) and STAY.', 'Only one hangar can follow you at a time.'] },
