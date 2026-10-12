@@ -945,10 +945,12 @@ const Game = (() => {
       }
     }
     // CARRIER: big hangar next to a command tower
+    // forgiving: the command tower just has to be close (any side, diagonals too), not in the exact next square
     for (const hg of mineOf('hangar')) {
-      if (!hg.big || hg.carrier) continue;
-      const [x, y] = cellOf(hg), ct = SIDES.map(([dx, dy]) => at(radars.filter(r => r.command), x + dx, y + dy)).find(Boolean);
+      if (hg.carrier) continue;
+      const ct = radars.find(r => r.command && Math.hypot(r.x - hg.x, r.y - hg.y) <= MAP.grid * 2.2);
       if (!ct) continue;
+      if (!hg.big) { G.banner = { text: 'Carrier needs a BIG Drone Hangar (3 in one spot)', t: 2.5 }; continue; }
       consumeGadget(ct); upgradeGadget(hg, 'carrier');
       formationFx(hg.x, hg.y, '#00d2d3', 'CARRIER'); return;
     }
