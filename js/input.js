@@ -29,7 +29,7 @@ const Input = (() => {
   addEventListener('keyup', e => keys.delete(e.code));
   addEventListener('blur', reset);
   canvas.addEventListener('wheel', () => { if (!Settings.mobile) flags.swap = true; }, { passive: true });
-  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('contextmenu', e => { e.preventDefault(); if (!Settings.mobile) flags.dblAt = { x: e.clientX, y: e.clientY }; }); // PC: right click a building = inspect it
 
   canvas.addEventListener('pointerdown', e => {
     e.preventDefault();
@@ -63,7 +63,6 @@ const Input = (() => {
   });
 
   let lastTap = null;
-  canvas.addEventListener('dblclick', e => { flags.dblAt = { x: e.clientX, y: e.clientY }; });
   const release = e => {
     if (e.pointerType === 'mouse' && e.button === 0) mouse.down = false;
     for (const k in sticks) {
