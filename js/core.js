@@ -66,8 +66,9 @@ function allowedBuild(kind, build) {
   return out;
 }
 
-// buyable ultimates: do you own every ability it needs? (extra = keys being bought right now)
-function ultReqsMet(id, extra = []) { return (ULT_REQS[id] || []).every(a => !priceOf('ab:' + a) || extra.includes('ab:' + a)); }
+// mega buildings: do you own every building ability it is made from?
+function megaReqsMet(id) { return MEGA[id].needs.every(a => !priceOf('ab:' + a)); }
+const megaName = id => MEGA[id].name || FORMATION_NAMES[id];
 // what an unlock costs in banked score; 0 = free or already owned. key = 'ab:id' | 'perk:id' | 'part:kind:slot:id'
 function priceOf(key) {
   if (!Account.user || Account.user.owned.includes(key)) return 0;
@@ -78,7 +79,7 @@ function priceOf(key) {
     return SHOP.freeAbilities.includes(a) ? 0 : A.building || a === 'turret' ? SHOP.ability.building : A.gadget ? SHOP.ability.gadget : A.type === 'passive' ? SHOP.ability.passive : SHOP.ability.active;
   }
   if (type === 'perk') return SHOP.perk;
-  if (type === 'ult') return SHOP.ultimate;
+  if (type === 'mega') return MEGA[a] ? MEGA[a].price : 0;
   const i = PARTS[b].filter(p => (p.gun || 'main') === a || p.gun === 'both').findIndex(p => p.id === c);
   return i < SHOP.freeParts ? 0 : Math.min(SHOP.partMax, (i - SHOP.freeParts + 1) * SHOP.part);
 }
@@ -637,7 +638,7 @@ const Account = {
     // shop: banked score + what you've unlocked. Things already equipped before the shop existed stay yours.
     // ultimates are crate-only again: give back the score for any bought ones and unequip them
     if (Array.isArray(u.owned) && u.owned.some(k => k.startsWith('ult:'))) {
-      u.bank = (u.bank || 0) + u.owned.filter(k => k.startsWith('ult:')).length * SHOP.ultimate;
+      u.bank = (u.bank || 0) + u.owned.filter(k => k.startsWith('ult:')).length * 4000; // old ultimate price
       u.owned = u.owned.filter(k => !k.startsWith('ult:'));
     }
     for (const L of u.presets) L.ult = null;

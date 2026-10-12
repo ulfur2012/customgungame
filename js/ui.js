@@ -86,7 +86,7 @@
     Account.save();
     return add;
   }
-  const spLoadout = () => openLoadout(testMode ? 'Start test' : 'Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); runBanked = 0; Game.startSP(testMode); }, goMenu);
+  const spLoadout = () => openLoadout(testMode ? 'Start test' : 'Start', () => { show(null); buildMap('medium', MAP.seed, 'medium'); runBanked = 0; Game.freeUp = !shopOn; Game.startSP(testMode); }, goMenu);
   // Single Player first asks: test mode on or off?
   el('spBtn').onclick = () => { el('testToggle').checked = testMode; overlay('spScreen', true); };
   el('spStart').onclick = () => { testMode = el('testToggle').checked; shopOn = !el('freeToggle').checked; overlay('spScreen', false); spLoadout(); };
@@ -234,7 +234,6 @@
     for (const x of unowned()) {
       const [type, a, b, c] = x.key.split(':');
       if (type === 'part') L[a][b] = null;
-      if (type === 'ult') L.ult = null;
       for (const [k, pk] of [['ability', 'perk'], ['ability2', 'perk2'], ['ability3', 'perk3'], ['ability4', 'perk4']]) {
         if (type === 'ab' && L[k] === a) { L[k] = k === 'ability' ? 'grenade' : null; L[pk] = null; }
         if (type === 'perk' && L[pk] === a) L[pk] = null;
@@ -249,12 +248,6 @@
     if (!list.length) return true;
     const total = list.reduce((n, x) => n + x.cost, 0);
     const lines = list.map(x => `• ${x.name} — ${x.cost}`).join('\n');
-    const badUlt = list.find(x => x.key.startsWith('ult:') && !ultReqsMet(x.key.slice(4), list.map(y => y.key)));
-    if (badUlt) {
-      const id = badUlt.key.slice(4), need = ULT_REQS[id].map(a => ABILITIES[a].name).join(', ');
-      if (menuShop) { toast(`Saved. ${ULTIMATES[id].name} needs: ${need} before you can buy it`); return true; }
-      alert(`${ULTIMATES[id].name} needs you to own: ${need}.\nUnequip it in the Ultimate tab or buy those first.`); return false;
-    }
     if (menuShop) { // main menu: offer to buy, but saving always works
       if ((u.bank || 0) < total) { toast(`Saved. Not enough score to buy it all yet (${total} needed)`); return true; }
       if (!confirm(`Buy everything in this loadout for ${total} score?\n${lines}\n\nYou have ${u.bank}. (Cancel = just save)`)) return true;
@@ -281,15 +274,15 @@
       el('presetTabs').appendChild(b);
     }
     el('gunTabs').innerHTML = '';
-    for (const kind of ['main', 'secondary', 'ability']) { // ultimates can't be bought or picked: they only come from gold crates
+    for (const kind of ['main', 'secondary', 'ability', 'mega']) { // ultimates can't be bought: they only come from gold crates
       const b = document.createElement('button');
-      b.className = 'gun-tab' + (kind === gunKind ? ' active' : '') + (kind === 'ability' ? ' ability-tab' : '') + (kind === 'ult' ? ' ability-tab ult-tab' : '');
-      b.textContent = kind === 'ability' ? 'Ability' : kind === 'ult' ? '⚡ Ultimate' : GUNS[kind].name;
+      b.className = 'gun-tab' + (kind === gunKind ? ' active' : '') + (kind === 'ability' ? ' ability-tab' : '') + (kind === 'mega' ? ' ability-tab ult-tab' : '');
+      b.textContent = kind === 'ability' ? 'Ability' : kind === 'mega' ? '🏰 Mega' : GUNS[kind].name;
       b.onclick = () => { gunKind = kind; renderLoadout(); };
       el('gunTabs').appendChild(b);
     }
     if (gunKind === 'ability') { renderAbilities(); return; }
-    if (gunKind === 'ult') gunKind = 'main';
+    if (gunKind === 'mega') { renderMega(); return; }
     const build = Account.user.loadout[gunKind];
 
     const slots = SLOTS.filter(s => partsFor(gunKind, s.key).length);
@@ -342,74 +335,66 @@
     box.scrollTop = scroll;
     if (top !== null && after) box.scrollTop += after.getBoundingClientRect().top - top;
   }
-  // ULTIMATE tab: buy (score + owning its abilities) and equip one ultimate; it charges up from damage in game
-  function renderUltimates() {
-    const L = Account.user.loadout, u = Account.user;
+  // MEGA tab: buy mega buildings (formations) with score once you own the buildings they're made from
+  function renderMega() {
+    const u = Account.user;
     el('slotTabs').innerHTML = '';
     const tab = document.createElement('button');
     tab.className = 'tab active';
-    tab.innerHTML = `<span class="tab-label">Ultimate (${keyName(Settings.keys.ult || 'KeyF')})</span><span class="tab-value">${ULTIMATES[L.ult] ? ULTIMATES[L.ult].name : 'None'}</span>`;
+    const have = Object.keys(MEGA).filter(id => !priceOf('mega:' + id)).length;
+    tab.innerHTML = `<span class="tab-label">Mega buildings</span><span class="tab-value">${have} / ${Object.keys(MEGA).length} owned</span>`;
     el('slotTabs').appendChild(tab);
     const wrap = el('parts');
     wrap.innerHTML = '';
     const info = document.createElement('div');
     info.className = 'class-banner on';
-    info.innerHTML = `<b>⚡ Ultimates</b> — equip one: it charges up when you hit enemies (and a bit every second). When it is full press <b>F</b> (gold button on phones).`
-      + (shopOn ? `<br>Each costs ⭐ ${SHOP.ultimate} and you must <b>own the abilities it needs</b> first.` : '<br><small>Upgrades are free right now.</small>')
-      + ' Gold epic crates still give a random one too.';
+    info.innerHTML = `<b>🏰 Mega buildings</b> — put your buildings together in the right shape and they fuse into a super building.`
+      + ` You have to <b>buy</b> each one first, and you must <b>own the buildings it is made from</b>.`
+      + '<br><small>Test mode and "All upgrades free" games let you build them all anyway.</small>';
     wrap.appendChild(info);
-    const none = document.createElement('button');
-    none.className = 'card' + (!ULTIMATES[L.ult] ? ' equipped' : '');
-    none.innerHTML = `<div class="ab-icon" style="background:#555c68">–</div><div class="card-name">None</div><div class="card-desc">No ultimate (crates only).</div>`;
-    none.dataset.ult = 'none';
-    none.onclick = () => { L.ult = null; Account.save(); keepInPlace('[data-ult="none"]', renderLoadout); };
-    wrap.appendChild(none);
-    for (const id of Object.keys(ULTIMATES)) {
-      const U = ULTIMATES[id], cost = shopOn ? priceOf('ult:' + id) : 0, reqs = ULT_REQS[id] || [], met = ultReqsMet(id);
+    for (const id of Object.keys(MEGA)) {
+      const M = MEGA[id], cost = priceOf('mega:' + id), met = megaReqsMet(id), name = megaName(id);
+      const combo = COMBOS.find(c => c.name === name), how = combo ? combo.how : '';
       const card = document.createElement('div');
-      card.className = 'card' + (L.ult === id ? ' equipped' : '') + (cost ? ' locked' : '');
-      card.setAttribute('role', 'button');
-      const needs = reqs.length ? `<span class="needs">Needs: ${reqs.map(a => `<span class="${!shopOn || !priceOf('ab:' + a) ? 'ok' : 'no'}">${ABILITIES[a].name}${!shopOn || !priceOf('ab:' + a) ? ' ✓' : ''}</span>`).join(', ')}</span>` : '';
-      card.innerHTML = `<div class="ult-dot" style="background:${U.color}">⚡</div>
-        <div><div class="card-name">${U.name}${priceTag(cost)}${!cost && shopOn ? ' <small class="hint">owned</small>' : ''}</div>
-        <div class="card-desc">${U.desc}${needs}</div></div>`;
+      card.className = 'card' + (cost ? ' locked' : ' equipped');
+      const needs = `<span class="needs">Needs: ${M.needs.map(a => `<span class="${priceOf('ab:' + a) ? 'no' : 'ok'}">${ABILITIES[a].name} ${priceOf('ab:' + a) ? '✗' : '✓'}</span>`).join(', ')}</span>`;
+      card.innerHTML = `<div class="ult-dot" style="background:${M.color}">🏰</div>
+        <div><div class="card-name">${name}${cost ? ` <small class="price">⭐ ${cost}</small>` : ' <small class="hint">owned ✓</small>'}</div>
+        <div class="card-desc"><b>${M.does}</b><br><small>How: ${how}</small>${needs}</div></div>`;
       if (cost) {
         const buy = document.createElement('button');
         buy.className = 'buy-btn';
         buy.disabled = !met || (u.bank || 0) < cost;
-        buy.textContent = !met ? 'Locked' : (u.bank || 0) < cost ? `Need ⭐ ${cost}` : `Buy ⭐ ${cost}`;
-        buy.onclick = ev => { ev.stopPropagation(); buyUlt(id); };
+        buy.textContent = !met ? 'Own the buildings first' : (u.bank || 0) < cost ? `Need ⭐ ${cost}` : `Buy ⭐ ${cost}`;
+        buy.onclick = ev => { ev.stopPropagation(); buyMega(id); };
         card.querySelector('.card-desc').appendChild(document.createElement('br'));
         card.querySelector('.card-desc').appendChild(buy);
       }
-      card.dataset.ult = id;
-      card.onclick = () => {
-        if (cost && !met) { toast(`${U.name} needs: ${reqs.map(a => ABILITIES[a].name).join(', ')}`); return; }
-        L.ult = id; Account.save(); keepInPlace(`[data-ult="${id}"]`, renderLoadout);
-      };
+      card.dataset.mega = id;
       wrap.appendChild(card);
     }
-    const U = ULTIMATES[L.ult];
     const { ctx, w, h } = fitCanvas(el('preview'));
     if (w && h) {
       const r = Math.min(w, h) * 0.24;
-      ctx.fillStyle = U ? U.color : '#555c68';
+      ctx.fillStyle = '#ffd700';
       ctx.beginPath(); ctx.arc(w / 2, h / 2 - 10, r, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `900 ${Math.round(r)}px system-ui, sans-serif`; ctx.fillText('⚡', w / 2, h / 2 - 10);
-      ctx.font = '800 16px system-ui, sans-serif'; ctx.fillText(U ? U.name : 'No ultimate', w / 2, h - 22);
+      ctx.font = `900 ${Math.round(r)}px system-ui, sans-serif`; ctx.fillText('🏰', w / 2, h / 2 - 10);
+      ctx.font = '800 16px system-ui, sans-serif'; ctx.fillText(`${have} owned`, w / 2, h - 22);
     }
-    el('stats').innerHTML = `<p class="stat-note" style="font-size:14px">${U ? U.desc : 'Pick an ultimate to charge up in every game.'}</p><p class="stat-note">Charges from ${ULT_CHARGE.damage} damage dealt.</p>`;
+    el('stats').innerHTML = `<p class="stat-note" style="font-size:14px">Mega buildings are yours forever once bought.</p>`;
   }
-  function buyUlt(id) {
-    const u = Account.user, cost = priceOf('ult:' + id);
-    if (!cost) return;
-    if (!ultReqsMet(id)) { toast('Own the abilities it needs first'); return; }
-    if ((u.bank || 0) < cost) { toast(`You need ⭐ ${cost}`); return; }
-    u.bank -= cost; u.owned.push('ult:' + id); u.loadout.ult = id; Account.save();
-    toast(`Bought ${ULTIMATES[id].name}! ${u.bank} score left`);
-    keepInPlace(`[data-ult="${id}"]`, renderLoadout);
+  function buyMega(id) {
+    const u = Account.user, cost = priceOf('mega:' + id);
+    if (!cost) return false;
+    if (!megaReqsMet(id)) { toast(`Own ${MEGA[id].needs.map(a => ABILITIES[a].name).join(' + ')} first`); return false; }
+    if ((u.bank || 0) < cost) { toast(`You need ⭐ ${cost}`); return false; }
+    u.bank -= cost; u.owned.push('mega:' + id); Account.save();
+    toast(`Bought ${megaName(id)}! ${u.bank} score left`);
+    if (gunKind === 'mega') keepInPlace(`[data-mega="${id}"]`, renderLoadout);
+    return true;
   }
+  window.buyMega = buyMega; // for tests
   let abSlot = 0; // which ability slot the Ability tab is editing (0 = E, 1 = C)
   function renderAbilities() {
     const L = Account.user.loadout;
@@ -599,7 +584,7 @@
   }
 
   function renderPreview() {
-    if (el('loadout').classList.contains('hidden') || gunKind === 'ability' || gunKind === 'ult') return;
+    if (el('loadout').classList.contains('hidden') || gunKind === 'ability' || gunKind === 'mega') return;
     const { ctx, w, h } = fitCanvas(el('preview'));
     if (!w || !h) return;
     const L = layoutGun(gunKind, Account.user.loadout[gunKind]);
@@ -859,6 +844,7 @@
     if (unowned().length && !checkout()) stripUnowned();
     applyRules();
     buildMap(settings.layout, seed, settings.size);
+    Game.freeUp = !!settings.free;
     Game.startMP(players, Net.state.myId, settings.mode === 'teams', settings.mode === 'coop');
   }
 

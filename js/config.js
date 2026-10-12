@@ -828,15 +828,21 @@ const ULTIMATES = {
 
 // Hidden: the ability you have equipped makes some ultimates more likely from an epic crate.
 // The matching ultimate gets `weight` tickets, every other one gets 1.
-// BUYABLE ULTIMATES: buy one in the loadout's Ultimate tab (SHOP.ultimate) once you own the abilities it needs.
-// The equipped one charges up from damage you do (ULT_CHARGE) -> F / gold button when it's ready.
-const ULT_REQS = {
-  airstrike: ['grenade', 'jumppad'], nuke: ['blackhole', 'glass'], minigun: ['rapid', 'bandolier'], god: ['energy', 'laststand'],
-  laser: ['laser', 'radar'], bullethell: ['nova', 'thorns'], aimbot: ['overcharge', 'hands'], wallhack: ['phase', 'smoke'],
-  rockets: ['rpg', 'cluster'], tracker: ['radar', 'ninja'], clones: ['decoy', 'medic'], fountain: ['regen', 'medic'],
-  meteors: ['firepit', 'mine'], timestop: ['slowmo', 'recall'], juggernaut: ['shield', 'armor'], overdrive: ['resupply', 'magnet'],
-  carpet: ['cluster', 'grenade'], fortress: ['barrier', 'bubble'], blinkstorm: ['blink', 'shadowstep'], frenzy: ['stim', 'sprinter'],
-  turretnest: ['turret', 'resupply'], blizzard: ['freeze', 'smoke'], megaslam: ['quake', 'armor'], railcannon: ['turret', 'tesla'],
+// MEGA BUILDINGS (formations) must be bought in the loadout's Mega tab ('mega:id', SHOP) once you own every building ability
+// in `needs`. Not owned = the formation won't fuse (except Test mode / "All upgrades free"). name/how from COMBOS + FORMATION_NAMES.
+const MEGA = {
+  railgun:     { name: 'Railgun', needs: ['turret', 'tesla'], price: 3000, color: '#48dbfb',
+                 does: 'A super-fast rail cannon that shreds enemies from very far away.' },
+  fortress:    { needs: ['turret', 'shieldgen'], price: 3500, color: '#6c5ce7', does: '4-barrel gun + rockets, a regenerating shield and an overshield for you inside its dome.' },
+  stormtower:  { needs: ['tesla'], price: 3500, color: '#a29bfe', does: 'Huge range, zaps chain to 4 more enemies and lightning falls from its storm cloud.' },
+  orbital:     { needs: ['laser', 'radar'], price: 4500, color: '#ff2e63', does: 'Every 6s a sky beam hits the toughest enemy anywhere on the map (140 damage).' },
+  carrier:     { needs: ['hangar', 'radar', 'decoy'], price: 4500, color: '#00d2d3', does: '5 big drones, double damage, longer reach.' },
+  artillery:   { needs: ['mortar'], price: 3500, color: '#e67e22', does: 'Every 4s fires 5 shells at 5 enemies almost anywhere on the map.' },
+  aegis:       { needs: ['shieldgen'], price: 3500, color: '#6c5ce7', does: 'Giant dome: overshield for you, repairs buildings and stops enemy bullets.' },
+  inferno:     { needs: ['flame'], price: 3500, color: '#ff5e1a', does: 'Fire all the way around (stronger, further) + fireballs at far enemies.' },
+  singularity: { needs: ['gravity'], price: 4000, color: '#7d5fff', does: 'Pulls enemies from twice as far and crushes everything near its core.' },
+  watchtower:  { needs: ['sniper', 'radar'], price: 5000, color: '#20bf6b', does: 'Snipes the toughest enemy anywhere on the map through walls every 1.2s (160 damage).' },
+  citadel:     { needs: ['barrier', 'shieldgen'], price: 4000, color: '#54a0ff', does: '1500 HP wall that repairs itself, with a gun tower at each end.' },
 };
 const ULT_CHARGE = { damage: 1800, perSec: 3 }; // charge: 1 point per damage you deal + perSec every second; full at `damage`
 const ULT_AFFINITY = {
@@ -861,7 +867,6 @@ const SHOP = {
   ability: { active: 1000, passive: 1200, gadget: 1500, building: 2500 },
   perk: 800,
   special: { radar: 5000, sensor: 200 }, // abilities with their own price
-  ultimate: 4000,        // each ultimate (needs its ULT_REQS abilities owned first)
   start: 200,            // score new players start with
 };
 // first 10 waves of single player are easier (fewer, weaker, slower-spawning enemies)
@@ -879,6 +884,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 87, title: 'Buy mega buildings', notes: ['Mega buildings (Railgun, Fortress, Watchtower...) are now bought with score in the new 🏰 Mega tab.', 'You must own the buildings they are made from first (Railgun needs Turret + Tesla).', 'Test mode and "All upgrades free" games still let you build them all.'] },
   { v: 86, title: 'Ultimates fixed', notes: ['Ultimates can NOT be bought anymore. They only come from gold crates again.', 'If you bought one, you got your score back.'] },
   { v: 85, title: 'Mega buildings for everyone', notes: [
     'Every building now has a MEGA version! Make a Big one (3 in one square) and put the right buddy building next to it.',

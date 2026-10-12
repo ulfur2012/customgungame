@@ -67,7 +67,7 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
 - Multiplayer damage is worked out by whoever gets hit; gadgets are synced with `gad`/`gadx`/`gadc`/`gadm`.
 - Maps must be identical in every browser (no random-comparator sorts in the generator).
 - SHOP (config `SHOP`, `priceOf` in core.js, `unowned`/`checkout` in ui.js): score from SP runs (not test) is banked
-  in `Account.user.bank`; unlocks in `Account.user.owned` ('ab:id', 'perk:id', 'part:kind:slot:id'). Some abilities
+  in `Account.user.bank`; unlocks in `Account.user.owned` ('ab:id', 'perk:id', 'part:kind:slot:id', 'mega:id'). Some abilities
   + the first part of each slot are free; `SHOP.special` = per-ability prices (Radar 5000, Motion Sensor 200). Only active when
   the game isn't "All upgrades free" (SP toggle on the single-player screen, host setting `settings.free` in MP). Customize from
   the main menu shows prices and offers to buy on Save (`menuShop`, never blocks saving); on paid
@@ -81,9 +81,11 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
   the user's PNGs arrive (`assets/parts/<slot>/<id>.png` etc. replace them automatically). The user is making art.
 - Single player Test mode: pause menu has change loadout, spawn ultimate crate, infinite ability.
 
-- ULTIMATES are also buyable ('ult:id', `SHOP.ultimate`) in the loadout's Ultimate tab (`renderUltimates`, `L.ult`), only once
-  you own the abilities in config `ULT_REQS` (`ultReqsMet` in core.js). The equipped one charges (`chargeUlt`: damage dealt +
-  `ULT_CHARGE.perSec`) and fills `me.ult` (F). Epic crates still give random ones. Rail Cannon = `fireRail` (MP 'ult' k railcannon).
+- ULTIMATES are NOT buyable (crate-only; v86 refunded any bought 'ult:' keys in core.js load migration).
+- MEGA BUILDINGS (formations + railgun) are bought: 'mega:id' in owned, config `MEGA` (needs = building abilities you must own,
+  price, does), `megaReqsMet`/`megaName` in core.js, loadout tab "🏰 Mega" (`renderMega`/`buyMega` in ui.js; also shown in the
+  after-boss picker). In game `megaOk(id)` (game.js) blocks the fuse unless owned, `G.test`, or `Game.freeUp` (ui sets it from the
+  SP free toggle / MP `settings.free`); else one banner per mega per game ("Buy X in the Mega tab").
 - Non-building combos (v83): Frost Fog, Healing Mist, Spring Trap, Napalm, Cryo Vortex (throw-onto, flags via `upgradeGadget`);
   equip-both: Napalm Rocket, Shield Bash, Parting Gift, Ground Pound, Mirror Shield, Supercharged, Time Burst (`both(a,b)`).
 - WHAT'S NEW: every update MUST add an entry at the top of config `UPDATES` (version + short kid-friendly notes); the menu

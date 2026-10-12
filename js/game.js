@@ -1181,6 +1181,13 @@ const Game = (() => {
   };
   // ---- FORMATIONS (config FORMATIONS): buildings in side-by-side squares fuse into one super building
   function consumeGadget(g) { removeGadget(g); if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id, q: 1 }); }
+  // mega buildings must be bought ('mega:id') unless Test mode / "All upgrades free"; not owned -> one banner per mega per game
+  function megaOk(id) {
+    if (G.test || Game.freeUp || (Account.user && Account.user.owned.includes('mega:' + id))) return true;
+    G.megaNag = G.megaNag || {};
+    if (!G.megaNag[id]) { G.megaNag[id] = 1; G.banner = { text: `Buy ${megaName(id)} in the Mega tab to build it!`, t: 3 }; }
+    return false;
+  }
   function checkFormations() {
     if (!G) return;
     checkRailgun();
@@ -1194,7 +1201,7 @@ const Game = (() => {
       const [x, y] = cellOf(lz);
       for (const [dx, dy] of AX) {
         const a = at(radars, x - dx, y - dy), b = at(radars, x + dx, y + dy);
-        if (!a || !b) continue;
+        if (!a || !b || !megaOk('orbital')) continue;
         consumeGadget(a); consumeGadget(b); upgradeGadget(lz, 'orbital');
         formationFx(lz.x, lz.y, '#ff2e63', 'ORBITAL STRIKE'); return;
       }
@@ -1206,6 +1213,7 @@ const Game = (() => {
       const ct = radars.find(r => r.command && Math.hypot(r.x - hg.x, r.y - hg.y) <= MAP.grid * 2.2);
       if (!ct) continue;
       if (!hg.big) { G.banner = { text: 'Carrier needs a BIG Drone Hangar (3 in one spot)', t: 2.5 }; continue; }
+      if (!megaOk('carrier')) continue;
       consumeGadget(ct); upgradeGadget(hg, 'carrier');
       formationFx(hg.x, hg.y, '#00d2d3', 'CARRIER'); return;
     }
@@ -1215,7 +1223,7 @@ const Game = (() => {
       const [x, y] = cellOf(c);
       for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
         const a = at(bigT, x + sx, y), b = at(bigT, x, y + sy);
-        if (!a || !b) continue;
+        if (!a || !b || !megaOk('stormtower')) continue;
         consumeGadget(a); consumeGadget(b); upgradeGadget(c, 'stormtower');
         formationFx(c.x, c.y, '#a29bfe', 'STORM TOWER'); return;
       }
@@ -1226,7 +1234,7 @@ const Game = (() => {
       const [x, y] = cellOf(sg);
       for (const [dx, dy] of AX) {
         const a = at(rockets, x - dx, y - dy), b = at(rockets, x + dx, y + dy);
-        if (!a || !b) continue;
+        if (!a || !b || !megaOk('fortress')) continue;
         consumeGadget(sg);
         G.turrets = G.turrets.filter(t => t !== a && t !== b);
         const F = FORMATIONS.fortress;
@@ -1243,7 +1251,7 @@ const Game = (() => {
         const [x, y] = cellOf(c);
         for (const [dx, dy] of AX) {
           const a = at(smalls, x - dx, y - dy), b = at(smalls, x + dx, y + dy);
-          if (!a || !b) continue;
+          if (!a || !b || !megaOk(what)) continue;
           consumeGadget(a); consumeGadget(b); upgradeGadget(c, what);
           formationFx(c.x, c.y, col, FORMATION_NAMES[what].toUpperCase()); return;
         }
@@ -1253,7 +1261,7 @@ const Game = (() => {
     for (const sn of mineOf('sniper')) {
       if (!sn.big || !plain(sn)) continue;
       const [x, y] = cellOf(sn), rd = SIDES.map(([dx, dy]) => at(radars.filter(r => !r.command && !r.dead), x + dx, y + dy)).find(Boolean);
-      if (!rd) continue;
+      if (!rd || !megaOk('watchtower')) continue;
       consumeGadget(rd); upgradeGadget(sn, 'watchtower');
       formationFx(sn.x, sn.y, '#20bf6b', 'WATCHTOWER'); return;
     }
@@ -1262,7 +1270,7 @@ const Game = (() => {
       if (!w.big || !w.rect || !plain(w)) continue;
       const [rx, ry, rw, rh] = w.rect;
       const sg = mineOf('shieldgen').find(g => !g.dead && plain(g) && Math.hypot(g.x - clamp(g.x, rx, rx + rw), g.y - clamp(g.y, ry, ry + rh)) <= MAP.grid * 0.75);
-      if (!sg) continue;
+      if (!sg || !megaOk('citadel')) continue;
       consumeGadget(sg); upgradeGadget(w, 'citadel');
       formationFx(w.x, w.y, '#54a0ff', 'CITADEL WALL'); return;
     }
@@ -1276,7 +1284,7 @@ const Game = (() => {
       if (!t.rocket || t.hp <= 0) continue;
       const [x, y] = cellOf(t);
       const pair = at(x - 1, y) && at(x + 1, y) ? [at(x - 1, y), at(x + 1, y)] : at(x, y - 1) && at(x, y + 1) ? [at(x, y - 1), at(x, y + 1)] : null;
-      if (!pair) continue;
+      if (!pair || !megaOk('railgun')) continue;
       for (const g of pair) { removeGadget(g); if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id }); }
       const R = MERGE.railgun;
       Object.assign(t, { rocket: false, rail: true, hp: R.hp, maxHp: R.hp, cd: 0.5, zap: null, lvl: 1 }); // levels of the parts don't matter: starts fresh
@@ -5717,6 +5725,7 @@ const Game = (() => {
     get coopWave() { return G && G.coop ? G.wave : 0; },
     get run() { return G && G.mode === 'sp' && !G.over ? { wave: G.wave, score: G.score, test: G.test } : null; },
     get debugState() { return G; },
+    freeUp: false, // set by ui: "All upgrades free" game (mega buildings don't need buying)
     on(name, fn) { hooks[name] = fn; },
   };
 })();
