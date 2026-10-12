@@ -783,3 +783,7 @@ const EASY = { waves: 10, hp: 0.55, count: 0.6, spawn: 1.6, damage: 0.6 };
 // decoy teamwork: a 2nd decoy goes for the next-nearest enemy unless the first one's target has more than `crowd`
 // enemies within crowdRadius (then it goes along to help). Spare targets further than maxSpread are skipped.
 const DECOY_AI = { crowd: 2, crowdRadius: 250, maxSpread: 1400 };
+// TEAMWORK (single player): every enemy has danger points, every buddy / drone has strength points.
+// The most dangerous enemies are handled first: buddies + drones are sent until their strength adds up to its danger.
+const DANGER = { grunt: 5, gunslinger: 5, runner: 3, shooter: 6, tank: 15, bomber: 6, splitter: 8, sniper: 8, healer: 8, boss: 100, mini: 25 };
+const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };

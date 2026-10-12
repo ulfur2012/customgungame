@@ -56,6 +56,7 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
   games you can pick anything but pressing Start/Done lists unowned items + total and asks to buy (MP round start
   strips unowned items if declined).
 - EASY (config): waves 1-10 in SP have fewer/weaker enemies, slower spawns, less damage taken.
+- TEAMWORK (SP, `assignTeam`, config `DANGER`/`STRENGTH`): enemies have danger points (boss 100), buddies/drones strength; most dangerous enemies get units until strength >= danger, leftovers take the closest.
 - Decoy AI (`buddyTarget`, config `DECOY_AI`): decoys spread over the nearest unclaimed targets, but team up when
   a claimed target has >2 enemies near it. Decoys push apart (same owner only).
 - Gun parts are drawn as realistic vector art in core.js `drawPart`/`drawBody` (steel/polymer/wood materials) until

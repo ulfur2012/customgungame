@@ -232,6 +232,7 @@ const Game = (() => {
     updateBullets(dt);
     updateProjectiles(dt);
     updateGadgets(dt);
+    assignTeam(dt);
     updateGadgetList(dt);
     updateUlt(dt);
     updatePacks(dt);
@@ -1230,6 +1231,8 @@ const Game = (() => {
     // drones spin as one ring, spread perfectly evenly (3 drones = 120 degrees apart, like the nuclear symbol)
     g.spin = ((g.spin || 0) + dt * 2.4) % (Math.PI * 2);
     const flying = g.drones.filter(d => d.alive);
+    // single player: each drone goes for the enemy TEAMWORK gave it (or circles home)
+    const tgtOf = d => G.mode !== 'sp' ? tgt : d.assigned && d.assigned.hp > 0 && G.enemies.includes(d.assigned) ? d.assigned : null;
     for (const d of g.drones) {
       d.mf = Math.max(0, d.mf - dt);
       if (d.hb) { d.hb.life -= dt; if (d.hb.life <= 0) d.hb = null; }
@@ -1238,9 +1241,11 @@ const Game = (() => {
         if (d.back <= 0) { d.alive = true; d.hp = dhp; d.x = g.x; d.y = g.y; burst(g.x, g.y, g.medic ? '#32ff7e' : A.color, 8, 160); }
         continue;
       }
-      d.ph = g.spin + flying.indexOf(d) * Math.PI * 2 / flying.length;
+      const dt_ = tgtOf(d), group = flying.filter(o => tgtOf(o) === dt_); // drones on the same target share one even ring
+      d.ph = g.spin + group.indexOf(d) * Math.PI * 2 / group.length;
+      const tgt = dt_;
       const tx = tgt ? tgt.x + Math.cos(d.ph) * 110 : g.x + Math.cos(d.ph) * 58 * g.sc, ty = tgt ? tgt.y + Math.sin(d.ph) * 110 : g.y + Math.sin(d.ph) * 58 * g.sc;
-      const dx = tx - d.x, dy = ty - d.y, dl = Math.hypot(dx, dy) || 1, step = Math.min(dl, Math.max(A.speed, dl * 6) * dt);
+      const dx = tx - d.x, dy = ty - d.y, dl = Math.hypot(dx, dy) || 1, step = Math.min(dl, Math.max(A.speed, Math.min(dl * 6, A.speed * 2.5)) * dt);
       d.x += dx / dl * step; d.y += dy / dl * step;
       d.a = tgt ? Math.atan2(tgt.y - d.y, tgt.x - d.x) : Math.atan2(dy, dx);
       d.cd -= dt;
@@ -1714,7 +1719,41 @@ const Game = (() => {
 
   // DECOY AI: spread out. Take the nearest enemy nobody else is on; if another decoy already has it,
   // go for the next nearest, unless that enemy has more than 2 enemies around it (then help out).
+  // TEAMWORK: hand out your buddies and drones to enemies, most dangerous first, until strength >= danger
+  const dangerOf = e => e.mini ? DANGER.mini : DANGER[e.type] ?? 5;
+  function assignTeam(dt) {
+    G.teamT = (G.teamT || 0) - dt;
+    if (G.mode !== 'sp' || G.teamT > 0) return;
+    G.teamT = 0.25;
+    const units = [];
+    for (const g of G.gadgets) {
+      if (g.dead || !isMine(g.owner)) continue;
+      if (g.kind === 'decoy' && !g.supply && !g.medicBuddy && g.stats) { g.assigned = null; units.push({ u: g, x: g.x, y: g.y, str: STRENGTH.decoy, reach: DECOY_AI.maxSpread }); }
+      if (g.kind === 'hangar' && g.drones) {
+        const A = ABILITIES.hangar, R = A.range * (g.big ? MERGE.range : 1) * (g.carrier ? FORMATIONS.carrier.range : 1);
+        const str = g.carrier ? STRENGTH.carrierDrone : g.big ? STRENGTH.bigDrone : STRENGTH.drone;
+        for (const d of g.drones) { d.assigned = null; if (d.alive) units.push({ u: d, x: d.x, y: d.y, str, home: g, reach: R }); }
+      }
+    }
+    const canReach = (k, e) => Math.hypot(e.x - (k.home ? k.home.x : k.x), e.y - (k.home ? k.home.y : k.y)) <= k.reach;
+    const foes = G.enemies.filter(e => e.hp > 0).sort((a, b) => dangerOf(b) - dangerOf(a) || Math.hypot(a.x - G.me.x, a.y - G.me.y) - Math.hypot(b.x - G.me.x, b.y - G.me.y));
+    const free = new Set(units);
+    for (const e of foes) {
+      let need = dangerOf(e);
+      const near = [...free].filter(k => canReach(k, e)).sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y));
+      for (const k of near) { if (need <= 0) break; k.u.assigned = e; free.delete(k); need -= k.str; }
+      if (!free.size) break;
+    }
+    // anyone left over helps with the closest enemy they can reach
+    for (const k of free) {
+      let best = null, bd = Infinity;
+      for (const e of foes) { const d = Math.hypot(e.x - k.x, e.y - k.y); if (d < bd && canReach(k, e)) { best = e; bd = d; } }
+      k.u.assigned = best;
+    }
+  }
+
   function buddyTarget(g) {
+    if (G.mode === 'sp' && g.assigned && g.assigned.hp > 0 && G.enemies.includes(g.assigned)) return (g.target = g.assigned);
     const list = targets(), D = DECOY_AI;
     const sorted = list.map(t => ({ t, d: Math.hypot(t.x - g.x, t.y - g.y) })).sort((a, b) => a.d - b.d || a.t.x - b.t.x);
     if (!sorted.length) return (g.target = null);
