@@ -48,6 +48,9 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
   bullets as `kind.dfx` -> `droneHitFx` in `hitEnemy` (SP/co-op only; PvP drones shoot normally). Medic Drones still stack on top.
   Hangar megas (`hangF`): Drone Hive = Hangar | Big Hangar | Hangar trio (10 fast drones), Drone Uplink = Big Hangar + Laser beside
   (laser beams, SP/co-op; PvP bullets). Drawn on a hex base (`drawHangarMega`).
+  v93 more types (same `droneCombo`): Bubble -> Guardian (circle you, block bullets, half dmg, not in assignTeam), Grenade -> Bomber
+  (G.strikes bombs, PvE), Sensor -> Sniper (far, slow 4x shots), Smoke -> Ghost (bullets pass, `e.markT` +20% dmg in hitEnemy),
+  Black Hole -> Gravity (hits pull nearby enemies). Numbers COMBO.guard*/bomb*/snipe*/ghost*/gravDrone*.
 - Ability slots: 1 = E, 2 = C, 3 = V from wave 20, 4 = B from wave 30 (SP; all 4 in Test mode).
   Slot state is swapped into `me` (`swapAlt('alt'|'alt3'|'alt4')`) so ability code works for every slot.
   Passives work from any slot (`hasAb`). Weak abilities (`respawn`) get a use back every 30s.

@@ -660,6 +660,12 @@ const COMBOS = [
   { a: 'hangar', b: 'firepit', name: 'Flame Drones',  how: 'Throw a Fire Pit onto a Drone Hangar: the fire pit is used up and the drones turn orange. Their shots set enemies on fire.' },
   { a: 'hangar', b: 'tesla',   name: 'Shock Drones',  how: 'Throw a Tesla Coil onto a Drone Hangar: the coil is used up and the drones turn yellow. Every shot jumps with lightning to 2 more enemies close by.' },
   { a: 'hangar', b: 'mine',    name: 'Kamikaze Drones', how: 'Throw a Land Mine onto a Drone Hangar: the mine is used up and the drones turn red. They dive into the most dangerous enemies and blow up, then a new one launches after 3s. (A hangar can only have ONE drone type.)' },
+  // v93: five more drone types (still one per hangar)
+  { a: 'hangar', b: 'bubble',  name: 'Guardian Drones', how: 'Throw a Bubble Shield onto a Drone Hangar: the bubble is used up and the drones turn light blue. They fly in a circle around YOU, block enemy bullets (taking only half damage) and shoot anything close.' },
+  { a: 'hangar', b: 'grenade', name: 'Bomber Drones',   how: 'Throw a Grenade onto a Drone Hangar: the grenade is used up and the drones turn green. They fly over enemies and drop a bomb every 2.5s (35 damage in a circle), great on groups.' },
+  { a: 'hangar', b: 'sensor',  name: 'Sniper Drones',   how: 'Throw a Motion Sensor onto a Drone Hangar: the sensor is used up and the drones get long barrels. They stay far back and fire slow, very strong shots (4x damage) from twice as far.' },
+  { a: 'hangar', b: 'smoke',   name: 'Ghost Drones',    how: 'Throw a Smoke Bomb onto a Drone Hangar: the smoke is used up and the drones go see-through. Enemy bullets fly right through them, and every enemy they hit is marked and takes 20% more damage from everything for 4s.' },
+  { a: 'hangar', b: 'blackhole', name: 'Gravity Drones', how: 'Throw a Black Hole onto a Drone Hangar: the black hole is used up and the drones turn purple. Every shot pulls the enemies around the target in close together.' },
   { a: 'gravity', b: 'grenade', name: 'Implosion',    how: 'Throw a Grenade onto a Gravity Tower: the grenade is used up and every 5s the tower crushes everything it is pulling in (40 damage blast).' },
   { a: 'tesla', b: 'grenade', name: 'Storm Coil',     how: 'Throw a Grenade onto a Tesla Coil: the grenade is used up and every zap chains on to up to 2 more nearby enemies.' },
   // ---- passive combos: just equip both, they power each other up ----
@@ -691,6 +697,8 @@ const COMBOS = [
 const COMBO = { supplySpeed: 1.25, supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 1.5, healRange: 700, healShotSpeed: 900,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8,
   iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230,  cryoMortar: 1.5, shockDps: 20,
   blazeRange: 0.8, prismBeams: 2, prismMul: 0.6, medicDroneRange: 300, droneChill: 1.5, droneFreezeHits: 4, droneFreeze: 0.8, droneBurn: 3, droneChains: 2, droneChainRange: 170, droneChainMul: 0.6,
+  guardRing: 52, guardBlock: 16, guardTake: 0.5, bombEvery: 2.5, bombRadius: 110, bombDmg: 35, snipeRange: 520, snipeRing: 330, snipeEvery: 3, snipeMul: 4,
+  ghostMark: 4, ghostMul: 1.2, gravDroneRange: 170, gravDronePull: 7,
   kamiRadius: 95, kamiDmg: 55, kamiBack: 3, kamiSpeed: 1.7, implodeEvery: 5, implodeDamage: 40, implodeRadius: 180,
   fogSlow: 0.4, mistHeal: 5, springDmg: 40, springKb: 30, springCd: 1.5, napalmSize: 1.6, napalmTime: 4, cryoBhTime: 2, cryoBhFreeze: 3,
   bashTime: 0.35, bashDmg: 35, bashKb: 16, giftDelay: 0.6, giftRadius: 130, giftDmg: 60, poundRadius: 200, poundDmg: 30, poundKb: 10, mirrorShield: 80 };
@@ -898,6 +906,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5, hiveDrone: 
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 93, title: 'Even more drones', notes: ['5 new drone types! Throw onto a Drone Hangar:', 'Bubble Shield = Guardian Drones (fly around you and block bullets)', 'Grenade = Bomber Drones (drop bombs on groups)', 'Motion Sensor = Sniper Drones (stay far back, big hits)', 'Smoke Bomb = Ghost Drones (bullets go through them, enemies they hit take more damage)', 'Black Hole = Gravity Drones (pull enemies together)', 'Your gun is always under your player now.'] },
   { v: 92, title: 'New drone powers', notes: ['Throw a Freeze Bomb, Fire Pit, Tesla Coil or Land Mine onto a Drone Hangar to get Frost, Flame, Shock or Kamikaze Drones!', 'New mega buildings: Drone Hive (Hangar | Big Hangar | Hangar) with 10 fast drones, and Drone Uplink (Big Hangar next to a Laser Tower) whose drones shoot lasers.', 'Buy them in the 🏰 Mega tab.'] },
   { v: 91, title: 'Hex shield is back', notes: ['The Aegis Dome has its hexagon shield pattern again.'] },
   { v: 90, title: 'Cleaner mega buildings', notes: ['Artillery Battery, Aegis Dome, Inferno Tower, Black Hole Generator, Watchtower and Citadel Wall have new simple looks.', 'They all stand on a hexagon base like the Railgun, with one bright colour each. The Fortress got a hexagon base too.'] },
