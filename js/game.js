@@ -818,8 +818,7 @@ const Game = (() => {
         if (tc && !tc.plasma) { upgradeGadget(tc, 'plasma'); comboFx(tc.x, tc.y, '#ff9f43', 'PLASMA COIL'); return; }
         const t = nearTurret(n.x1, n.y1); // FLAME TURRET
         if (t && !t.flame) { t.flame = true; comboFx(t.x, t.y, '#ff6b1a', 'FLAME TURRET'); return; }
-        const wall = G.gadgets.find(g => g.kind === 'barrier' && g.rect && !g.dead && !g.fire && isMine(g.owner) &&
-          Math.hypot(n.x1 - clamp(n.x1, g.rect[0], g.rect[0] + g.rect[2]), n.y1 - clamp(n.y1, g.rect[1], g.rect[1] + g.rect[3])) <= 70);
+        const wall = myWall(n.x1, n.y1, 'fire');
         if (wall) { upgradeGadget(wall, 'fire'); comboFx(n.x1, n.y1, '#ff6b1a', 'WALL OF FIRE'); return; }
       }
       if (n.kind === 'bubble') { // SHIELDED TURRET (the bubble still goes up)
@@ -831,6 +830,18 @@ const Game = (() => {
         if (t) { t.spot = true; comboFx(t.x, t.y, '#ff9ff3', 'SPOTTER TURRET'); return; }
         const tc = myGadget('tesla', n.x1, n.y1, COMBO.near * 1.5); // SEEKER COIL
         if (tc && !tc.seeker) { upgradeGadget(tc, 'seeker'); comboFx(tc.x, tc.y, '#ff9ff3', 'SEEKER COIL'); return; }
+      }
+      if (n.kind === 'barrier' && !n.noMerge && !n.big) { // BUNKER: the barrier is used up as armor plating
+        const t = G.turrets.find(t => !t.bunker && t.hp > 0 && Math.hypot(t.x - n.x1, t.y - n.y1) <= COMBO.near);
+        if (t) { t.bunker = true; comboFx(t.x, t.y, '#a4b0be', 'BUNKER'); return; }
+      }
+      if (n.kind === 'decoy' && !n.supply) { // COMMAND TOWER (the decoy still lands as a normal buddy)
+        const rd = myGadget('radar', n.x1, n.y1, COMBO.near);
+        if (rd && !rd.command) { upgradeGadget(rd, 'command'); comboFx(rd.x, rd.y, '#ffd32a', 'COMMAND TOWER'); }
+      }
+      if (n.kind === 'freeze') { // ICE WALL (the freeze still goes off)
+        const wall = myWall(n.x1, n.y1, 'ice');
+        if (wall) { upgradeGadget(wall, 'ice'); comboFx(n.x1, n.y1, '#9ee7ff', 'ICE WALL'); }
       }
       if (n.kind === 'freeze') { // CRYO COIL (the freeze still goes off)
         const tc = myGadget('tesla', n.x1, n.y1, COMBO.near);
@@ -865,6 +876,9 @@ const Game = (() => {
     G.banner = { text: `COMBO: ${text}!`, t: 1.8 };
   };
   const nearTurret = (x, y) => G.turrets.find(t => !t.rocket && !t.rail && !t.spot && !t.medic && t.hp > 0 && Math.hypot(t.x - x, t.y - y) <= COMBO.near);
+  // your barrier whose wall is within 70 of (x, y) and doesn't have `flag` yet
+  const myWall = (x, y, flag) => G.gadgets.find(g => g.kind === 'barrier' && g.rect && !g.dead && !g[flag] && isMine(g.owner) &&
+    Math.hypot(x - clamp(x, g.rect[0], g.rect[0] + g.rect[2]), y - clamp(y, g.rect[1], g.rect[1] + g.rect[3])) <= 70);
   const myGadget = (kind, x, y, r) => G.gadgets.find(g => g.kind === kind && !g.dead && isMine(g.owner) && Math.hypot(g.x - x, g.y - y) <= r);
   // tell everyone a gadget changed (vortex / cryo)
   function upgradeGadget(g, what) {
@@ -961,6 +975,25 @@ const Game = (() => {
   const smokeBlocks = (x1, y1, x2, y2) => G.gadgets.some(g => g.kind === 'smoke' && g.puffs.some(p => segHitsCircle(x1, y1, x2, y2, p.x, p.y, p.r * 0.8)));
   const myDecoy = () => G.gadgets.find(g => g.kind === 'decoy' && isMine(g.owner));
 
+  // STORM COIL: a zap jumps on from enemy to enemy (nearest one not hit yet, up to stormChains more)
+  function stormChain(g, first, A) {
+    const done = [first];
+    let from = first;
+    for (let k = 0; k < COMBO.stormChains; k++) {
+      let pick = null, bd = COMBO.stormRange;
+      for (const o of G.enemies) {
+        if (done.includes(o)) continue;
+        const d = Math.hypot(o.x - from.x, o.y - from.y);
+        if (d < bd && lineOfSight(from.x, from.y, o.x, o.y)) { pick = o; bd = d; }
+      }
+      if (!pick) return;
+      g.zaps.push({ x: pick.x, y: pick.y, fx: from.x, fy: from.y, life: 0.18 });
+      hurtEnemy(pick, A.damage * (g.plasma ? 2 : 1), 0.5, Math.atan2(pick.y - from.y, pick.x - from.x));
+      if (g.cryo) pick.frozen = Math.max(pick.frozen || 0, COMBO.cryoFreeze);
+      done.push(pick); from = pick;
+    }
+  }
+
   function updateGadgetList(dt) {
     const me = G.me;
     for (const g of G.gadgets) {
@@ -1003,6 +1036,7 @@ const Game = (() => {
             if (Math.hypot(e.x - g.x, e.y - g.y) > A.radius * (g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1) || !lineOfSight(g.x, g.y, e.x, e.y)) continue;
             g.zaps.push({ x: e.x, y: e.y, life: 0.15 });
             if (G.mode === 'sp') { hurtEnemy(e, A.damage * (g.plasma ? 2 : 1), 0.5, Math.atan2(e.y - g.y, e.x - g.x)); if (g.cryo) e.frozen = Math.max(e.frozen || 0, COMBO.cryoFreeze); }
+            if (g.storm && G.mode === 'sp') stormChain(g, e, A);
           }
         } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius * (g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1) && lineOfSight(g.x, g.y, me.x, me.y)) {
           g.zaps.push({ x: me.x, y: me.y, life: 0.15 });
@@ -1038,6 +1072,12 @@ const Game = (() => {
         const [rx, ry, rw, rh] = g.rect;
         G.fx.push({ x: rx + Math.random() * rw, y: ry + Math.random() * rh, vx: 0, vy: -70, life: 0.5, max: 0.5, size: 7, color: Math.random() < 0.5 ? '#ff6b1a' : '#ffd32a' });
       }
+      if (g.kind === 'barrier' && g.ice && g.rect) { // ICE WALL: everything near it is chilled (slowed)
+        const [rx, ry, rw, rh] = g.rect;
+        const near = (x, y, r) => Math.hypot(x - clamp(x, rx, rx + rw), y - clamp(y, ry, ry + rh)) <= r + COMBO.iceNear;
+        if (isMine(g.owner)) { if (G.mode === 'sp') for (const e of G.enemies) if (near(e.x, e.y, e.r)) e.chill = COMBO.iceTime; }
+        else if (me.alive && hostileTo(g.owner) && near(me.x, me.y, me.r)) me.frozenT = Math.max(me.frozenT, COMBO.iceTime * 0.5);
+      }
       if (g.kind === 'barrier' && (g.electric || g.fire) && g.rect && g.tick <= 0) {
         g.tick = 0.5;
         const dps = (g.electric ? COMBO.fenceDps : 0) + (g.fire ? COMBO.fireWallDps : 0);
@@ -1063,7 +1103,7 @@ const Game = (() => {
     for (const r of G.rings) r.life -= dt;
     G.rings = G.rings.filter(r => r.life > 0);
     // frozen single player enemies thaw out
-    if (G.mode === 'sp') for (const e of G.enemies) if (e.frozen > 0) e.frozen -= dt;
+    if (G.mode === 'sp') for (const e of G.enemies) { if (e.frozen > 0) e.frozen -= dt; if (e.chill > 0) e.chill -= dt; }
   }
   // Buddy (decoy): a teammate bot with a copy of your main gun that hunts enemies
   // heal sources (heal zones, medic turrets, medic buddies, healing domes) also patch up your buddies
@@ -1225,12 +1265,14 @@ const Game = (() => {
     collideWorld(g);
     g.cd -= dt;
     g.kick = Math.max(0, g.kick - 40 * dt);
+    // COMMAND TOWER: buddies near your command radar shoot faster and harder
+    g.cmd = G.gadgets.some(r => r.kind === 'radar' && r.command && !r.dead && isMine(r.owner) && Math.hypot(r.x - g.x, r.y - g.y) <= COMBO.cmdRadius * (r.big ? MERGE.range : 1));
     if (sees && bd < g.stats.range && g.cd <= 0 && g.ammo > 0) {
       const s = g.stats;
       g.ammo--;
-      g.cd = Math.max(s.fireDelay, 0.12);
+      g.cd = Math.max(s.fireDelay, 0.12) * (g.cmd ? COMBO.cmdFire : 1);
       g.kick = 4;
-      shootFrom(g.x + Math.cos(g.aim) * 30, g.y + Math.sin(g.aim) * 30, g.aim, s);
+      shootFrom(g.x + Math.cos(g.aim) * 30, g.y + Math.sin(g.aim) * 30, g.aim, g.cmd ? { ...s, damage: s.damage * COMBO.cmdDmg } : s);
     }
   }
 
@@ -1293,7 +1335,7 @@ const Game = (() => {
     if (hostileToMe) for (const t of G.turrets) {
       if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, t.rail ? 30 : t.rocket ? 26 : 18)) continue;
       if (t.shieldT > 0) { burst(b.x, b.y, '#7ef9ff', 4, 120); return true; } // shielded turret
-      t.hp -= bulletDamage(b); t.flash = 0.1;
+      t.hp -= bulletDamage(b) * (t.bunker ? COMBO.bunkerTake : 1); t.flash = 0.1;
       if (t.hp <= 0) { t.t = 0; burst(t.x, t.y, '#cd84f1', 24, 300); }
       return true;
     }
@@ -1380,25 +1422,7 @@ const Game = (() => {
           ctx.fillText(txt, g.x, g.y + PLAYER.r + 14);
         }
       } else if (g.kind === 'barrier' && g.rect) {
-        const [x, y, w, h] = g.rect;
-        ctx.fillStyle = g.fire ? 'rgba(255,107,26,0.6)' : g.electric ? 'rgba(254,202,87,0.55)' : 'rgba(84,160,255,0.55)'; ctx.strokeStyle = g.electric ? '#fff7d6' : '#c8e1ff'; ctx.lineWidth = 2;
-        ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h);
-        if (g.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(x, y, w, h); }
-        if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(x - 3, y - 3, w + 6, h + 6); }
-        if (g.maxHp && g.maxHp !== Infinity && g.dur === undefined) drawBar(x + w / 2, y - 8, 50, 5, g.hp / g.maxHp, false, '#54a0ff');
-        if (g.electric) { // crackling sparks running along the fence
-          ctx.strokeStyle = '#fff3a0'; ctx.lineWidth = 2;
-          for (let i = 0; i < 3; i++) {
-            ctx.beginPath();
-            for (let k = 0; k <= 8; k++) {
-              const f = k / 8, px = w > h ? x + w * f : x + w / 2 + (Math.random() - 0.5) * 16, py = w > h ? y + h / 2 + (Math.random() - 0.5) * 16 : y + h * f;
-              k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
-            }
-            ctx.stroke();
-          }
-          ctx.strokeStyle = '#c7f4ff'; ctx.lineWidth = 3;
-          for (const z of g.zaps) { ctx.beginPath(); ctx.moveTo(clamp(z.x, x, x + w), clamp(z.y, y, y + h)); ctx.lineTo(z.x, z.y); ctx.stroke(); }
-        }
+        drawBarrier(g);
       } else if (g.kind === 'mine') {
         if (!hostileTo(g.owner)) { // enemies can't see your mines
           ctx.fillStyle = g.cryo ? '#4a6a80' : '#3d3d3d'; ctx.strokeStyle = g.cryo ? '#7ed6ff' : '#c0392b'; ctx.lineWidth = 2;
@@ -1414,35 +1438,9 @@ const Game = (() => {
         const s = (G.time * 2) % 1;
         for (let i = 0; i < 2; i++) { const o = -14 + ((s + i * 0.5) % 1) * 28; ctx.beginPath(); ctx.moveTo(o + 10, 0); ctx.lineTo(o - 4, -10); ctx.lineTo(o - 4, 10); ctx.fill(); }
       } else if (g.kind === 'radar') {
-        ctx.strokeStyle = `rgba(255,159,243,${0.6 * (1 - (G.time % 1.5) / 1.5)})`; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(g.x, g.y, 30 + ((G.time % 1.5) / 1.5) * 200, 0, Math.PI * 2); ctx.stroke();
-        // tower: base, mast and a spinning dish (big = merged)
-        ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc); ctx.translate(-g.x, -g.y);
-        if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(g.x - 22, g.y - 22, 44, 44); }
-        ctx.fillStyle = g.flash > 0 ? '#fff' : '#57606f'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
-        ctx.strokeStyle = '#2f3542'; ctx.lineWidth = 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
-        ctx.save(); ctx.translate(g.x, g.y); ctx.rotate(G.time * 3);
-        ctx.fillStyle = '#ff9ff3'; ctx.fillRect(-4, -4, 26, 8); ctx.beginPath(); ctx.arc(22, 0, 9, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-        drawBar(g.x, g.y - 32, 44, 6, g.hp / g.maxHp, false, '#ff9ff3');
+        drawRadar(g);
       } else if (g.kind === 'tesla') {
-        ctx.strokeStyle = 'rgba(72,219,251,0.25)'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * (g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1), 0, Math.PI * 2); ctx.stroke();
-        ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc); ctx.translate(-g.x, -g.y);
-        if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(g.x - 22, g.y - 22, 44, 44); }
-        ctx.fillStyle = g.flash > 0 ? '#fff' : '#2d3436'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36);
-        ctx.strokeStyle = g.plasma ? '#ff9f43' : g.cryo ? '#dff6ff' : '#48dbfb'; ctx.lineWidth = g.cryo || g.plasma ? 4 : 2; ctx.strokeRect(g.x - 18, g.y - 18, 36, 36);
-        if (g.cryo) { ctx.fillStyle = 'rgba(126,214,255,0.35)'; ctx.fillRect(g.x - 18, g.y - 18, 36, 36); }
-        ctx.fillStyle = '#636e72'; ctx.fillRect(g.x - 5, g.y - 14, 10, 18);
-        ctx.fillStyle = '#48dbfb'; ctx.beginPath(); ctx.arc(g.x, g.y - 12, 8 + Math.sin(G.time * 20) * 2, 0, Math.PI * 2); ctx.fill();
-        drawBar(g.x, g.y - 32, 44, 6, g.hp / g.maxHp, false, '#48dbfb');
-        ctx.restore();
-        ctx.strokeStyle = g.plasma ? '#ffbe76' : '#c7f4ff'; ctx.lineWidth = g.plasma ? 4 : 3;
-        for (const z of g.zaps) { // jagged lightning
-          ctx.beginPath(); ctx.moveTo(g.x, g.y - 4);
-          for (let i = 1; i < 6; i++) { const k = i / 6; ctx.lineTo(g.x + (z.x - g.x) * k + (Math.random() - 0.5) * 22, g.y - 4 + (z.y - g.y + 4) * k + (Math.random() - 0.5) * 22); }
-          ctx.lineTo(z.x, z.y); ctx.stroke();
-        }
+        drawTesla(g, A);
       }
       ctx.restore();
     }
@@ -1451,7 +1449,11 @@ const Game = (() => {
       ctx.strokeStyle = `rgba(${r.color},${1 - k})`; ctx.lineWidth = 8 * (1 - k) + 1;
       ctx.beginPath(); ctx.arc(r.x, r.y, r.r * (0.2 + 0.8 * k), 0, Math.PI * 2); ctx.stroke();
     }
-    // frozen enemies get an ice shell
+    // chilled enemies (ice wall) get a frosty ring, frozen ones an ice shell
+    if (G.mode === 'sp') for (const e of G.enemies) if (e.chill > 0 && !(e.frozen > 0) && canSee(e.x, e.y, e.r)) {
+      ctx.strokeStyle = 'rgba(158,231,255,0.8)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); ctx.stroke();
+    }
     if (G.mode === 'sp') for (const e of G.enemies) if (e.frozen > 0 && canSee(e.x, e.y, e.r)) {
       ctx.fillStyle = 'rgba(126,214,255,0.45)'; ctx.strokeStyle = '#dff6ff'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -1464,6 +1466,179 @@ const Game = (() => {
       ctx.globalAlpha = 0.35; drawChar(PLAYER, me.recall.x, me.recall.y, PLAYER.r, me.aim, '#00a8ff', false); ctx.globalAlpha = 1;
     }
     if (me.grapple) { ctx.strokeStyle = '#e1b12c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(me.x, me.y); ctx.lineTo(me.grapple.x, me.grapple.y); ctx.stroke(); }
+  }
+
+  // ---- building art (cheap layered vector shapes: shadow, dark rim, face, highlight)
+  const hash01 = k => { const v = Math.sin(k * 127.1 + 311.7) * 43758.5453; return v - Math.floor(v); };
+  const DASH = [10, 8], NODASH = [];
+  function bShadow(rx, ry) { ctx.fillStyle = 'rgba(0,0,0,0.32)'; ctx.beginPath(); ctx.ellipse(3, 6, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); }
+  function bPoly(n, r, rot) { ctx.beginPath(); for (let i = 0; i < n; i++) { const a = rot + i * Math.PI * 2 / n; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); } ctx.closePath(); }
+  function bBolts(n, r, rot, col) { ctx.fillStyle = col; for (let i = 0; i < n; i++) { const a = rot + i * Math.PI * 2 / n; ctx.fillRect(Math.cos(a) * r - 1.5, Math.sin(a) * r - 1.5, 3, 3); } }
+  function bSpark(x, y, len, col) { // little jagged arc
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x, y);
+    const a = Math.random() * Math.PI * 2;
+    for (let i = 1; i <= 3; i++) ctx.lineTo(x + Math.cos(a) * len * i / 3 + (Math.random() - 0.5) * 6, y + Math.sin(a) * len * i / 3 + (Math.random() - 0.5) * 6);
+    ctx.stroke();
+  }
+
+  function drawBarrier(g) {
+    const [x, y, w, h] = g.rect, horiz = w >= h, L = horiz ? w : h;
+    // [face, mid, dark edge, highlight]
+    const pal = g.ice ? ['#cdefff', '#86cdee', '#3a7ca3', '#ffffff'] : g.fire ? ['#ff9a4d', '#d9531a', '#5e1e06', '#ffd29a']
+      : g.electric ? ['#ffe08a', '#d6a42a', '#5e480f', '#fff7d6'] : ['#8ea7c6', '#5d7695', '#253246', '#dbe8f7'];
+    if (g.ice) { ctx.fillStyle = 'rgba(158,231,255,0.10)'; ctx.fillRect(x - COMBO.iceNear, y - COMBO.iceNear, w + COMBO.iceNear * 2, h + COMBO.iceNear * 2); }
+    ctx.fillStyle = 'rgba(0,0,0,0.33)'; ctx.fillRect(x + 4, y + 6, w, h);
+    const n = Math.max(2, Math.round(L / 24)), seg = L / n;
+    const frac = g.maxHp && g.maxHp !== Infinity ? Math.max(0, g.hp / g.maxHp) : 1, dmg = (1 - frac) * 1.3, seed = (g.x * 0.37 + g.y * 0.71) | 0;
+    for (let i = 0; i < n; i++) {
+      const sx = horiz ? x + i * seg : x, sy = horiz ? y : y + i * seg, sw = horiz ? seg : w, sh = horiz ? h : seg;
+      ctx.fillStyle = pal[2]; ctx.fillRect(sx, sy, sw, sh);
+      ctx.fillStyle = pal[1]; ctx.fillRect(sx + 1, sy + 1, sw - 2, sh - 2);
+      ctx.fillStyle = pal[0]; ctx.fillRect(sx + 3, sy + 3, sw - 6, sh - 7);
+      ctx.fillStyle = pal[3]; if (horiz) ctx.fillRect(sx + 3, sy + 3, sw - 6, 2); else ctx.fillRect(sx + 3, sy + 3, 2, sh - 7);
+      ctx.fillStyle = pal[2]; // rivets
+      if (horiz) { ctx.fillRect(sx + 4, sy + sh / 2 - 1, 2, 2); ctx.fillRect(sx + sw - 6, sy + sh / 2 - 1, 2, 2); }
+      else { ctx.fillRect(sx + sw / 2 - 1, sy + 4, 2, 2); ctx.fillRect(sx + sw / 2 - 1, sy + sh - 7, 2, 2); }
+      if (hash01(seed + i) < dmg) { // cracks appear segment by segment as HP drops
+        const cx = sx + sw / 2, cy = sy + sh / 2;
+        ctx.strokeStyle = 'rgba(15,20,30,0.85)'; ctx.lineWidth = 1.5; ctx.beginPath();
+        for (let k = 0; k < 3; k++) {
+          const a = hash01(seed * 3 + i * 7 + k) * Math.PI * 2, r = Math.min(sw, sh) * (0.3 + 0.3 * hash01(i + k * 13));
+          ctx.moveTo(cx, cy); const mx = cx + Math.cos(a) * r * 0.5 + 2, my = cy + Math.sin(a) * r * 0.5 - 1;
+          ctx.lineTo(mx, my); ctx.lineTo(cx + Math.cos(a + 0.4) * r, cy + Math.sin(a + 0.4) * r);
+        }
+        ctx.stroke();
+      }
+    }
+    if (g.ice) { // frost crystals on top
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      for (let i = 0; i < n; i++) { const sx = horiz ? x + (i + 0.5) * seg : x + w / 2, sy = horiz ? y + h / 2 : y + (i + 0.5) * seg; ctx.beginPath(); ctx.moveTo(sx, sy - 4); ctx.lineTo(sx + 3, sy); ctx.lineTo(sx, sy + 4); ctx.lineTo(sx - 3, sy); ctx.fill(); }
+    }
+    if (g.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fillRect(x, y, w, h); }
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(x - 3, y - 3, w + 6, h + 6); }
+    if (g.maxHp && g.maxHp !== Infinity && g.dur === undefined) drawBar(x + w / 2, y - 8, 50, 5, frac, false, g.ice ? '#9ee7ff' : '#54a0ff');
+    if (g.electric) { // crackling sparks running along the fence
+      ctx.strokeStyle = '#fff3a0'; ctx.lineWidth = 2;
+      for (let i = 0; i < 2; i++) {
+        ctx.beginPath();
+        for (let k = 0; k <= 8; k++) {
+          const f = k / 8, px = horiz ? x + w * f : x + w / 2 + (Math.random() - 0.5) * 16, py = horiz ? y + h / 2 + (Math.random() - 0.5) * 16 : y + h * f;
+          k ? ctx.lineTo(px, py) : ctx.moveTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.strokeStyle = '#c7f4ff'; ctx.lineWidth = 3;
+      for (const z of g.zaps) { ctx.beginPath(); ctx.moveTo(clamp(z.x, x, x + w), clamp(z.y, y, y + h)); ctx.lineTo(z.x, z.y); ctx.stroke(); }
+    }
+  }
+
+  function drawRadar(g) {
+    const T = G.time, acc = g.command ? '#ffd32a' : '#ff9ff3', k = (T % 1.5) / 1.5;
+    ctx.strokeStyle = g.command ? `rgba(255,211,42,${0.5 * (1 - k)})` : `rgba(255,159,243,${0.6 * (1 - k)})`; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(g.x, g.y, 30 + k * 200, 0, Math.PI * 2); ctx.stroke();
+    if (g.command) { // command radius
+      ctx.strokeStyle = 'rgba(255,211,42,0.3)'; ctx.lineWidth = 2; ctx.setLineDash(DASH);
+      ctx.beginPath(); ctx.arc(g.x, g.y, COMBO.cmdRadius * (g.big ? MERGE.range : 1), 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash(NODASH);
+    }
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    bShadow(22, 18);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(-24, -24, 48, 48); }
+    ctx.fillStyle = '#1f242d'; ctx.fillRect(-19, -17, 38, 38);              // side (depth)
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#57606f'; ctx.fillRect(-19, -19, 38, 34); // top
+    ctx.fillStyle = '#747d8c'; ctx.fillRect(-15, -15, 30, 26);
+    ctx.fillStyle = '#a4b0be'; ctx.fillRect(-15, -15, 30, 2);
+    bBolts(4, 21, Math.PI / 4, '#2f3542');
+    if (g.command) { ctx.fillStyle = '#ffd32a'; for (let i = 0; i < 4; i++) ctx.fillRect(-15 + i * 8, 9, 4, 2); }
+    // sweep wedge
+    const a = T * 3;
+    ctx.fillStyle = g.command ? 'rgba(255,211,42,0.18)' : 'rgba(255,159,243,0.18)';
+    ctx.beginPath(); ctx.moveTo(0, -2); ctx.arc(0, -2, 52, a - 0.8, a); ctx.closePath(); ctx.fill();
+    // mast + dish
+    ctx.fillStyle = '#2f3542'; ctx.beginPath(); ctx.arc(0, -2, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.save(); ctx.translate(0, -2); ctx.rotate(a);
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#2f3542'; ctx.lineWidth = 7; ctx.beginPath(); ctx.arc(-8, 0, 17, -1.05, 1.05); ctx.stroke();
+    ctx.strokeStyle = acc; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(-8, 0, 17, -1.05, 1.05); ctx.stroke();
+    ctx.strokeStyle = '#f1f2f6'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(-8, 0, 14, -0.8, 0.8); ctx.stroke();
+    ctx.strokeStyle = '#2f3542'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(14, 0); ctx.stroke();
+    ctx.fillStyle = Math.sin(T * 10) > 0 ? '#fff' : acc; ctx.beginPath(); ctx.arc(14, 0, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    if (g.command) { // flag on the mast
+      ctx.strokeStyle = '#dfe4ea'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-12, -12); ctx.lineTo(-12, -30); ctx.stroke();
+      ctx.fillStyle = '#ffd32a'; ctx.beginPath(); ctx.moveTo(-12, -30); ctx.lineTo(2 + Math.sin(T * 6) * 2, -26); ctx.lineTo(-12, -22); ctx.fill();
+    }
+    ctx.restore();
+    drawBar(g.x, g.y - 36 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
+  }
+
+  function drawTesla(g, A) {
+    const T = G.time, col = g.storm ? '#a29bfe' : g.plasma ? '#ff9f43' : g.cryo ? '#9ee7ff' : g.seeker ? '#ff9ff3' : '#48dbfb';
+    ctx.strokeStyle = col; ctx.globalAlpha = 0.25; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(g.x, g.y, A.radius * (g.big ? MERGE.range : 1) * (g.seeker ? COMBO.seekerRange : 1), 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    bShadow(22, 14);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; bPoly(6, 25, Math.PI / 6); ctx.stroke(); }
+    ctx.fillStyle = '#12171b'; bPoly(6, 21, Math.PI / 6); ctx.fill();
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#2d3436'; bPoly(6, 19, Math.PI / 6); ctx.fill();
+    ctx.fillStyle = '#3d4a50'; bPoly(6, 14, Math.PI / 6); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = g.cryo || g.plasma || g.storm ? 3 : 2; bPoly(6, 19, Math.PI / 6); ctx.stroke();
+    bBolts(6, 17, 0, '#636e72');
+    // central rod + stacked copper coil rings
+    ctx.fillStyle = '#636e72'; ctx.fillRect(-3, -22, 6, 26);
+    for (let i = 0; i < 5; i++) {
+      const yy = 4 - i * 5, rw = 10 - i * 0.8;
+      ctx.fillStyle = g.cryo ? '#bfe9ff' : '#b87333'; ctx.beginPath(); ctx.ellipse(0, yy, rw, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = g.cryo ? '#e8f8ff' : '#e0a060'; ctx.fillRect(-rw + 2, yy - 2, rw * 2 - 4, 1);
+    }
+    // glowing orb
+    const p = 1 + Math.sin(T * 18) * 0.15;
+    ctx.fillStyle = col; ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(0, -24, 11 * p, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, -24, 10, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#eaffff'; ctx.beginPath(); ctx.arc(0, -24, 5, 0, Math.PI * 2); ctx.fill();
+    if (Math.random() < (g.storm ? 0.7 : 0.35)) bSpark(0, -24, 14 + Math.random() * 8, col); // idle sparks
+    ctx.restore();
+    drawBar(g.x, g.y - 40 * g.sc, 44, 6, g.hp / g.maxHp, false, col);
+    ctx.strokeStyle = g.plasma ? '#ffbe76' : g.storm ? '#d6d2ff' : '#c7f4ff'; ctx.lineWidth = g.plasma ? 4 : 3;
+    const ox = g.x, oy = g.y - 24 * g.sc;
+    for (const z of g.zaps) { // jagged lightning (chain zaps start from the last enemy)
+      const fx = z.fx ?? ox, fy = z.fy ?? oy;
+      ctx.beginPath(); ctx.moveTo(fx, fy);
+      for (let i = 1; i < 6; i++) { const k = i / 6; ctx.lineTo(fx + (z.x - fx) * k + (Math.random() - 0.5) * 22, fy + (z.y - fy) * k + (Math.random() - 0.5) * 22); }
+      ctx.lineTo(z.x, z.y); ctx.stroke();
+    }
+  }
+
+  // armor plates bolted around a turret (BUNKER)
+  function drawBunker(t, r) {
+    ctx.save(); ctx.translate(t.x, t.y);
+    ctx.fillStyle = '#1e252b'; bPoly(8, r + 2, Math.PI / 8); ctx.fill();
+    ctx.fillStyle = '#5a6670'; bPoly(8, r, Math.PI / 8); ctx.fill();
+    ctx.fillStyle = '#7f8c96'; bPoly(8, r - 4, Math.PI / 8); ctx.fill();
+    ctx.strokeStyle = '#1e252b'; ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r - 8), Math.sin(a) * (r - 8)); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); ctx.stroke(); }
+    bBolts(8, r - 3, 0, '#c8d6e5');
+    ctx.restore();
+  }
+
+  // a normal turret: shaded octagon base + rotating head housing with your sidearm on top
+  function drawTurret(t) {
+    const acc = t.spot ? '#ff9ff3' : t.medic || t.healer ? '#32ff7e' : t.flame ? '#ff6b1a' : '#cd84f1';
+    ctx.save(); ctx.translate(t.x, t.y);
+    bShadow(20, 15);
+    ctx.restore();
+    if (t.bunker) drawBunker(t, 26);
+    ctx.save(); ctx.translate(t.x, t.y);
+    ctx.fillStyle = '#23252e'; bPoly(8, 19, Math.PI / 8); ctx.fill();
+    ctx.fillStyle = t.flash > 0 ? '#fff' : '#3a3d4a'; bPoly(8, 17, Math.PI / 8); ctx.fill();
+    ctx.fillStyle = '#545869'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = acc; ctx.lineWidth = 3; bPoly(8, 17, Math.PI / 8); ctx.stroke();
+    bBolts(4, 14.5, Math.PI / 4, '#9aa0b5');
+    ctx.rotate(t.aim);
+    ctx.fillStyle = '#2b2d38'; ctx.fillRect(-11, -9, 20, 18);
+    ctx.fillStyle = '#6b6f85'; ctx.fillRect(-11, -9, 20, 3);
+    ctx.fillStyle = acc; ctx.fillRect(-11, 5, 20, 2);
+    ctx.restore();
   }
 
   // arrow around you pointing at the nearest enemy (radar tower, tracker ultimate)
@@ -1941,8 +2116,10 @@ const Game = (() => {
       ctx.fillStyle = '#fff'; ctx.fillRect(h.x - 4, h.y - 1.5, 8, 3); ctx.fillRect(h.x - 1.5, h.y - 4, 3, 8);
     }
     for (const t of G.turrets) {
-      if (t.rail) { drawRailgun(t); continue; }
+      if (t.rail) { if (t.bunker) drawBunker(t, 40); drawRailgun(t); continue; }
       if (t.rocket) {
+        ctx.save(); ctx.translate(t.x, t.y); bShadow(30, 24); ctx.restore();
+        if (t.bunker) drawBunker(t, 34);
         ctx.fillStyle = '#3d3d4a'; ctx.strokeStyle = '#e17055'; ctx.lineWidth = 4;
         ctx.beginPath(); ctx.arc(t.x, t.y, 26, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
@@ -1975,8 +2152,7 @@ const Game = (() => {
         ctx.strokeStyle = 'rgba(255,159,243,0.35)'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(t.x, t.y); ctx.arc(t.x, t.y, 60, G.time * 4, G.time * 4 + 0.6); ctx.closePath(); ctx.stroke();
       }
-      ctx.fillStyle = '#4b4b5a'; ctx.strokeStyle = t.spot ? '#ff9ff3' : t.medic ? '#32ff7e' : '#cd84f1'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      drawTurret(t);
       if (t.medic) { ctx.fillStyle = '#32ff7e'; ctx.fillRect(t.x - 3, t.y + 4, 6, 14); ctx.fillRect(t.x - 7, t.y + 8, 14, 6); }
       if (t.spot) { ctx.fillStyle = '#ff9ff3'; ctx.beginPath(); ctx.arc(t.x - 12, t.y - 12, 6, 0, Math.PI * 2); ctx.fill(); }
       ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.aim);
@@ -1985,7 +2161,7 @@ const Game = (() => {
       ctx.drawImage(sp.canvas, sp.minX * k, sp.minY * k - 6, sp.w * k, sp.h * k);
       ctx.restore();
       if (t.flash > 0) { t.flash -= 1 / 60; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(t.x, t.y, 16, 0, Math.PI * 2); ctx.fill(); }
-      drawBar(t.x, t.y - 28, 40, 5, t.hp / t.maxHp, false, '#cd84f1');
+      drawBar(t.x, t.y - (t.bunker ? 34 : 28), 40, 5, t.hp / t.maxHp, false, t.bunker ? '#c8d6e5' : '#cd84f1');
     }
     const me = G.me;
     if (me.invT > 0) {
@@ -2113,6 +2289,9 @@ const Game = (() => {
           if (G.mode === 'mp') Net.send({ t: 'ult', k: 'sing', s: [s] });
           comboFx(bh.x, bh.y, '#8e44ad', 'SINGULARITY');
           G.shake = 30;
+        } else if (n.kind === 'grenade' && isMine(n.owner) && myGadget('tesla', n.x1, n.y1, COMBO.near) && !myGadget('tesla', n.x1, n.y1, COMBO.near).storm) { // STORM COIL
+          const tc = myGadget('tesla', n.x1, n.y1, COMBO.near);
+          upgradeGadget(tc, 'storm'); comboFx(tc.x, tc.y, '#a29bfe', 'STORM COIL');
         } else explode(n.x1, n.y1, G_.radius, G_.damage, n.owner);
       }
     }
@@ -2641,8 +2820,9 @@ const Game = (() => {
         const step = pathStep(e);
         if (step) { const l = Math.hypot(step.x - e.x, step.y - e.y) || 1; mx = (step.x - e.x) / l; my = (step.y - e.y) / l; }
       }
-      e.x += (mx * e.speed + e.kx) * dt;
-      e.y += (my * e.speed + e.ky) * dt;
+      const spd = e.speed * (e.chill > 0 ? COMBO.iceSlow : 1); // ice wall
+      e.x += (mx * spd + e.kx) * dt;
+      e.y += (my * spd + e.ky) * dt;
       e.kx *= Math.exp(-8 * dt); e.ky *= Math.exp(-8 * dt);
       e.flash = Math.max(0, e.flash - dt);
       e.aim = Math.atan2(dy, dx);
@@ -2669,7 +2849,7 @@ const Game = (() => {
       if (e.def.kamikaze && !e.gone && Math.hypot(tgt.x - e.x, tgt.y - e.y) < e.r + PLAYER.r + 18) {
         e.gone = true;
         explode(e.x, e.y, e.def.kamikaze.radius, e.def.kamikaze.damage, 'enemy');
-        if (tgt !== me && tgt.hp !== undefined) { if (tgt.kind) damageGadget(tgt, e.def.kamikaze.damage); else tgt.hp -= e.def.kamikaze.damage; }
+        if (tgt !== me && tgt.hp !== undefined) { if (tgt.kind) damageGadget(tgt, e.def.kamikaze.damage); else tgt.hp -= e.def.kamikaze.damage * (tgt.bunker ? COMBO.bunkerTake : 1); }
       }
       // HEALER: patches up enemies around it
       if (e.def.heal) {

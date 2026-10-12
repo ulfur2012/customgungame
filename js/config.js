@@ -567,6 +567,10 @@ const COMBOS = [
   { a: 'turret', b: 'bubble',  name: 'Shielded Turret', how: 'Throw a Bubble Shield onto a Turret: the turret can\'t be hurt while the bubble is up.' },
   { a: 'barrier', b: 'firepit', name: 'Wall of Fire',  how: 'Throw a Fire Pit onto a Barrier: the wall burns enemies that touch it (20/s).' },
   { a: 'turret', b: 'firepit', name: 'Flame Turret',   how: 'Throw a Fire Pit onto a Turret: its bullets do 50% more damage.' },
+  { a: 'barrier', b: 'freeze', name: 'Ice Wall',      how: 'Throw a Freeze Bomb onto a Barrier: the wall frosts over and enemies touching or right next to it move at 30% speed (the freeze bomb still goes off).' },
+  { a: 'turret', b: 'barrier', name: 'Bunker',        how: 'Throw a Barrier onto a Turret: the barrier is used up and bolts on as armor plating. The turret takes 50% less damage.' },
+  { a: 'radar', b: 'decoy',   name: 'Command Tower',  how: 'Throw a Decoy onto a Radar: the decoy stays a normal buddy and the radar becomes a Command Tower. Your buddies near it (320) shoot 30% faster and do 25% more damage.' },
+  { a: 'tesla', b: 'grenade', name: 'Storm Coil',     how: 'Throw a Grenade onto a Tesla Coil: the grenade is used up and every zap chains on to up to 2 more nearby enemies.' },
   // ---- passive combos: just equip both, they power each other up ----
   { a: 'sprinter', b: 'dash',   name: 'Speedster',      passive: true, how: 'Equip both: +2 dashes and dashes go 50% further.', syn: { dash: { add: { uses: 2 }, mul: { power: 1.5 } } } },
   { a: 'glass', b: 'overcharge', name: 'Overload',      passive: true, how: 'Equip both: overcharged shots do 3x damage instead of 2x.', syn: { overcharge: { add: { mul: 1 } } } },
@@ -580,7 +584,8 @@ const COMBOS = [
   { a: 'resupply', b: 'decoy', name: 'Supply Decoy',  how: 'Throw a Decoy onto your Resupply crate: the crate is used up and becomes a Supply Decoy (no gun, never attacks). It goes to every decoy you place, one after another, and gives each 3 mags, then comes back to any that run low. When no decoy needs ammo it only comes to you if you need ammo, and hands you 3 mags. Otherwise it tags along with the nearest decoy.' },
   { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
 ];
-const COMBO = { supplySpeed: 1.25, supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 1.5, healRange: 700, healShotSpeed: 900,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8 };
+const COMBO = { supplySpeed: 1.25, supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 1.5, healRange: 700, healShotSpeed: 900,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8,
+  iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230 };
 
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.
