@@ -1371,8 +1371,9 @@ const Game = (() => {
 
   // DRONE HANGAR: drones orbit the hangar, fly out at enemies near it and shoot them; shot-down drones come back later
   function updateHangar(g, A, dt) {
-    const CF = g.carrier && FORMATIONS.carrier, me = G.me, mine = isMine(g.owner), n = CF ? CF.drones : A.drones + (g.big ? 1 : 0), dhp = A.droneHp * (CF ? CF.droneHp : 1);
+    const CF = g.carrier && FORMATIONS.carrier, me = G.me, mine = isMine(g.owner), n = (CF ? CF.drones : A.drones + (g.big ? 1 : 0)) + ((g.lvl || 1) - 1) * (g.big || CF ? 2 : 1), dhp = A.droneHp * (CF ? CF.droneHp : 1);
     if (!g.drones) g.drones = Array.from({ length: n }, (_, i) => ({ x: g.x, y: g.y, ph: i * Math.PI * 2 / n, alive: false, back: 0.35 + i * 0.35, hp: dhp, cd: 0.5, a: 0, mf: 0 }));
+    while (g.drones.length < n) g.drones.push({ x: g.x, y: g.y, ph: 0, alive: false, back: 0.4, hp: dhp, cd: 0.5, a: 0, mf: 0 }); // upgrades add drones (Engineer: +1 per level, +2 if big)
     const R = A.range * rng(g) * (CF ? CF.range : 1);
     let tgt = null;
     if (mine) { let bd = R; for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd) { tgt = e; bd = d; } } }
