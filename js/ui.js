@@ -21,6 +21,7 @@
   function showResult(title, text, buttons) {
     el('resultTitle').textContent = title;
     el('resultText').textContent = text;
+    for (const o of document.querySelectorAll('#resultScreen .standings')) o.remove();
     const wrap = el('resultButtons');
     wrap.innerHTML = '';
     buttons.forEach((b, i) => {
@@ -590,12 +591,13 @@
   });
 
   // ---------------------------------------------------------------- multiplayer
-  const lobby = { players: [], inRound: false, alive: new Set(), round: [], settings: { mode: 'ffa', layout: 'medium', size: 'medium', banned: [] } };
+  const lobby = { players: [], inRound: false, alive: new Set(), round: [], settings: { mode: 'ffa', layout: 'medium', size: 'medium', banned: [], rounds: 3 }, roundNo: 0 };
+  const MODE_NAMES = { ffa: 'Free for all', teams: 'Teams (random)', coop: 'Co-op vs enemies' };
 
   function applyRules() { Rules.banned = new Set(lobby.settings.banned); }
   function rulesText() {
     const s = lobby.settings;
-    return `${s.mode === 'teams' ? 'Teams (random)' : 'Free for all'} · ${MAP.layouts[s.layout].label} · ${MAP.sizes[s.size || 'medium'].label} map` +
+    return `${MODE_NAMES[s.mode] || MODE_NAMES.ffa}${s.mode === 'coop' ? '' : ` · ${s.rounds || 3} round${(s.rounds || 3) === 1 ? '' : 's'}`} · ${MAP.layouts[s.layout].label} · ${MAP.sizes[s.size || 'medium'].label} map` +
       (s.free ? ' · all upgrades free' : ' · upgrades cost score') + (s.banned.length ? ` · ${s.banned.length} upgrade${s.banned.length === 1 ? '' : 's'} removed` : '');
   }
 
@@ -616,7 +618,17 @@
       b.classList.toggle('active', b.dataset.v === editing.mode);
       b.onclick = () => { editing.mode = b.dataset.v; renderHostSetup(); };
     }
-    el('modeHint').textContent = editing.mode === 'teams' ? 'Players are split into two random teams. No friendly fire.' : 'Everyone against everyone.';
+    el('modeHint').textContent = editing.mode === 'teams' ? 'Players are split into two random teams. No friendly fire.'
+      : editing.mode === 'coop' ? 'Everyone together against the waves and bosses, like single player. Dead players come back when a wave is cleared. Game over when everyone is down.'
+      : 'Everyone against everyone.';
+    // how many rounds make a game (FFA / Teams only — co-op is one long run)
+    editing.rounds = clamp(editing.rounds || 3, 1, 10);
+    el('roundsSetting').classList.toggle('hidden', editing.mode === 'coop');
+    el('roundsVal').textContent = editing.rounds;
+    el('roundsMinus').disabled = editing.rounds <= 1;
+    el('roundsPlus').disabled = editing.rounds >= 10;
+    el('roundsMinus').onclick = () => { editing.rounds = Math.max(1, editing.rounds - 1); renderHostSetup(); };
+    el('roundsPlus').onclick = () => { editing.rounds = Math.min(10, editing.rounds + 1); renderHostSetup(); };
     el('layoutPick').innerHTML = '';
     for (const key in MAP.layouts) {
       const b = document.createElement('button');
@@ -661,11 +673,16 @@
       await Net.host();
       lobby.players = [{ id: Net.state.myId, name: Account.user.name, wins: 0 }];
       lobby.inRound = false;
+      lobby.roundNo = 0;
       applyRules();
       showLobby();
     } catch (err) { netError(err); }
   }
   function saveRoomSettings() {
+    if (editing.mode !== lobby.settings.mode || editing.rounds !== lobby.settings.rounds) { // new kind of game: start counting again
+      lobby.roundNo = 0;
+      for (const p of lobby.players) p.wins = 0;
+    }
     lobby.settings = editing;
     applyRules();
     broadcastRoster();
@@ -704,12 +721,12 @@
       <li><i style="background:${PLAYER_COLORS[i % PLAYER_COLORS.length]}"></i>
       <span>${esc(p.name)}${p.id === Net.state.myId ? ' (you)' : ''}${i === 0 ? ' · host' : ''}</span>
       <b>${p.wins} ${p.wins === 1 ? 'win' : 'wins'}</b></li>`).join('') || '<li><span>Connecting…</span></li>';
-    el('lobbyRules').textContent = rulesText();
+    el('lobbyRules').textContent = rulesText() + (lobby.settings.mode !== 'coop' && lobby.roundNo ? ` · next: round ${lobby.roundNo + 1} of ${lobby.settings.rounds || 3}` : '');
     el('roomSettingsBtn').classList.toggle('hidden', !Net.state.isHost || lobby.inRound);
     el('startRoundBtn').classList.toggle('hidden', !Net.state.isHost);
     el('startRoundBtn').disabled = lobby.inRound;
     el('lobbyStatus').textContent = lobby.inRound ? 'A round is in progress…'
-      : Net.state.isHost ? (lobby.players.length < 2 ? 'Waiting for friends to join…' : 'Customize your guns, then start the round.')
+      : Net.state.isHost ? (lobby.players.length < 2 ? (lobby.settings.mode === 'coop' ? 'Waiting for friends (you can also start co-op alone).' : 'Waiting for friends to join…') : 'Customize your guns, then start the round.')
       : 'Customize your guns. The host starts the round.';
   }
 
@@ -717,17 +734,18 @@
   el('leaveLobby').onclick = () => { Net.leave(); goMenu(); };
 
   function broadcastRoster() {
-    Net.send({ t: 'roster', players: lobby.players, inRound: lobby.inRound, settings: lobby.settings });
+    Net.send({ t: 'roster', players: lobby.players, inRound: lobby.inRound, settings: lobby.settings, roundNo: lobby.roundNo });
     if (!el('lobby').classList.contains('hidden')) renderLobby();
   }
 
   el('startRoundBtn').onclick = () => {
-    if (lobby.players.length < 2) { toast('You need at least 2 players.'); return; }
+    const coop = lobby.settings.mode === 'coop';
+    if (lobby.players.length < 2 && !coop) { toast('You need at least 2 players.'); return; }
     lobby.inRound = true;
     lobby.alive = new Set(lobby.players.map(p => p.id));
     // random teams: shuffle, then alternate
     const order = lobby.players.map(p => ({ id: p.id, name: p.name })).sort(() => Math.random() - 0.5);
-    order.forEach((p, i) => { p.team = lobby.settings.mode === 'teams' ? i % 2 : i; });
+    order.forEach((p, i) => { p.team = coop ? 0 : lobby.settings.mode === 'teams' ? i % 2 : i; });
     const seed = Math.floor(Math.random() * 1e9);
     Net.send({ t: 'start', players: order, settings: lobby.settings, seed });
     broadcastRoster();
@@ -744,13 +762,22 @@
     if (unowned().length && !checkout()) stripUnowned();
     applyRules();
     buildMap(settings.layout, seed, settings.size);
-    Game.startMP(players, Net.state.myId, settings.mode === 'teams');
+    Game.startMP(players, Net.state.myId, settings.mode === 'teams', settings.mode === 'coop');
   }
 
   // host bookkeeping
   function handleDead(id) {
     if (!Net.state.isHost || !lobby.inRound) return;
     lobby.alive.delete(id);
+    if (lobby.settings.mode === 'coop') { // co-op: game over only when everyone is down
+      if ([...lobby.alive].some(pid => lobby.round.some(p => p.id === pid))) return;
+      lobby.inRound = false;
+      const wave = Game.coopWave;
+      Net.send({ t: 'end', coop: true, wave });
+      broadcastRoster();
+      coopOver(wave);
+      return;
+    }
     const teamOf = pid => (lobby.round.find(p => p.id === pid) || {}).team;
     const teamsLeft = new Set([...lobby.alive].map(teamOf));
     if (teamsLeft.size > 1) return;
@@ -759,12 +786,25 @@
     lobby.inRound = false;
     for (const p of lobby.players) if (winners.includes(p.id)) p.wins++;
     const winner = lobby.settings.mode === 'teams' ? null : winners[0] || null;
-    Net.send({ t: 'end', winner, team: winTeam });
+    lobby.roundNo++;
+    // last round of the game: final standings, then everything starts over
+    const final = lobby.roundNo >= (lobby.settings.rounds || 3) ? standings() : null;
+    Net.send({ t: 'end', winner, team: winTeam, final, roundNo: lobby.roundNo });
+    if (final) { lobby.roundNo = 0; for (const p of lobby.players) p.wins = 0; }
     broadcastRoster();
-    roundOver(winner, winTeam);
+    roundOver(winner, winTeam, final);
+  }
+  const standings = () => lobby.players.map(p => ({ name: p.name, wins: p.wins, id: p.id })).sort((a, b) => b.wins - a.wins);
+
+  function coopOver(wave) {
+    setTimeout(() => {
+      if (Game.mode === 'mp') Game.stop();
+      overlay('pauseScreen', false);
+      showResult('Game over', `Your team reached wave ${wave}. Change your guns in the lobby and try again!`, [{ label: 'Back to lobby', fn: showLobby }]);
+    }, 1200);
   }
 
-  function roundOver(winner, team) {
+  function roundOver(winner, team, final) {
     const name = (lobby.players.find(p => p.id === winner) || {}).name;
     const mine = (lobby.round.find(p => p.id === Net.state.myId) || {}).team;
     const title = lobby.settings.mode === 'teams'
@@ -773,7 +813,16 @@
     setTimeout(() => {
       if (Game.mode === 'mp') Game.stop();
       overlay('pauseScreen', false);
-      showResult(title, 'Change your guns in the lobby before the next round.', [{ label: 'Back to lobby', fn: showLobby }]);
+      if (final && final.length) {
+        const top = final[0], tie = final.length > 1 && final[1].wins === top.wins;
+        const t2 = tie ? "It's a tie!" : top.id === Net.state.myId ? 'You won the game!' : `${top.name} won the game!`;
+        showResult(t2, 'Final standings (round wins):', [{ label: 'Back to lobby', fn: showLobby }]);
+        const ol = document.createElement('ol');
+        ol.className = 'standings';
+        ol.innerHTML = final.map((p, i) => `<li><span>${i + 1}. ${esc(p.name)}${p.id === Net.state.myId ? ' (you)' : ''}</span><b>${p.wins} ${p.wins === 1 ? 'win' : 'wins'}</b></li>`).join('');
+        el('resultText').after(ol);
+        toast(title);
+      } else showResult(title, `Round ${lobby.roundNo} of ${lobby.settings.rounds || 3} done. Change your guns in the lobby before the next round.`, [{ label: 'Back to lobby', fn: showLobby }]);
     }, 1200);
   }
 
@@ -789,6 +838,7 @@
     if (Net.state.isHost) return;
     lobby.players = m.players;
     lobby.inRound = m.inRound;
+    if (m.roundNo !== undefined) lobby.roundNo = m.roundNo;
     if (m.settings) { lobby.settings = m.settings; applyRules(); }
     if (!el('lobby').classList.contains('hidden')) renderLobby();
   });
@@ -801,7 +851,16 @@
   Net.on('start', m => { if (!Net.state.isHost) { lobby.inRound = true; beginRound(m.players, m.settings, m.seed); } });
   Net.on('dead', m => handleDead(m.from));
   Game.on('myDeath', () => handleDead(Net.state.myId));
-  Net.on('end', m => { if (!Net.state.isHost) { lobby.inRound = false; roundOver(m.winner, m.team); } });
+  Net.on('end', m => {
+    if (Net.state.isHost) return;
+    lobby.inRound = false;
+    if (m.coop) return coopOver(m.wave);
+    if (m.roundNo !== undefined) lobby.roundNo = m.roundNo;
+    roundOver(m.winner, m.team, m.final);
+  });
+  // co-op: a player who came back counts as alive again
+  Net.on('rev', m => { if (Net.state.isHost && lobby.inRound) lobby.alive.add(m.from); });
+  Game.on('revive', () => { if (Net.state.isHost && lobby.inRound) lobby.alive.add(Net.state.myId); });
   Net.on('hostLeft', () => {
     Game.stop();
     Net.leave();

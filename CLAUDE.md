@@ -51,6 +51,14 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
   crate) delivers 3 mags to each decoy, else follows the nearest decoy / you if you need ammo.
   Medic Buddy stays with the other decoys.
 - You can't see enemies/enemy players unless there's line of sight to their middle (`canSee`).
+- MP host settings: mode ffa / teams / coop, `rounds` (1-10, default 3; FFA/Teams only) -> after N rounds final standings
+  (round wins) and wins reset (`lobby.roundNo`, ui.js `handleDead`/`roundOver`).
+- CO-OP (`G.coop`, mode stays 'mp', everyone team 0 so no friendly fire; `pve()` = SP or co-op for all enemy code): the HOST
+  runs waves/enemies/bosses (+50% count/HP per extra player via `coopMul`), enemies target the nearest player (`players()`,
+  multi-source flow map). Host sends `es` snapshots (~12/s, max 140 enemies) + `ev` events (enemy bullets via `addBullet`
+  hook, boss moves, bomber blasts, boss down, `rs` = dead players respawn when a wave is cleared). Clients mirror enemies
+  (`applySnap`/`updateMirror`), send their damage `eh` (all enemy damage goes through `hitEnemy`) and freeze/chill/gravity
+  `ef`. Game over when all are dead. Not synced: client knockback/pulls on enemies; enemies only aim at the host's buildings.
 - Multiplayer damage is worked out by whoever gets hit; gadgets are synced with `gad`/`gadx`/`gadc`/`gadm`.
 - Maps must be identical in every browser (no random-comparator sorts in the generator).
 - SHOP (config `SHOP`, `priceOf` in core.js, `unowned`/`checkout` in ui.js): score from SP runs (not test) is banked

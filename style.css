@@ -569,3 +569,10 @@ body.mobile #ability4Btn .ab-state { color: #062b12; font-weight: 800; font-size
 .panel { max-width: calc((100vw - 32px) / var(--ui, 1)); }
 .overlay { overflow-y: auto; }
 #uiScale { width: 100%; min-height: 36px; }
+
+/* host setup: rounds per game stepper */
+.stepper { display: flex; align-items: center; gap: 10px; background: var(--panel-2); padding: 4px; border-radius: 12px; width: max-content; }
+.stepper button { width: 48px; height: 44px; padding: 0 !important; font-size: 22px; border-radius: 9px !important; }
+.stepper b { min-width: 28px; text-align: center; font-size: 18px; }
+.standings { list-style: none; padding: 0; margin: 8px 0; text-align: left; }
+.standings li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 10px; border-radius: 8px; background: var(--panel-2); margin-bottom: 4px; }

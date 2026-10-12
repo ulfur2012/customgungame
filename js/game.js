@@ -8,7 +8,7 @@ const Game = (() => {
 
   let W = 0, H = 0, DPR = 1, zoom = 1;
   let G = null, raf = 0, last = 0;
-  const hooks = { spOver: () => {}, myDeath: () => {}, bossDown: () => {} };
+  const hooks = { spOver: () => {}, myDeath: () => {}, bossDown: () => {}, revive: () => {} };
 
   function resize() {
     DPR = Math.min(devicePixelRatio || 1, 2);
@@ -37,14 +37,18 @@ const Game = (() => {
     for (const k of SLOT_KEYS) { const v = me[k]; me[k] = me[slot][k]; me[slot][k] = v; }
   }
   // is this ability equipped in any slot? (passives work from all of them)
+  // PvE = single player or CO-OP (players vs enemies). In co-op the host simulates the enemies, clients mirror them.
+  const pve = () => G.mode === 'sp' || !!G.coop;
+  const coopHost = () => !!G.coop && Net.state.isHost;
+  const coopClient = () => !!G.coop && !Net.state.isHost;
   const hasAb = id => G.me.ability === id || G.me.alt.ability === id || G.me.alt3.ability === id || G.me.alt4.ability === id;
   const slot3Wave = () => (myClass() || {}).id === 'engineer' ? CLASSES.engineerSlot3 : SLOT3_WAVE;
-  const slot3Open = () => G.mode === 'sp' && (G.test || G.wave >= slot3Wave());
-  const slot4Open = () => G.mode === 'sp' && (G.test || G.wave >= SLOT4_WAVE);
+  const slot3Open = () => pve() && (G.test || G.wave >= slot3Wave());
+  const slot4Open = () => pve() && (G.test || G.wave >= SLOT4_WAVE);
   const allSlots = () => [G.me, G.me.alt, G.me.alt3, G.me.alt4];
   // CLASSES: only one section's abilities in slots 1-3 -> slot 4 is the class ability (from CLASSES.unlockWave in SP)
   const myClass = () => classOf(Account.user.loadout);
-  const classOpen = () => G.mode !== 'sp' || G.test || G.wave >= CLASSES.unlockWave;
+  const classOpen = () => !pve() || G.test || G.wave >= CLASSES.unlockWave;
   function slot4Pick() {
     const c = myClass();
     if (c) return classOpen() ? c.ab : null;
@@ -172,23 +176,24 @@ const Game = (() => {
   }
 
   // players: [{id, name, team}] in spawn order. team mode = no friendly fire, last team standing wins
-  function startMP(players, myId, teams) {
+  function startMP(players, myId, teams, coop) {
     resize();
     const idx = Math.max(0, players.findIndex(p => p.id === myId));
     const spawnOf = i => MAP.spawns[i % MAP.spawns.length];
     G = newState('mp', spawnOf(idx), PLAYER_COLORS[idx % PLAYER_COLORS.length]);
     G.myId = myId;
-    G.teams = !!teams;
-    G.me.team = (players[idx] || {}).team || 0;
+    G.teams = !!teams || !!coop;
+    G.me.team = coop ? 0 : (players[idx] || {}).team || 0;
+    if (coop) Object.assign(G, { coop: true, coopN: players.length, emap: new Map(), cdead: new Map(), ev: [], hitBuf: new Map(), esT: 0, hitT: 0, efT: 0, eSeq: 0 });
     players.forEach((p, i) => {
       if (p.id === myId) return;
       const [x, y] = spawnOf(i);
       G.remotes.set(p.id, {
-        id: p.id, name: p.name, team: p.team || 0, color: PLAYER_COLORS[i % PLAYER_COLORS.length],
+        id: p.id, rp: true, name: p.name, team: coop ? 0 : p.team || 0, color: PLAYER_COLORS[i % PLAYER_COLORS.length],
         x, y, tx: x, ty: y, aim: 0, hp: PLAYER.hp, gun: 0, alive: true, kick: 0, flash: 0, sprites: [null, null],
       });
     });
-    G.banner = { text: G.teams ? 'Team match — last team standing wins!' : 'Last one standing wins!', t: 2.5 };
+    G.banner = coop ? { text: 'Co-op — beat the waves together!', t: 2.5 } : { text: G.teams ? 'Team match — last team standing wins!' : 'Last one standing wins!', t: 2.5 };
     begin();
     Net.send({ t: 'kit', main: G.me.guns[0].build, secondary: G.me.guns[1].build });
   }
@@ -227,11 +232,14 @@ const Game = (() => {
   function update(dt) {
     const me = G.me;
     if (me.alive) updateMe(dt);
-    G.cam.x += (me.x - G.cam.x) * Math.min(1, dt * 10);
-    G.cam.y += (me.y - G.cam.y) * Math.min(1, dt * 10);
+    const camT = G.coop && !me.alive ? [...G.remotes.values()].find(r => r.alive) || me : me; // co-op: watch a friend while dead
+    G.cam.x += (camT.x - G.cam.x) * Math.min(1, dt * 10);
+    G.cam.y += (camT.y - G.cam.y) * Math.min(1, dt * 10);
 
-    if (G.mode === 'sp') { updateWaves(dt); updateEnemies(me.slowT > 0 ? dt * ABILITIES.slowmo.factor : dt); }
-    else {
+    if (G.mode === 'sp' || coopHost()) { updateWaves(dt); updateEnemies(me.slowT > 0 ? dt * ABILITIES.slowmo.factor : dt); }
+    if (coopClient()) updateMirror(dt);
+    if (G.coop) coopNet(dt);
+    if (G.mode === 'mp') {
       for (const r of G.remotes.values()) {
         r.x += (r.tx - r.x) * Math.min(1, dt * 15);
         r.y += (r.ty - r.y) * Math.min(1, dt * 15);
@@ -366,7 +374,7 @@ const Game = (() => {
   const teamOf = id => (G.remotes.has(id) ? G.remotes.get(id).team : G.me.team);
 
   function targets() {
-    if (G.mode === 'sp') return G.enemies;
+    if (pve()) return G.enemies;
     return [...G.remotes.values()].filter(r => r.alive && isEnemy(r)).map(r => ({ x: r.x, y: r.y, r: PLAYER.r }));
   }
 
@@ -427,6 +435,7 @@ const Game = (() => {
   }
 
   function addBullet(x, y, a, speed, dmg, kb, team, owner, range = BULLET_RANGE, falloff = 0, flare = false, kind = {}) {
+    if (team === 'e' && G.coop && Net.state.isHost) G.ev.push(['b', Math.round(x), Math.round(y), +a.toFixed(3), Math.round(speed), dmg, kb, Math.round(range)]);
     G.bullets.push({ x, y, ox: x, oy: y, range, falloff, flare,
       bounce: kind.bounce || 0, pierce: !!kind.pierce, homing: !!kind.homing, ghost: !!kind.ghost, boom: kind.boom || null, hit: new Set(), vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
   }
@@ -483,7 +492,7 @@ const Game = (() => {
       G.over = true;
       setTimeout(() => G && hooks.spOver({ wave: G.wave, score: G.score, kills: G.kills, test: G.test }), 900);
     } else {
-      G.banner = { text: 'You were eliminated', t: 3 };
+      G.banner = { text: G.coop ? 'You died — back next wave!' : 'You were eliminated', t: 3 };
       Net.send({ t: 'dead', by });
       addFeed(by, G.myId);
       hooks.myDeath(by);
@@ -510,7 +519,7 @@ const Game = (() => {
       const out = b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h;
       if (wall && G.gadgets.length) { // shooting a Barrier wears it down
         const bg = G.gadgets.find(g => g.rect === wall && !g.dead);
-        if (bg && bg.hp !== undefined && (G.mode === 'sp' ? b.team === 'e' : b.owner !== bg.owner && (!G.teams || teamOf(b.owner) !== teamOf(bg.owner)))) damageGadget(bg, bulletDamage(b));
+        if (bg && bg.hp !== undefined && (pve() ? b.team === 'e' : b.owner !== bg.owner && (!G.teams || teamOf(b.owner) !== teamOf(bg.owner)))) damageGadget(bg, bulletDamage(b));
       }
       if (wall || out) {
         if (b.bounce > 0) {
@@ -538,7 +547,7 @@ const Game = (() => {
       const a = Math.atan2(b.vy, b.vx);
       if ((G.gadgets.length || G.turrets.length) && bulletHitsGadget(b, x1, y1)) { b.life = 0; continue; }
       if (b.team === 'me') {
-        if (G.mode === 'sp') {
+        if (pve()) {
           for (const e of G.enemies) {
             if (e.hp <= 0 || b.hit.has(e) || !segHitsCircle(x1, y1, b.x, b.y, e.x, e.y, e.r)) continue;
             b.hit.add(e);
@@ -554,7 +563,7 @@ const Game = (() => {
           }
         }
       } else {
-        const friendly = G.mode === 'mp' && G.teams && teamOf(b.owner) === me.team;
+        const friendly = G.mode === 'mp' && G.teams && b.team !== 'e' && teamOf(b.owner) === me.team;
         if (me.alive && !friendly && !b.hit.has('me') && segHitsCircle(x1, y1, b.x, b.y, me.x, me.y, me.r)) {
           b.hit.add('me');
           if (me.reflectT > 0) { // mirror: send it straight back
@@ -565,6 +574,14 @@ const Game = (() => {
           }
           hurtMe(bulletDamage(b), b.kb, a, b.owner);
           if (!b.pierce) { b.life = 0; continue; }
+        }
+        if (G.coop && b.team === 'r') { // a friend's bullet: their own game does the damage, here it just stops
+          const e = G.enemies.find(e => segHitsCircle(x1, y1, b.x, b.y, e.x, e.y, e.r));
+          if (e && !b.pierce) { b.life = 0; burst(b.x, b.y, e.def.color, 3, 120); continue; }
+        }
+        if (G.coop && b.team === 'e') {
+          const r = [...G.remotes.values()].find(r => r.alive && segHitsCircle(x1, y1, b.x, b.y, r.x, r.y, PLAYER.r));
+          if (r) { b.life = 0; continue; }
         }
         if (b.team === 'r') {
           for (const r of G.remotes.values()) {
@@ -585,13 +602,13 @@ const Game = (() => {
     burst(x, y, '#ff7675', 10, 200);
     G.fx.push({ x, y, vx: 0, vy: 0, life: 0.15, max: 0.15, size: radius * 1.4, color: 'rgba(255,120,100,0.45)' });
     if (b.team === 'me') {
-      if (G.mode === 'sp') {
+      if (pve()) {
         for (const e of [...G.enemies]) {
           if (Math.hypot(e.x - x, e.y - y) <= radius + e.r) hitEnemy(e, { dmg: damage, falloff: 0, kb: 1, x: e.x, y: e.y, ox: e.x, oy: e.y, range: 1 }, Math.atan2(e.y - y, e.x - x));
         }
       }
     } else {
-      const friendly = G.mode === 'mp' && G.teams && teamOf(b.owner) === me.team;
+      const friendly = G.mode === 'mp' && G.teams && b.team !== 'e' && teamOf(b.owner) === me.team;
       if (me.alive && !friendly && Math.hypot(me.x - x, me.y - y) <= radius + me.r) hurtMe(damage, 1, Math.atan2(me.y - y, me.x - x), b.owner);
     }
   }
@@ -606,7 +623,7 @@ const Game = (() => {
   // ---------------------------------------------------------------- abilities
   const myOwnerId = () => G.myId || 'me';
   const isMine = owner => owner === myOwnerId();
-  const hostileTo = owner => !isMine(owner) && (G.mode === 'sp' ? owner === 'enemy' : (!G.teams || teamOf(owner) !== G.me.team));
+  const hostileTo = owner => !isMine(owner) && (pve() ? owner === 'enemy' : (!G.teams || teamOf(owner) !== G.me.team));
 
   function updateAbility(dt) {
     const me = G.me;
@@ -897,14 +914,14 @@ const Game = (() => {
   function areaOf(g, r, onEnemy, onMe) {
     const me = G.me;
     if (isMine(g.owner)) {
-      if (G.mode === 'sp') for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= r + e.r) onEnemy(e);
+      if (pve()) for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= r + e.r) onEnemy(e);
     } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= r + me.r) onMe();
   }
 
   // like areaOf, but hits everyone in range, the thrower too
   function areaAll(g, r, onEnemy, onMe) {
     const me = G.me;
-    if (isMine(g.owner) && G.mode === 'sp') for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= r + e.r) onEnemy(e);
+    if (isMine(g.owner) && pve()) for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= r + e.r) onEnemy(e);
     if (me.alive && Math.hypot(me.x - g.x, me.y - g.y) <= r + me.r) onMe();
   }
 
@@ -1266,7 +1283,7 @@ const Game = (() => {
       if (isMine(g.owner)) for (const b of G.gadgets) if (b.kind === 'decoy' && !b.dead && isMine(b.owner) && Math.hypot(b.x - g.x, b.y - g.y) <= R) b.sh = A.shield;
     }
     if (g.shock) { // SHOCK DOME
-      if (isMine(g.owner)) { if (G.mode === 'sp') for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= R + e.r) { hurtEnemy(e, COMBO.shockDps / 2, 0.5, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); } }
+      if (isMine(g.owner)) { if (pve()) for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= R + e.r) { hurtEnemy(e, COMBO.shockDps / 2, 0.5, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); } }
       else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= R + me.r) { hurtMe(COMBO.shockDps / 2, 0.5, Math.atan2(me.y - g.y, me.x - g.x), g.owner); g.zaps.push({ x: me.x, y: me.y, life: 0.15 }); }
     }
   }
@@ -1299,7 +1316,7 @@ const Game = (() => {
     const dmg = A.dps * 0.25 * (g.big ? 1.5 : 1), hits = (x, y, r) => Math.hypot(x - g.x, y - g.y) <= R + r &&
       (g.blaze || angDiff(Math.atan2(y - g.y, x - g.x), g.aim) <= A.cone) && lineOfSight(g.x, g.y, x, y);
     if (isMine(g.owner)) {
-      if (G.mode === 'sp') for (const e of [...G.enemies]) if (hits(e.x, e.y, e.r)) { e.burnT = A.burn; hurtEnemy(e, dmg, 0.3, Math.atan2(e.y - g.y, e.x - g.x)); }
+      if (pve()) for (const e of [...G.enemies]) if (hits(e.x, e.y, e.r)) { e.burnT = A.burn; hurtEnemy(e, dmg, 0.3, Math.atan2(e.y - g.y, e.x - g.x)); }
     } else if (me.alive && hostileTo(g.owner) && hits(me.x, me.y, me.r)) { me.burnT = A.burn; me.burnBy = g.owner; hurtMe(dmg, 0.3, Math.atan2(me.y - g.y, me.x - g.x), g.owner); }
   }
 
@@ -1326,14 +1343,14 @@ const Game = (() => {
     let tgt = null, extra = [];
     if (isMine(g.owner)) {
       const list = targets();
-      if (g.tgt) tgt = G.mode === 'sp' ? (list.includes(g.tgt) ? g.tgt : null) : list.find(e => Math.hypot(e.x - g.tgt.x, e.y - g.tgt.y) < 60) || null;
+      if (g.tgt) tgt = pve() ? (list.includes(g.tgt) ? g.tgt : null) : list.find(e => Math.hypot(e.x - g.tgt.x, e.y - g.tgt.y) < 60) || null;
       if (tgt && !ok(tgt)) tgt = null;
       if (!tgt) {
         g.heat = 0;
         let bd = Infinity;
         for (const e of list) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd && ok(e)) { tgt = e; bd = d; } }
       }
-      g.tgt = tgt ? (G.mode === 'sp' ? tgt : { x: tgt.x, y: tgt.y }) : null;
+      g.tgt = tgt ? (pve() ? tgt : { x: tgt.x, y: tgt.y }) : null;
       if (tgt && g.prism) extra = list.filter(e => e !== tgt && ok(e)).sort((a, b) => Math.hypot(a.x - g.x, a.y - g.y) - Math.hypot(b.x - g.x, b.y - g.y)).slice(0, COMBO.prismBeams);
     } else if (me.alive && hostileTo(g.owner) && ok(me)) tgt = me;
     if (!tgt) { g.heat = Math.max(0, (g.heat || 0) - dt * 2); return; }
@@ -1346,7 +1363,7 @@ const Game = (() => {
     g.tick = 0.2;
     const dmg = (A.dps + (A.maxDps - A.dps) * g.heat) * 0.2 * (g.big ? 1.5 : 1);
     if (tgt === me) hurtMe(dmg, 0.05, g.aim, g.owner);
-    else if (G.mode === 'sp') {
+    else if (pve()) {
       hurtEnemy(tgt, dmg, 0.05, g.aim);
       for (const e of extra) hurtEnemy(e, dmg * COMBO.prismMul, 0.05, Math.atan2(e.y - g.y, e.x - g.x));
     }
@@ -1363,7 +1380,7 @@ const Game = (() => {
     g.spin = ((g.spin || 0) + dt * 2.4) % (Math.PI * 2);
     const flying = g.drones.filter(d => d.alive);
     // single player: each drone goes for the enemy TEAMWORK gave it (or circles home)
-    const tgtOf = d => G.mode !== 'sp' ? tgt : d.assigned && d.assigned.hp > 0 && G.enemies.includes(d.assigned) ? d.assigned : null;
+    const tgtOf = d => !pve() ? tgt : d.assigned && d.assigned.hp > 0 && G.enemies.includes(d.assigned) ? d.assigned : null;
     for (const d of g.drones) {
       d.mf = Math.max(0, d.mf - dt);
       if (d.hb) { d.hb.life -= dt; if (d.hb.life <= 0) d.hb = null; }
@@ -1444,7 +1461,7 @@ const Game = (() => {
   // burning (flame tower) and gravity slow wear off
   function updateBurn(dt) {
     const me = G.me, A = ABILITIES.flame;
-    if (G.mode === 'sp') for (const e of [...G.enemies]) {
+    if (pve()) for (const e of [...G.enemies]) {
       if (e.grav > 0) e.grav -= dt;
       if (!(e.burnT > 0)) continue;
       e.burnT -= dt; e.burnK = (e.burnK || 0) - dt;
@@ -1580,7 +1597,7 @@ const Game = (() => {
         const an = Math.random() * Math.PI * 2, d = Math.random() * A.radius;
         G.fx.push({ x: g.x + Math.cos(an) * d, y: g.y + Math.sin(an) * d, vx: 0, vy: -50, life: 0.5, max: 0.5, size: 7, color: Math.random() < 0.5 ? '#ff6b1a' : '#ffd32a' });
       }
-      if (g.kind === 'tesla' && g.stormtower && isMine(g.owner) && G.mode === 'sp') { // STORM TOWER: lightning falls from its cloud
+      if (g.kind === 'tesla' && g.stormtower && isMine(g.owner) && pve()) { // STORM TOWER: lightning falls from its cloud
         const F = FORMATIONS.stormtower;
         g.boltK = (g.boltK ?? F.boltEvery) - dt;
         if (g.boltK <= 0) {
@@ -1597,11 +1614,11 @@ const Game = (() => {
         const dmg = A.damage * (g.plasma ? 2 : 1) * (g.stormtower ? FORMATIONS.stormtower.dmgMul : 1), R = teslaRange(g, A);
         g.tick = A.every * (g.stormtower ? FORMATIONS.stormtower.everyMul : 1);
         if (isMine(g.owner)) {
-          for (const e of (G.mode === 'sp' ? [...G.enemies] : targets())) {
+          for (const e of (pve() ? [...G.enemies] : targets())) {
             if (Math.hypot(e.x - g.x, e.y - g.y) > R || !lineOfSight(g.x, g.y, e.x, e.y)) continue;
             g.zaps.push({ x: e.x, y: e.y, life: 0.15 });
-            if (G.mode === 'sp') { hurtEnemy(e, dmg, 0.5, Math.atan2(e.y - g.y, e.x - g.x)); if (g.cryo) e.frozen = Math.max(e.frozen || 0, COMBO.cryoFreeze); }
-            if ((g.storm || g.stormtower) && G.mode === 'sp') stormChain(g, e, A, dmg);
+            if (pve()) { hurtEnemy(e, dmg, 0.5, Math.atan2(e.y - g.y, e.x - g.x)); if (g.cryo) e.frozen = Math.max(e.frozen || 0, COMBO.cryoFreeze); }
+            if ((g.storm || g.stormtower) && pve()) stormChain(g, e, A, dmg);
           }
         } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= R && lineOfSight(g.x, g.y, me.x, me.y)) {
           g.zaps.push({ x: me.x, y: me.y, life: 0.15 });
@@ -1647,7 +1664,7 @@ const Game = (() => {
       if (g.kind === 'barrier' && g.ice && g.rect) { // ICE WALL: everything near it is chilled (slowed)
         const [rx, ry, rw, rh] = g.rect;
         const near = (x, y, r) => Math.hypot(x - clamp(x, rx, rx + rw), y - clamp(y, ry, ry + rh)) <= r + COMBO.iceNear;
-        if (isMine(g.owner)) { if (G.mode === 'sp') for (const e of G.enemies) if (near(e.x, e.y, e.r)) e.chill = COMBO.iceTime; }
+        if (isMine(g.owner)) { if (pve()) for (const e of G.enemies) if (near(e.x, e.y, e.r)) e.chill = COMBO.iceTime; }
         else if (me.alive && hostileTo(g.owner) && near(me.x, me.y, me.r)) me.frozenT = Math.max(me.frozenT, COMBO.iceTime * 0.5);
       }
       if (g.kind === 'barrier' && (g.electric || g.fire) && g.rect && g.tick <= 0) {
@@ -1656,7 +1673,7 @@ const Game = (() => {
         const [rx, ry, rw, rh] = g.rect;
         const touch = (x, y, r) => Math.hypot(x - clamp(x, rx, rx + rw), y - clamp(y, ry, ry + rh)) <= r + 14;
         if (isMine(g.owner)) {
-          if (G.mode === 'sp') for (const e of [...G.enemies]) if (touch(e.x, e.y, e.r)) { hurtEnemy(e, dps / 2, 3, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); }
+          if (pve()) for (const e of [...G.enemies]) if (touch(e.x, e.y, e.r)) { hurtEnemy(e, dps / 2, 3, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); }
         } else if (me.alive && hostileTo(g.owner) && touch(me.x, me.y, me.r)) { hurtMe(dps / 2, 3, Math.atan2(me.y - g.y, me.x - g.x), g.owner); g.zaps.push({ x: me.x, y: me.y, life: 0.15 }); }
       }
       if (g.kind === 'jumppad' && me.alive && me.padCd === 0 && !hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= A.radius + me.r * 0.5) {
@@ -1675,7 +1692,7 @@ const Game = (() => {
     for (const r of G.rings) r.life -= dt;
     G.rings = G.rings.filter(r => r.life > 0);
     // frozen single player enemies thaw out
-    if (G.mode === 'sp') for (const e of G.enemies) { if (e.frozen > 0) e.frozen -= dt; if (e.chill > 0) e.chill -= dt; }
+    if (pve()) for (const e of G.enemies) { if (e.frozen > 0) e.frozen -= dt; if (e.chill > 0) e.chill -= dt; }
     updateBurn(dt);
   }
   // Buddy (decoy): a teammate bot with a copy of your main gun that hunts enemies
@@ -1745,7 +1762,7 @@ const Game = (() => {
       if (box) return { x: box.x, y: box.y, why: 'ammo' };
     }
     // between waves it tops up on any healing in the 8x8 squares around it; during a fight only when it's low
-    const between = G.mode === 'sp' && G.phase === 'break', box = A.healBox * MAP.grid / 2;
+    const between = pve() && G.phase === 'break', box = A.healBox * MAP.grid / 2;
     if (g.hp < g.maxHp * A.lowHp || (between && g.hp < g.maxHp)) {
       let spots = [
         ...G.packs.filter(p => !p.kind),                                   // green health packs
@@ -1854,10 +1871,10 @@ const Game = (() => {
   // TEAMWORK: hand out your buddies and drones to enemies, most dangerous first, until strength >= danger
   const dangerOf = e => e.mini ? DANGER.mini : DANGER[e.type] ?? 5;
   // an enemy that hits your decoy / drones counts DANGER.attackMul x as dangerous, but only for that decoy / hangar
-  function markAttack(g, e) { if (G.mode === 'sp' && e && g && isMine(g.owner)) (g.atk ||= new Map()).set(e, G.time); }
+  function markAttack(g, e) { if (pve() && e && g && isMine(g.owner)) (g.atk ||= new Map()).set(e, G.time); }
   function assignTeam(dt) {
     G.teamT = (G.teamT || 0) - dt;
-    if (G.mode !== 'sp' || G.teamT > 0) return;
+    if (!pve() || G.teamT > 0) return;
     G.teamT = 0.25;
     const units = [];
     for (const g of G.gadgets) {
@@ -1898,7 +1915,7 @@ const Game = (() => {
   }
 
   function buddyTarget(g) {
-    if (G.mode === 'sp' && g.assigned && g.assigned.hp > 0 && G.enemies.includes(g.assigned)) return (g.target = g.assigned);
+    if (pve() && g.assigned && g.assigned.hp > 0 && G.enemies.includes(g.assigned)) return (g.target = g.assigned);
     const list = targets(), D = DECOY_AI;
     const sorted = list.map(t => ({ t, d: Math.hypot(t.x - g.x, t.y - g.y) })).sort((a, b) => a.d - b.d || a.t.x - b.t.x);
     if (!sorted.length) return (g.target = null);
@@ -1951,7 +1968,7 @@ const Game = (() => {
   // The owner keeps track of the HP and tells everyone when it breaks.
   function bulletHitsGadget(b, x1, y1) {
     // your turrets (only on your screen)
-    const hostileToMe = G.mode === 'sp' ? b.team === 'e' : b.team === 'r' && hostileTo(b.owner);
+    const hostileToMe = pve() ? b.team === 'e' : b.team === 'r' && hostileTo(b.owner);
     if (hostileToMe) for (const t of G.turrets) {
       if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, t.fort ? 36 : t.rail ? 30 : t.rocket ? 26 : 18)) continue;
       if (t.shieldT > 0) { burst(b.x, b.y, '#7ef9ff', 4, 120); return true; } // shielded turret
@@ -1964,12 +1981,12 @@ const Game = (() => {
     for (const g of G.gadgets) {
       if (g.kind === 'bubble') {
         const R = ABILITIES.bubble.radius * Math.min(1, g.age / 0.25);
-        const hostile = G.mode === 'sp' ? b.team === 'e' : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
+        const hostile = pve() ? b.team === 'e' : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
         if (hostile && Math.hypot(b.x - g.x, b.y - g.y) < R && Math.hypot(x1 - g.x, y1 - g.y) >= R - 2) { burst(b.x, b.y, '#7ef9ff', 4, 120); return true; }
         continue;
       }
       if (g.hp === undefined || g.dead || g.kind === 'barrier') continue;
-      const hostile = G.mode === 'sp' ? b.team === 'e'
+      const hostile = pve() ? b.team === 'e'
         : b.owner !== g.owner && (!G.teams || teamOf(b.owner) !== teamOf(g.owner));
       if (!hostile || !segHitsCircle(x1, y1, b.x, b.y, g.x, g.y, g.kind === 'decoy' ? PLAYER.r : 22 * (g.sc || 1))) continue;
       markAttack(g, b.src); damageGadget(g, bulletDamage(b));
@@ -2089,11 +2106,11 @@ const Game = (() => {
       ctx.beginPath(); ctx.arc(r.x, r.y, r.r * (0.2 + 0.8 * k), 0, Math.PI * 2); ctx.stroke();
     }
     // chilled enemies (ice wall) get a frosty ring, frozen ones an ice shell
-    if (G.mode === 'sp') for (const e of G.enemies) if (e.chill > 0 && !(e.frozen > 0) && canSee(e.x, e.y, e.r)) {
+    if (pve()) for (const e of G.enemies) if (e.chill > 0 && !(e.frozen > 0) && canSee(e.x, e.y, e.r)) {
       ctx.strokeStyle = 'rgba(158,231,255,0.8)'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 4, 0, Math.PI * 2); ctx.stroke();
     }
-    if (G.mode === 'sp') for (const e of G.enemies) if (e.frozen > 0 && canSee(e.x, e.y, e.r)) {
+    if (pve()) for (const e of G.enemies) if (e.frozen > 0 && canSee(e.x, e.y, e.r)) {
       ctx.fillStyle = 'rgba(126,214,255,0.45)'; ctx.strokeStyle = '#dff6ff'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
@@ -3485,7 +3502,7 @@ const Game = (() => {
     const me = G.me, d = Math.hypot(me.x - x, me.y - y);
     G.shake = Math.min(14, G.shake + Math.max(0, 12 - d / 60));
     if (!isMine(owner)) hear(x, y, 12 * HEAR_UNIT);
-    if (isMine(owner) && G.mode === 'sp') {
+    if (isMine(owner) && pve()) {
       for (const e of [...G.enemies]) {
         if (e === skip || Math.hypot(e.x - x, e.y - y) > radius + e.r) continue;
         hitEnemy(e, { dmg, falloff: 0, kb: 5, x: e.x, y: e.y, ox: e.x, oy: e.y, range: 1 }, Math.atan2(e.y - y, e.x - x));
@@ -3574,7 +3591,7 @@ const Game = (() => {
       if (blocked) { r.done = true; explode(x1, y1, R.radius, R.damage, r.owner); continue; }
       // direct hits
       if (isMine(r.owner)) {
-        if (G.mode === 'sp') {
+        if (pve()) {
           const e = G.enemies.find(e => segHitsCircle(x1, y1, r.x, r.y, e.x, e.y, e.r));
           if (e) {
             r.done = true;
@@ -3829,31 +3846,29 @@ const Game = (() => {
   }
 
   // ---------------------------------------------------------------- single player
-  const easy = () => G.mode === 'sp' && G.wave <= EASY.waves;
+  const easy = () => pve() && G.wave <= EASY.waves;
+  // co-op: +50% enemies / HP for every extra player
+  const coopMul = () => G.coop ? 1 + 0.5 * Math.max(0, (G.coopN || 1) - 1) : 1;
+  // everyone still fighting (you + co-op friends)
+  const players = () => [G.me, ...(G.coop ? [...G.remotes.values()] : [])].filter(p => p.alive);
+  const nearestPlayer = e => { let best = G.me, bd = Infinity; for (const p of players()) { const d = Math.hypot(p.x - e.x, p.y - e.y); if (d < bd) { bd = d; best = p; } } return best; };
   function updateWaves(dt) {
-    if (!G.me.alive) return;
+    if (!players().length) return;
     if (G.phase === 'break') {
       G.breakT -= dt;
       if (G.breakT > 0) return;
       G.wave++;
-      if (G.mode === 'sp' && G.wave === slot3Wave() && !G.me.alt3.ability && Account.user.loadout.ability3) {
-        G.me.alt3 = newSlot(Account.user.loadout.ability3); applyPerk(G.me); abCache3 = '';
-      }
-      if (G.mode === 'sp' && slot4Pick() && G.me.alt4.ability !== slot4Pick()) {
-        G.me.alt4 = newSlot(slot4Pick()); applyPerk(G.me); abCache4 = '';
-        const c = myClass();
-        if (c && G.me.alt4.ability === c.ab) G.banner = { text: `${ABILITIES[c.ab].name} unlocked!`, t: 2.5 };
-      }
+      newWave();
       G.phase = 'fight';
       G.spawnT = 0;
       if (G.wave % BOSS_EVERY === 0) {
         const B = bossFor(G.wave);
-        G.queue = ['boss', ...(B.id === 'gamemaster' ? [] : Array(G.wave).fill('grunt'))];
+        G.queue = ['boss', ...(B.id === 'gamemaster' ? [] : Array(Math.round(G.wave * coopMul())).fill('grunt'))];
         G.banner = { text: `Wave ${G.wave} — ${B.name}!`, t: 3 };
       } else {
         // old mix, plus the newer enemies once their wave comes up
         const extra = Object.keys(ENEMIES).filter(k => ENEMIES[k].from && G.wave >= ENEMIES[k].from);
-        G.queue = Array.from({ length: Math.round((3 + G.wave * 2) * (easy() ? EASY.count : 1)) }, () => {
+        G.queue = Array.from({ length: Math.round((3 + G.wave * 2) * (easy() ? EASY.count : 1) * coopMul()) }, () => {
           if (extra.length && Math.random() < Math.min(0.45, 0.1 + G.wave * 0.02)) {
             let r = Math.random() * extra.reduce((n, k) => n + ENEMIES[k].weight, 0);
             for (const k of extra) if ((r -= ENEMIES[k].weight) < 0) return k;
@@ -3867,13 +3882,25 @@ const Game = (() => {
       G.spawnT -= dt;
       if (G.spawnT <= 0) {
         spawnEnemy(G.queue.shift());
-        G.spawnT = Math.max(0.25, 1 - G.wave * 0.05) * (easy() ? EASY.spawn : 1);
+        G.spawnT = Math.max(0.25, 1 - G.wave * 0.05) * (easy() ? EASY.spawn : 1) / Math.sqrt(coopMul());
       }
     } else if (G.enemies.length === 0) {
       G.phase = 'break';
       G.breakT = 3;
       G.banner = { text: 'Wave cleared!', t: 2.5 };
+      if (G.coop) { G.ev.push(['rs']); coopRevive(); } // co-op: the dead come back for the next wave
     }
+  }
+  // a new wave started: slots 3/4 + class ability unlock on their wave (SP + co-op)
+  function newWave() {
+      if (pve() && G.wave === slot3Wave() && !G.me.alt3.ability && Account.user.loadout.ability3) {
+        G.me.alt3 = newSlot(Account.user.loadout.ability3); applyPerk(G.me); abCache3 = '';
+      }
+      if (pve() && slot4Pick() && G.me.alt4.ability !== slot4Pick()) {
+        G.me.alt4 = newSlot(slot4Pick()); applyPerk(G.me); abCache4 = '';
+        const c = myClass();
+        if (c && G.me.alt4.ability === c.ab) G.banner = { text: `${ABILITIES[c.ab].name} unlocked!`, t: 2.5 };
+      }
   }
 
   // which boss shows up on this wave
@@ -3894,16 +3921,16 @@ const Game = (() => {
       const c = { x, y, r: def.r };
       collideWorld(c);
       x = c.x; y = c.y;
-      if (Math.hypot(x - me.x, y - me.y) <= 650) continue;
+      if (players().some(p => Math.hypot(x - p.x, y - p.y) <= 650)) continue;
       if (!big) break;
       const C = MAP.grid, gx = Math.floor((x - C / 2) / C), gy = Math.floor((y - C / 2) / C);
       if (gx >= 0 && gy >= 0 && flowBig[gy * MAP.cols + gx] >= 0) { x = (gx + 1) * C; y = (gy + 1) * C; break; }
     }
-    const scale = (type === 'boss' ? 1 + (G.wave / BOSS_EVERY - 1) * 0.6 : 1 + (G.wave - 1) * 0.12) * (easy() ? EASY.hp : 1);
+    const scale = (type === 'boss' ? 1 + (G.wave / BOSS_EVERY - 1) * 0.6 : 1 + (G.wave - 1) * 0.12) * (easy() ? EASY.hp : 1) * coopMul();
     const e = {
       type, def, x, y, r: def.r, hp: def.hp * scale, maxHp: def.hp * scale,
       speed: def.speed * (0.9 + Math.random() * 0.2), kx: 0, ky: 0, flash: 0, aim: 0,
-      cd: 1 + Math.random(), side: Math.random() < 0.5 ? -1 : 1, pattern: 0,
+      cd: 1 + Math.random(), side: Math.random() < 0.5 ? -1 : 1, pattern: 0, id: G.eSeq = (G.eSeq || 0) + 1,
     };
     G.enemies.push(e);
     if (type === 'boss') {
@@ -3946,27 +3973,32 @@ const Game = (() => {
 
   // minion spawned right next to (x, y)
   function spawnNear(type, x, y) {
-    const def = ENEMIES[type], scale = (1 + (G.wave - 1) * 0.12) * (easy() ? EASY.hp : 1);
+    const def = ENEMIES[type], scale = (1 + (G.wave - 1) * 0.12) * (easy() ? EASY.hp : 1) * coopMul();
     const c = { x: x + (Math.random() - 0.5) * 160, y: y + (Math.random() - 0.5) * 160, r: def.r };
     collideWorld(c);
-    G.enemies.push({ type, def, x: c.x, y: c.y, r: def.r, hp: def.hp * scale, maxHp: def.hp * scale, speed: def.speed, kx: 0, ky: 0, flash: 0, aim: 0, cd: 1, side: 1, pattern: 0 });
+    G.enemies.push({ type, def, x: c.x, y: c.y, r: def.r, hp: def.hp * scale, maxHp: def.hp * scale, speed: def.speed, kx: 0, ky: 0, flash: 0, aim: 0, cd: 1, side: 1, pattern: 0, id: G.eSeq = (G.eSeq || 0) + 1 });
     burst(c.x, c.y, '#6c5ce7', 12, 200);
   }
 
   // GAMEMASTER: you and him get pulled into an empty arena (no walls) until he dies
   function enterArena(e) {
+    arenaLocal();
+    G.enemies = [e];
+    G.queue = [];
+    e.x = MAP.w / 2; e.y = MAP.h / 2 - 300;
+    G.banner = { text: 'GAMEMASTER: Welcome to my game!', t: 3 };
+  }
+  // the walls go away and you're pulled into the arena (co-op clients do this part themselves)
+  function arenaLocal() {
     const me = G.me;
+    if (G.arena) return;
     G.arena = { walls: MAP.walls, solid: MAP.solid, x: me.x, y: me.y };
     MAP.walls = [];
     MAP.solid = new Uint8Array(MAP.solid.length);
     flowT = 0;
-    G.enemies = [e];
-    G.queue = [];
     burst(me.x, me.y, '#fd79a8', 40, 400);
-    me.x = MAP.w / 2; me.y = MAP.h / 2 + 300;
-    e.x = MAP.w / 2; e.y = MAP.h / 2 - 300;
+    me.x = MAP.w / 2 + (G.coop ? (Math.random() - 0.5) * 300 : 0); me.y = MAP.h / 2 + 300;
     G.cam.x = me.x; G.cam.y = me.y;
-    G.banner = { text: 'GAMEMASTER: Welcome to my game!', t: 3 };
   }
   function leaveArena() {
     if (!G.arena) return;
@@ -3980,7 +4012,7 @@ const Game = (() => {
 
   // the special move of each boss
   function bossMove(e, dt) {
-    const me = G.me;
+    const me = nearestPlayer(e), ev = G.coop ? G.ev : []; // co-op: aim at the closest player, tell the clients
     e.bt -= dt;
     e.seen = Math.max(0, e.seen - dt);
     if (e.boss === 'gamemaster') { // bullet hell: a spinning spiral plus a ring every so often
@@ -4012,21 +4044,22 @@ const Game = (() => {
       }
     }
     if (e.boss === 'summoner') for (let i = 0; i < 3; i++) spawnNear(Math.random() < 0.5 ? 'grunt' : 'runner', e.x, e.y);
-    if (e.boss === 'inferno') addGadget({ kind: 'firepit', x: e.x, y: e.y, a: 0, owner: 'enemy', id: 'f' + Math.random() });
-    if (e.boss === 'frost') G.nades.push({ x0: e.x, y0: e.y, x1: me.x, y1: me.y, t: 0, owner: 'enemy', kind: 'freeze' });
-    if (e.boss === 'warlord') { addRocket(e.x + Math.cos(toMe) * e.r, e.y + Math.sin(toMe) * e.r, toMe, 'enemy'); hear(e.x, e.y, 12 * HEAR_UNIT); }
+    if (e.boss === 'inferno') { addGadget({ kind: 'firepit', x: e.x, y: e.y, a: 0, owner: 'enemy', id: 'f' + Math.random() }); ev.push(['fp', Math.round(e.x), Math.round(e.y)]); }
+    if (e.boss === 'frost') { G.nades.push({ x0: e.x, y0: e.y, x1: me.x, y1: me.y, t: 0, owner: 'enemy', kind: 'freeze' }); ev.push(['nd', Math.round(e.x), Math.round(e.y), Math.round(me.x), Math.round(me.y)]); }
+    if (e.boss === 'warlord') { addRocket(e.x + Math.cos(toMe) * e.r, e.y + Math.sin(toMe) * e.r, toMe, 'enemy'); hear(e.x, e.y, 12 * HEAR_UNIT); ev.push(['rk', Math.round(e.x + Math.cos(toMe) * e.r), Math.round(e.y + Math.sin(toMe) * e.r), +toMe.toFixed(3)]); }
     if (e.boss === 'creator') {
       const move = ['airstrike', 'meteors', 'nuke', 'laser', 'bullethell', 'timestop', 'megaslam', 'summon'][Math.floor(Math.random() * 8)];
       const U = ULTIMATES[move];
       G.banner = { text: `CREATOR uses ${U ? U.name.toUpperCase() : 'SUMMON'}!`, t: 1.5 };
-      const strike = (x, y, t, r, dmg) => G.strikes.push({ x: clamp(x, 0, MAP.w), y: clamp(y, 0, MAP.h), t, max: t, r, dmg, owner: 'enemy' });
+      ev.push(['bn', G.banner.text]);
+      const strike = (x, y, t, r, dmg) => { G.strikes.push({ x: clamp(x, 0, MAP.w), y: clamp(y, 0, MAP.h), t, max: t, r, dmg, owner: 'enemy' }); ev.push(['sk', Math.round(clamp(x, 0, MAP.w)), Math.round(clamp(y, 0, MAP.h)), +t.toFixed(2), r, dmg]); };
       if (move === 'airstrike') for (let i = 0; i < 8; i++) { const d = 150 + i * 120; strike(e.x + Math.cos(toMe) * d, e.y + Math.sin(toMe) * d, 0.8 + i * 0.18, 120, 40); }
       if (move === 'meteors') for (let i = 0; i < 14; i++) { const an = Math.random() * 6.28, d = Math.random() * 350; strike(me.x + Math.cos(an) * d, me.y + Math.sin(an) * d, 0.8 + Math.random() * 3, 90, 30); }
       if (move === 'nuke') strike(me.x, me.y, 3, 380, 90);
-      if (move === 'laser') G.lasers.push({ x: e.x + Math.cos(toMe) * 120, y: e.y + Math.sin(toMe) * 120, a: toMe, t: 5, tick: 0, owner: 'enemy' });
+      if (move === 'laser') { G.lasers.push({ x: e.x + Math.cos(toMe) * 120, y: e.y + Math.sin(toMe) * 120, a: toMe, t: 5, tick: 0, owner: 'enemy' }); ev.push(['lz', Math.round(e.x + Math.cos(toMe) * 120), Math.round(e.y + Math.sin(toMe) * 120), +toMe.toFixed(3)]); }
       if (move === 'bullethell') e.hellT = 3;
-      if (move === 'timestop') { me.frozenT = 1.5; G.rings.push({ x: e.x, y: e.y, r: 900, life: 0.8, max: 0.8, color: '116,185,255' }); }
-      if (move === 'megaslam') slam(e.x, e.y, 600, 30, 18, 'enemy');
+      if (move === 'timestop') { G.me.frozenT = 1.5; ev.push(['ts', Math.round(e.x), Math.round(e.y)]); G.rings.push({ x: e.x, y: e.y, r: 900, life: 0.8, max: 0.8, color: '116,185,255' }); }
+      if (move === 'megaslam') { slam(e.x, e.y, 600, 30, 18, 'enemy'); ev.push(['sl', Math.round(e.x), Math.round(e.y)]); }
       if (move === 'summon') for (let i = 0; i < 4; i++) spawnNear(['grunt', 'runner', 'shooter'][i % 3], e.x, e.y);
     }
   }
@@ -4056,12 +4089,14 @@ const Game = (() => {
     flowT = 0.25;
     const C = MAP.grid, cols = MAP.cols;
     const open = (x, y) => x >= 0 && y >= 0 && x < cols && y < cols && !MAP.solid[y * cols + x];
-    const sx = clamp(Math.floor(G.me.x / C), 0, cols - 1), sy = clamp(Math.floor(G.me.y / C), 0, cols - 1);
-    flow = bfs(open, [sy * cols + sx]);
+    // co-op: the map leads to whichever player is closest
+    const ps = players().length ? players() : [G.me];
+    const cells = ps.map(p => [clamp(Math.floor(p.x / C), 0, cols - 1), clamp(Math.floor(p.y / C), 0, cols - 1)]);
+    flow = bfs(open, cells.map(([sx, sy]) => sy * cols + sx));
     // big: (x, y) is the top-left of a 2x2 block that must be all open
     const open2 = (x, y) => open(x, y) && open(x + 1, y) && open(x, y + 1) && open(x + 1, y + 1);
     const starts = [];
-    for (let y = sy - 1; y <= sy; y++) for (let x = sx - 1; x <= sx; x++) if (x >= 0 && y >= 0) starts.push(y * cols + x);
+    for (const [sx, sy] of cells) for (let y = sy - 1; y <= sy; y++) for (let x = sx - 1; x <= sx; x++) if (x >= 0 && y >= 0) starts.push(y * cols + x);
     flowBig = bfs(open2, starts);
   }
   // the next spot on the way to the player (no cutting corners)
@@ -4096,8 +4131,8 @@ const Game = (() => {
       // you come first: if they can see you, they go for you. Otherwise the closest buddy/building they can see
       // you and your buddies are equally important: go for the closest one it can see
       const visible = a => lineOfSight(e.x, e.y, a.x, a.y) && !smokeBlocks(e.x, e.y, a.x, a.y);
-      let tgt = me, bestD = Infinity;
-      for (const a of [me.alive ? me : null, ...buddies]) {
+      let tgt = nearestPlayer(e), bestD = Infinity;
+      for (const a of [...players(), ...buddies]) {
         if (!a || !visible(a)) continue;
         const d = Math.hypot(a.x - e.x, a.y - e.y);
         if (d < bestD) { tgt = a; bestD = d; }
@@ -4114,7 +4149,7 @@ const Game = (() => {
       const dx = tgt.x - e.x, dy = tgt.y - e.y, d = Math.hypot(dx, dy) || 1;
       const sees = lineOfSight(e.x, e.y, tgt.x, tgt.y) && !smokeBlocks(e.x, e.y, tgt.x, tgt.y);
       let mx = dx / d, my = dy / d;
-      if (!me.alive) { mx = my = 0; }
+      if (!players().length) { mx = my = 0; }
       else if (e.def.keepDistance && sees && d < e.def.keepDistance) { mx *= -0.6; my *= -0.6; }
       else if (!sees || (e.r > MAP.grid * 0.45 && d > 250)) { // follow the path around the walls toward you (the boss always does)
         const step = pathStep(e);
@@ -4128,12 +4163,12 @@ const Game = (() => {
       e.aim = Math.atan2(dy, dx);
       collideWorld(e);
 
-      if (e.boss && me.alive) bossMove(e, dt);
+      if (e.boss && players().length) bossMove(e, dt);
       if (e.hellT > 0) { // creator's bullet hell
         e.hellT -= dt; e.hellCd = (e.hellCd || 0) - dt;
         if (e.hellCd <= 0) { e.hellCd = 0.25; for (let i = 0; i < 16; i++) addBullet(e.x, e.y, G.time * 2 + i * Math.PI / 8, 500, 8, 1, 'e', null, 1200); }
       }
-      if (e.def.gun && me.alive && sees && d < BULLET_RANGE * 0.8) {
+      if (e.def.gun && players().length && sees && d < BULLET_RANGE * 0.8) {
         e.cd -= dt;
         if (e.cd <= 0) {
           enemyShoot(e); e.cd = e.def.gun.delay * (0.8 + Math.random() * 0.4);
@@ -4149,7 +4184,8 @@ const Game = (() => {
       if (e.def.kamikaze && !e.gone && Math.hypot(tgt.x - e.x, tgt.y - e.y) < e.r + PLAYER.r + 18) {
         e.gone = true;
         explode(e.x, e.y, e.def.kamikaze.radius, e.def.kamikaze.damage, 'enemy');
-        if (tgt !== me && tgt.hp !== undefined) { if (tgt.kind) { markAttack(tgt, e); damageGadget(tgt, e.def.kamikaze.damage); } else tgt.hp -= e.def.kamikaze.damage * (tgt.bunker ? COMBO.bunkerTake : 1); }
+        if (G.coop) G.ev.push(['x', Math.round(e.x), Math.round(e.y), e.def.kamikaze.radius, e.def.kamikaze.damage]);
+        if (tgt !== me && !tgt.rp && tgt.hp !== undefined) { if (tgt.kind) { markAttack(tgt, e); damageGadget(tgt, e.def.kamikaze.damage); } else tgt.hp -= e.def.kamikaze.damage * (tgt.bunker ? COMBO.bunkerTake : 1); }
       }
       // HEALER: patches up enemies around it
       if (e.def.heal) {
@@ -4207,9 +4243,17 @@ const Game = (() => {
     e.ky += Math.sin(a) * b.kb * 50 / weight;
     G.texts.push({ x: e.x + (Math.random() - 0.5) * 16, y: e.y - e.r, text: Math.round(dmg), color: '#fff', life: 0.5 });
     burst(b.x, b.y, e.def.color, 3, 120);
+    if (coopClient()) { // co-op client: tell the host, guess the result here so it feels instant
+      if (e.id) { G.hitBuf.set(e.id, (G.hitBuf.get(e.id) || 0) + dmg); e.hitAt = G.time; }
+      if (e.hp > 0) return;
+      G.kills++; onKill();
+      burst(e.x, e.y, e.color || e.def.color, e.type === 'boss' ? 60 : 14, e.type === 'boss' ? 500 : 260);
+      G.enemies = G.enemies.filter(x => x !== e);
+      if (e.id) { G.emap.delete(e.id); G.cdead.set(e.id, G.time); }
+      return;
+    }
     if (e.hp > 0) return;
-    G.kills++;
-    onKill();
+    if (b.team !== 'r') { G.kills++; onKill(); } // 'r' = a co-op friend's hit (it's their kill)
     G.score += e.def.score;
     burst(e.x, e.y, e.color || e.def.color, e.type === 'boss' ? 60 : 14, e.type === 'boss' ? 500 : 260);
     G.enemies = G.enemies.filter(x => x !== e);
@@ -4218,7 +4262,7 @@ const Game = (() => {
       for (let i = 0; i < 3; i++) {
         const an = i * Math.PI * 2 / 3, c = { x: e.x + Math.cos(an) * 60, y: e.y + Math.sin(an) * 60, r: 30 };
         collideWorld(c);
-        G.enemies.push({ ...e, x: c.x, y: c.y, r: 30, hp: e.maxHp * 0.25, maxHp: e.maxHp * 0.25, mini: true, speed: e.speed * 1.4, kx: 0, ky: 0, flash: 0 });
+        G.enemies.push({ ...e, id: ++G.eSeq, x: c.x, y: c.y, r: 30, hp: e.maxHp * 0.25, maxHp: e.maxHp * 0.25, mini: true, speed: e.speed * 1.4, kx: 0, ky: 0, flash: 0 });
       }
       G.banner = { text: 'HYDRA splits!', t: 1.5 };
     }
@@ -4232,15 +4276,161 @@ const Game = (() => {
         if (A && A.type !== 'passive') { s.abUses = A.uses ?? Infinity; s.abCd = 0; }
       }
       G.banner = { text: `${e.name || 'Boss'} defeated! Ability restored`, t: 2.5 };
+      if (G.coop) G.ev.push(['bd', e.name || 'Boss']);
       if (G.mode === 'sp') setTimeout(() => G && hooks.bossDown({ unlocked3: G.wave >= slot3Wave() && G.wave - BOSS_EVERY < slot3Wave(), unlocked4: G.wave >= SLOT4_WAVE && G.wave - BOSS_EVERY < SLOT4_WAVE }), 1200);
       updateWeaponBar(true);
     }
   }
 
+  // ---------------------------------------------------------------- CO-OP (players vs enemies)
+  // The host runs the waves/enemies/bosses and sends a snapshot ~12x a second ('es') plus enemy events ('ev':
+  // bullets, boss moves, bomber blasts...). Clients draw the enemies smoothly, send their damage to the host ('eh')
+  // and freeze/slow they put on enemies ('ef'). Everyone works out the damage they take themselves.
+  const COOP_MAX = 140; // enemies per snapshot (keeps messages small)
+  const BOSS_DEF = id => id === 'creator' ? CREATOR : BOSSES.find(b => b.id === id);
+  function coopNet(dt) {
+    if (Net.state.isHost) {
+      if (G.ev.length) Net.send({ t: 'ev', l: G.ev.splice(0, 300) });
+      G.esT -= dt;
+      if (G.esT > 0) return;
+      G.esT = 0.08;
+      const r1 = v => Math.round(v * 10) / 10;
+      const list = G.enemies.slice(0, COOP_MAX).map(e => {
+        if (!e.id) e.id = ++G.eSeq;
+        return [e.id, e.type, Math.round(e.x), Math.round(e.y), Math.ceil(e.hp), Math.round(e.maxHp), +e.aim.toFixed(2),
+          r1(Math.max(0, e.frozen || 0)), r1(Math.max(0, e.chill || 0)), r1(Math.max(0, e.grav || 0)), e.boss || 0,
+          (e.mini ? 1 : 0) | (e.laserOn ? 2 : 0) | (e.seen > 0 ? 4 : 0), e.r];
+      });
+      Net.send({ t: 'es', w: G.wave, ph: G.phase === 'break' ? 0 : 1, sc: G.score, q: G.queue.length, ar: G.arena ? 1 : 0, e: list });
+    } else {
+      G.hitT -= dt;
+      if (G.hitT <= 0 && G.hitBuf.size) {
+        G.hitT = 0.05;
+        Net.send({ t: 'eh', l: [...G.hitBuf].map(([id, d]) => [id, Math.round(d * 10) / 10]) });
+        G.hitBuf.clear();
+      }
+      G.efT -= dt;
+      if (G.efT <= 0) { // freeze / ice / gravity you put on enemies
+        G.efT = 0.1;
+        const l = [];
+        for (const e of G.enemies) {
+          const f = e.frozen || 0, c = e.chill || 0, g = e.grav || 0;
+          if (f > (e.hf || 0) + 0.3 || c > (e.hc || 0) + 0.3 || g > (e.hg || 0) + 0.3) { l.push([e.id, +f.toFixed(1), +c.toFixed(1), +g.toFixed(1)]); e.hf = f; e.hc = c; e.hg = g; }
+        }
+        if (l.length) Net.send({ t: 'ef', l: l.slice(0, 60) });
+      }
+    }
+  }
+  // client: move the copies toward where the host says they are; enemies that touch you hurt you
+  function updateMirror(dt) {
+    const me = G.me;
+    for (const e of G.enemies) {
+      if (e.tx !== undefined) { const k = Math.min(1, dt * 12); e.x += (e.tx - e.x) * k; e.y += (e.ty - e.y) * k; }
+      e.flash = Math.max(0, e.flash - dt);
+      e.seen = Math.max(0, (e.seen || 0) - dt);
+      if (me.alive && e.def.melee && !(e.frozen > 0) && Math.hypot(me.x - e.x, me.y - e.y) < e.r + me.r && me.meleeInv === 0) {
+        hurtMe(e.def.melee, 4, Math.atan2(me.y - e.y, me.x - e.x), null);
+        me.meleeInv = 0.6;
+      }
+    }
+    for (const [id, t] of G.cdead) if (G.time - t > 1.5) G.cdead.delete(id);
+  }
+  function applySnap(m) {
+    if (!G || !G.coop || Net.state.isHost) return;
+    while (G.wave < m.w) { // new wave(s): unlocks + banner
+      G.wave++; newWave();
+      const B = G.wave % BOSS_EVERY === 0 ? bossFor(G.wave) : null;
+      G.banner = { text: B ? `Wave ${G.wave} — ${B.name}!` : `Wave ${G.wave}`, t: B ? 3 : 2 };
+    }
+    const ph = m.ph ? 'fight' : 'break';
+    if (ph === 'break' && G.phase === 'fight') G.banner = { text: 'Wave cleared!', t: 2.5 };
+    G.phase = ph; G.score = m.sc; G.qn = m.q;
+    if (m.ar && !G.arena) { arenaLocal(); G.banner = { text: 'GAMEMASTER: Welcome to my game!', t: 3 }; }
+    if (!m.ar && G.arena) leaveArena();
+    const seen = new Set();
+    for (const a of m.e || []) {
+      const [id, type, x, y, hp, maxHp, aim, fz, ch, gv, bid, fl, r] = a;
+      if (G.cdead.has(id) || !ENEMIES[type]) continue;
+      seen.add(id);
+      let e = G.emap.get(id);
+      if (!e) {
+        e = { id, type, def: ENEMIES[type], x, y, r, hp, maxHp, speed: 0, kx: 0, ky: 0, flash: 0, aim, cd: 1, side: 1, pattern: 0 };
+        if (bid) { const B = BOSS_DEF(bid) || {}; Object.assign(e, { boss: bid, name: B.name, color: B.color }); }
+        G.emap.set(id, e); G.enemies.push(e);
+      }
+      e.tx = x; e.ty = y; e.aim = aim; e.r = r; e.maxHp = maxHp;
+      e.hp = e.hitAt && G.time - e.hitAt < 0.4 ? Math.min(e.hp, hp) : hp; // keep your own fresh hits
+      e.hf = fz; e.hc = ch; e.hg = gv;
+      e.frozen = Math.max(e.frozen || 0, fz); e.chill = Math.max(e.chill || 0, ch); e.grav = Math.max(e.grav || 0, gv);
+      e.mini = !!(fl & 1); e.laserOn = !!(fl & 2); if (fl & 4) e.seen = 0.6;
+    }
+    if (G.enemies.some(e => !seen.has(e.id))) {
+      for (const e of G.enemies) if (!seen.has(e.id)) { burst(e.x, e.y, e.color || e.def.color, e.type === 'boss' ? 60 : 14, 260); G.emap.delete(e.id); }
+      G.enemies = G.enemies.filter(e => seen.has(e.id));
+    }
+    G.boss = G.enemies.find(e => e.boss && !e.mini) || G.enemies.find(e => e.boss) || null;
+  }
+  // host: a friend's damage / freeze reached us
+  function coopHits(m) {
+    if (!G || !G.coop || !Net.state.isHost) return;
+    for (const [id, d] of m.l || []) {
+      const e = G.enemies.find(e => e.id === id);
+      if (e && d > 0) hitEnemy(e, { dmg: Math.min(d, 1e5), falloff: 0, kb: 0, x: e.x, y: e.y, ox: e.x, oy: e.y, range: 1, team: 'r' }, 0);
+    }
+  }
+  function coopStatus(m) {
+    if (!G || !G.coop || !Net.state.isHost) return;
+    for (const [id, f, c, g] of m.l || []) {
+      const e = G.enemies.find(e => e.id === id);
+      if (!e) continue;
+      e.frozen = Math.max(e.frozen || 0, Math.min(f, 10)); e.chill = Math.max(e.chill || 0, Math.min(c, 10)); e.grav = Math.max(e.grav || 0, Math.min(g, 10));
+    }
+  }
+  // client: the host's enemy events
+  function coopEvents(m) {
+    if (!G || !G.coop || Net.state.isHost) return;
+    for (const v of m.l || []) {
+      const k = v[0];
+      if (k === 'b') { addBullet(v[1], v[2], v[3], v[4], v[5], v[6], 'e', null, v[7]); muzzleFlash(v[1], v[2], v[3]); }
+      else if (k === 'x') explode(v[1], v[2], v[3], v[4], 'enemy');
+      else if (k === 'fp') addGadget({ kind: 'firepit', x: v[1], y: v[2], a: 0, owner: 'enemy', id: 'f' + Math.random() });
+      else if (k === 'nd') G.nades.push({ x0: v[1], y0: v[2], x1: v[3], y1: v[4], t: 0, owner: 'enemy', kind: 'freeze' });
+      else if (k === 'rk') addRocket(v[1], v[2], v[3], 'enemy');
+      else if (k === 'sk') G.strikes.push({ x: v[1], y: v[2], t: v[3], max: v[3], r: v[4], dmg: v[5], owner: 'enemy' });
+      else if (k === 'lz') G.lasers.push({ x: v[1], y: v[2], a: v[3], t: 5, tick: 0, owner: 'enemy' });
+      else if (k === 'ts') { G.me.frozenT = 1.5; G.rings.push({ x: v[1], y: v[2], r: 900, life: 0.8, max: 0.8, color: '116,185,255' }); }
+      else if (k === 'sl') slam(v[1], v[2], 600, 30, 18, 'enemy');
+      else if (k === 'bn') G.banner = { text: String(v[1]).slice(0, 60), t: 1.5 };
+      else if (k === 'bd') {
+        for (const s of allSlots()) { const A = ABILITIES[s.ability]; if (A && A.type !== 'passive') { s.abUses = A.uses ?? Infinity; s.abCd = 0; } }
+        G.banner = { text: `${String(v[1]).slice(0, 30)} defeated! Ability restored`, t: 2.5 };
+        updateWeaponBar(true);
+      }
+      else if (k === 'rs') coopRevive();
+    }
+  }
+  // dead players come back when a wave is cleared
+  function coopRevive() {
+    const me = G.me;
+    if (me.alive) return;
+    const friend = [...G.remotes.values()].find(r => r.alive);
+    Object.assign(me, { alive: true, hp: me.maxHp, lastStand: false, invT: 1.5, frozenT: 0, vx: 0, vy: 0 });
+    if (friend) { const c = { x: friend.x + 40, y: friend.y, r: me.r }; collideWorld(c); me.x = c.x; me.y = c.y; }
+    G.banner = { text: 'You are back!', t: 2 };
+    burst(me.x, me.y, me.color, 24, 300);
+    Net.send({ t: 'rev' });
+    hooks.revive();
+  }
+  Net.on('es', applySnap);
+  Net.on('ev', coopEvents);
+  Net.on('eh', coopHits);
+  Net.on('ef', coopStatus);
+  Net.on('rev', m => { if (G && G.coop && G.remotes.has(m.from)) G.remotes.get(m.from).alive = true; });
+
   // ---------------------------------------------------------------- multiplayer messages
   function remote(id) {
     if (!G.remotes.has(id)) {
-      G.remotes.set(id, { id, name: '?', color: '#ccc', x: MAP.w / 2, y: MAP.h / 2, tx: MAP.w / 2, ty: MAP.h / 2,
+      G.remotes.set(id, { id, rp: true, name: '?', color: '#ccc', x: MAP.w / 2, y: MAP.h / 2, tx: MAP.w / 2, ty: MAP.h / 2,
         aim: 0, hp: PLAYER.hp, gun: 0, alive: true, kick: 0, flash: 0, sprites: [null, null] });
     }
     return G.remotes.get(id);
@@ -4258,7 +4448,7 @@ const Game = (() => {
     if (!inMP()) return;
     const r = remote(m.from);
     Object.assign(r, { tx: m.x, ty: m.y, aim: m.aim, hp: m.hp, sh: m.sh || 0, gun: m.gun });
-    if (!m.alive) r.alive = false;
+    if (!m.alive) r.alive = false; else if (G.coop) r.alive = true;
   });
   Net.on('kit', m => {
     if (!inMP()) return;
@@ -4682,12 +4872,13 @@ const Game = (() => {
     ctx.fillStyle = '#fff';
     const uiS = Settings.hud();
     ctx.save(); ctx.scale(uiS, uiS);
-    if (G.mode === 'sp') {
+    if (pve()) {
       ctx.fillText(`WAVE ${G.wave}`, pad, pad);
       ctx.fillStyle = '#ffd36b';
       ctx.fillText(`SCORE ${G.score}`, pad, pad + 20);
       ctx.fillStyle = '#ff8a8a';
-      ctx.fillText(`ENEMIES LEFT ${G.enemies.length + G.queue.length}`, pad, pad + 40);
+      ctx.fillText(`ENEMIES LEFT ${G.enemies.length + G.queue.length + (G.qn || 0)}`, pad, pad + 40);
+      if (G.coop) { ctx.fillStyle = '#9fd3ff'; ctx.fillText(`TEAM ${players().length}/${G.remotes.size + 1} ALIVE`, pad, pad + 60); }
     } else {
       const alive = [...G.remotes.values()].filter(r => r.alive).length + (G.me.alive ? 1 : 0);
       ctx.fillText(`ALIVE ${alive}/${G.remotes.size + 1}`, pad, pad);
@@ -4730,7 +4921,7 @@ const Game = (() => {
       ctx.textBaseline = 'middle';
       ctx.font = '700 16px system-ui, sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.fillText('Waiting for the round to end…', W / 2, H * 0.6);
+      ctx.fillText(G.coop ? 'You died — back when this wave is cleared' : 'Waiting for the round to end…', W / 2, H * 0.6);
     }
 
     if (Settings.mobile) drawSticks();
@@ -4845,6 +5036,7 @@ const Game = (() => {
     set infAbility(v) { if (G) G.infAbility = v; },
     get running() { return !!G; },
     get mode() { return G && G.mode; },
+    get coopWave() { return G && G.coop ? G.wave : 0; },
     get run() { return G && G.mode === 'sp' && !G.over ? { wave: G.wave, score: G.score, test: G.test } : null; },
     get debugState() { return G; },
     on(name, fn) { hooks[name] = fn; },
