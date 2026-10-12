@@ -4,8 +4,8 @@ const Input = (() => {
   const keys = new Set();
   const mouse = { x: 0, y: 0, down: false, active: false };
   const sticks = { move: null, aim: null };
-  const STICK_R = 60;
-  const MOVE_X = 110, MOVE_Y = 120; // fixed move stick position (from the bottom-left)
+  let STICK_R = 60, MOVE_X = 110, MOVE_Y = 120;
+  const sizeSticks = () => { const u = Settings.hud(); STICK_R = 60 * u; MOVE_X = 110 * u; MOVE_Y = 120 * u; }; // fixed move stick position (from the bottom-left)
   // keep the knob inside the ring instead of dragging the stick along
   function clampKnob(s) {
     const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy);
@@ -16,15 +16,18 @@ const Input = (() => {
   addEventListener('keydown', e => {
     if (e.repeat) return;
     keys.add(e.code);
-    if (e.code === 'KeyR') flags.reload = true;
-    if (e.code === 'KeyQ') flags.swap = true;
-    if (e.code === 'KeyE') flags.abPress = true;
-    if (e.code === 'KeyF') flags.ultPress = true;
-    if (e.code === 'KeyC') flags.ab2Press = true;
-    if (e.code === 'KeyV') flags.ab3Press = true;
-    if (e.code === 'KeyB') flags.ab4Press = true;
-    if (e.code === 'Digit1') flags.select = 0;
-    if (e.code === 'Digit2') flags.select = 1;
+    if (Input.rebinding) return; // settings screen is waiting for a key
+    const K = Settings.keys, c = e.code;
+    if (c === K.fire && e.target === document.body) e.preventDefault(); // no page scroll / button press
+    if (c === K.reload) flags.reload = true;
+    if (c === K.swap) flags.swap = true;
+    if (c === K.ab1) flags.abPress = true;
+    if (c === K.ult) flags.ultPress = true;
+    if (c === K.ab2) flags.ab2Press = true;
+    if (c === K.ab3) flags.ab3Press = true;
+    if (c === K.ab4) flags.ab4Press = true;
+    if (c === K.gun1) flags.select = 0;
+    if (c === K.gun2) flags.select = 1;
   });
   addEventListener('keyup', e => keys.delete(e.code));
   addEventListener('blur', reset);
@@ -43,6 +46,7 @@ const Input = (() => {
     const side = e.clientX < innerWidth / 2 ? 'move' : 'aim';
     if (sticks[side]) return;
     // the move stick stays put in the bottom-left corner; the aim stick appears where you touch
+    sizeSticks();
     const ox = side === 'move' ? MOVE_X : e.clientX, oy = side === 'move' ? innerHeight - MOVE_Y : e.clientY;
     sticks[side] = { id: e.pointerId, ox, oy, x: e.clientX, y: e.clientY, t: performance.now(), far: 0 };
     if (side === 'move') clampKnob(sticks.move);
@@ -101,8 +105,9 @@ const Input = (() => {
       if (d > 1) { x /= d; y /= d; }
       return { x, y };
     }
-    const x = (keys.has('KeyD') || keys.has('ArrowRight')) - (keys.has('KeyA') || keys.has('ArrowLeft'));
-    const y = (keys.has('KeyS') || keys.has('ArrowDown')) - (keys.has('KeyW') || keys.has('ArrowUp'));
+    const K = Settings.keys;
+    const x = (keys.has(K.right) || keys.has('ArrowRight')) - (keys.has(K.left) || keys.has('ArrowLeft'));
+    const y = (keys.has(K.down) || keys.has('ArrowDown')) - (keys.has(K.up) || keys.has('ArrowUp'));
     const d = Math.hypot(x, y) || 1;
     return { x: x / d, y: y / d };
   }
@@ -117,8 +122,8 @@ const Input = (() => {
       if (Math.hypot(dx, dy) < 10) return { angle: null, aiming: false, fire: false };
       return { angle: Math.atan2(dy, dx), aiming: true, fire: false };
     }
-    if (!mouse.active) return { angle: null, aiming: false, fire: keys.has('Space') };
-    return { angle: Math.atan2(mouse.y - py, mouse.x - px), aiming: true, fire: mouse.down || keys.has('Space') };
+    if (!mouse.active) return { angle: null, aiming: false, fire: keys.has(Settings.keys.fire) };
+    return { angle: Math.atan2(mouse.y - py, mouse.x - px), aiming: true, fire: mouse.down || keys.has(Settings.keys.fire) };
   }
 
   // ability button: E on PC, the green button on mobile
@@ -161,9 +166,9 @@ const Input = (() => {
     try { ab4Btn.setPointerCapture(e.pointerId); } catch (err) {}
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) ab4Btn.addEventListener(ev, () => { ability4Touch = false; });
-  const abilityHeld = slot => slot === 3 ? keys.has('KeyB') || ability4Touch : slot === 2 ? keys.has('KeyV') || ability3Touch : slot ? keys.has('KeyC') || ability2Touch : keys.has('KeyE') || abilityTouch;
+  const abilityHeld = slot => slot === 3 ? keys.has(Settings.keys.ab4) || ability4Touch : slot === 2 ? keys.has(Settings.keys.ab3) || ability3Touch : slot ? keys.has(Settings.keys.ab2) || ability2Touch : keys.has(Settings.keys.ab1) || abilityTouch;
 
   function take(name) { const v = flags[name]; flags[name] = name === 'select' ? -1 : false; return v; }
 
-  return { move, aim, reset, take, flags, sticks, mouse, STICK_R, abilityHeld };
+  return { move, aim, reset, take, flags, sticks, mouse, get STICK_R() { sizeSticks(); return STICK_R; }, abilityHeld };
 })();

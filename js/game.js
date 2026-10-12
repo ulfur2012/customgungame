@@ -3879,7 +3879,7 @@ const Game = (() => {
     return n % 10 === 0 ? CREATOR : BOSSES[(n - 1) % 10 % BOSSES.length];
   }
 
-  function spawnEnemy(type) {
+  function spawnEnemy(type, bossDef) {
     const def = ENEMIES[type], me = G.me;
     let x = 0, y = 0;
     // the boss only spawns where a 2-wide route leads to you
@@ -3904,12 +3904,41 @@ const Game = (() => {
     };
     G.enemies.push(e);
     if (type === 'boss') {
-      const B = bossFor(G.wave);
+      const B = bossDef || bossFor(G.wave);
       Object.assign(e, { boss: B.id, name: B.name, color: B.color, bt: B.every || 3, hp: e.hp * B.hp, maxHp: e.maxHp * B.hp, seen: 0 });
       if (B.id === 'phantom') e.speed *= 1.7;
       G.boss = e;
       if (B.id === 'gamemaster') enterArena(e);
     }
+  }
+
+  // TEST MODE: summon enemies/bosses in a ring around you (not on top of you, pushed out of walls)
+  function summon(kind, count) {
+    if (!G || !G.test) return;
+    count = Math.max(1, Math.min(100, count | 0));
+    const B = kind === 'creator' ? CREATOR : BOSSES.find(b => b.id === kind);
+    const type = B ? 'boss' : kind;
+    if (!ENEMIES[type]) return;
+    const me = G.me;
+    for (let i = 0; i < count; i++) {
+      const n = G.enemies.length;
+      spawnEnemy(type, B);
+      const e = G.enemies[n];
+      if (!e || (B && B.id === 'gamemaster')) continue;
+      for (let k = 0; k < 40; k++) { // put it 350-650 away from you, outside walls
+        const an = Math.random() * Math.PI * 2, d = 350 + Math.random() * 300;
+        const c = { x: Math.max(e.r, Math.min(MAP.w - e.r, me.x + Math.cos(an) * d)), y: Math.max(e.r, Math.min(MAP.h - e.r, me.y + Math.sin(an) * d)), r: e.r };
+        collideWorld(c);
+        if (Math.hypot(c.x - me.x, c.y - me.y) > 250) { e.x = c.x; e.y = c.y; break; }
+      }
+      burst(e.x, e.y, '#6c5ce7', 10, 200);
+    }
+  }
+  function killAll() {
+    if (!G || !G.test) return;
+    for (const e of G.enemies) burst(e.x, e.y, e.color || e.def.color, 14, 260);
+    G.enemies = [];
+    if (G.boss) { G.boss = null; leaveArena(); }
   }
 
   // minion spawned right next to (x, y)
@@ -4648,6 +4677,8 @@ const Game = (() => {
     ctx.textBaseline = 'top';
     ctx.font = '800 15px system-ui, sans-serif';
     ctx.fillStyle = '#fff';
+    const uiS = Settings.hud();
+    ctx.save(); ctx.scale(uiS, uiS);
     if (G.mode === 'sp') {
       ctx.fillText(`WAVE ${G.wave}`, pad, pad);
       ctx.fillStyle = '#ffd36b';
@@ -4658,6 +4689,7 @@ const Game = (() => {
       const alive = [...G.remotes.values()].filter(r => r.alive).length + (G.me.alive ? 1 : 0);
       ctx.fillText(`ALIVE ${alive}/${G.remotes.size + 1}`, pad, pad);
     }
+    ctx.restore();
 
     ctx.textAlign = 'right';
     ctx.font = '600 13px system-ui, sans-serif';
@@ -4717,14 +4749,14 @@ const Game = (() => {
   function drawSticks() {
     const R = Input.STICK_R;
     const draw = (s, gx, label, tint) => {
-      const ox = s ? s.ox : gx, oy = s ? s.oy : H - 120;
+      const u = Settings.hud(), ox = s ? s.ox : gx * u, oy = s ? s.oy : H - 120 * u;
       ctx.globalAlpha = s ? 1 : 0.45;
       ctx.fillStyle = 'rgba(255,255,255,0.08)';
       ctx.strokeStyle = 'rgba(255,255,255,0.3)';
       ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(ox, oy, R, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       ctx.fillStyle = tint;
-      ctx.beginPath(); ctx.arc(s ? s.x : ox, s ? s.y : oy, 26, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(s ? s.x : ox, s ? s.y : oy, 26 * u, 0, Math.PI * 2); ctx.fill();
       if (!s) {
         ctx.fillStyle = 'rgba(255,255,255,0.7)';
         ctx.font = '700 11px system-ui, sans-serif';
@@ -4735,7 +4767,7 @@ const Game = (() => {
       ctx.globalAlpha = 1;
     };
     draw(Input.sticks.move, 110, 'MOVE', 'rgba(120,180,255,0.6)');
-    draw(Input.sticks.aim, W - 110, 'AIM (auto-fires)', 'rgba(255,90,90,0.65)');
+    draw(Input.sticks.aim, W / Settings.hud() - 110, 'AIM (auto-fires)', 'rgba(255,90,90,0.65)');
   }
 
   // ---------------------------------------------------------------- weapon bar (DOM)
@@ -4804,7 +4836,7 @@ const Game = (() => {
   function resume() { if (G) { G.paused = false; last = performance.now(); } }
 
   return {
-    startSP, startMP, stop, pause, resume, applyLoadout, applyAbilities, spawnEpic,
+    startSP, startMP, stop, pause, resume, applyLoadout, applyAbilities, spawnEpic, summon, killAll,
     get test() { return !!(G && G.test); },
     get infAbility() { return !!(G && G.infAbility); },
     set infAbility(v) { if (G) G.infAbility = v; },

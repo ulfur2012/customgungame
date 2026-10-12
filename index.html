@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Custom Gun Game</title>
-  <link rel="stylesheet" href="style.css?v=78">
+  <link rel="stylesheet" href="style.css?v=79">
 </head>
 <body>
   <canvas id="game"></canvas>
@@ -154,6 +154,13 @@
       <button id="testLoadoutBtn" class="primary alt">Change guns / ability</button>
       <button id="testEpicBtn" class="epic-btn">★ Spawn ULTIMATE crate</button>
       <button id="testInfBtn">∞ Infinite ability: OFF</button>
+      <div id="spawnPanel" class="spawn-panel hidden">
+        <b>Spawn enemies</b>
+        <select id="spawnType"></select>
+        <div id="spawnCounts" class="seg"><button data-n="1">1</button><button data-n="5">5</button><button data-n="10">10</button><button data-n="25">25</button><button data-n="50">50</button></div>
+        <div class="spawn-row"><input id="spawnCount" type="number" min="1" max="100" value="5"><button id="spawnGo" class="primary">Spawn</button></div>
+        <button id="killAllBtn">💀 Kill all enemies</button>
+      </div>
       <button id="pauseSettings">Settings</button>
       <button id="quitBtn">Quit round</button>
     </div>
@@ -188,6 +195,8 @@
   <div id="settingsScreen" class="overlay hidden">
     <div class="panel">
       <h2>Settings</h2>
+      <div id="settingsTabs" class="seg"><button data-t="general" class="active">General</button><button data-t="controls">Controls</button></div>
+      <div id="setGeneral">
       <label class="toggle">
         <input id="mobileToggle" type="checkbox">
         <span class="switch"></span>
@@ -200,6 +209,18 @@
           <button data-v="light">☀️ Light</button>
         </div>
       </div>
+      <div class="setting">
+        <span class="setting-label">UI size: <b id="uiScaleVal">100%</b></span>
+        <input id="uiScale" type="range" min="70" max="150" step="5" value="100">
+      </div>
+      </div>
+      <div id="setControls" class="hidden">
+        <p id="controlsTouch" class="hint hidden">You're on the mobile version: you play with touch (joysticks + buttons). These keys are for playing on a PC with a keyboard.</p>
+        <p class="hint">Tap a key, then press the new key (Esc cancels).</p>
+        <div id="keyList" class="key-list"></div>
+        <p id="keyMsg" class="hint"></p>
+        <button id="keysReset">Reset to defaults</button>
+      </div>
       <button id="settingsClose" class="primary">Done</button>
     </div>
   </div>
@@ -207,11 +228,11 @@
   <div id="toast" class="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="js/config.js?v=78"></script>
-  <script src="js/core.js?v=78"></script>
-  <script src="js/input.js?v=78"></script>
-  <script src="js/net.js?v=78"></script>
-  <script src="js/game.js?v=78"></script>
-  <script src="js/ui.js?v=78"></script>
+  <script src="js/config.js?v=79"></script>
+  <script src="js/core.js?v=79"></script>
+  <script src="js/input.js?v=79"></script>
+  <script src="js/net.js?v=79"></script>
+  <script src="js/game.js?v=79"></script>
+  <script src="js/ui.js?v=79"></script>
 </body>
 </html>

@@ -85,6 +85,18 @@
     el('testInfBtn').textContent = `∞ Infinite ability: ${Game.infAbility ? 'ON' : 'OFF'}`;
     el('testInfBtn').classList.toggle('primary', Game.infAbility);
   };
+  // test mode: summon enemies / bosses in bulk
+  {
+    const sel = el('spawnType');
+    for (const k of Object.keys(ENEMIES)) if (k !== 'boss') sel.add(new Option(k[0].toUpperCase() + k.slice(1), k));
+    for (const B of [...BOSSES, CREATOR]) sel.add(new Option('BOSS: ' + B.name, B.id));
+    for (const b of document.querySelectorAll('#spawnCounts button')) b.onclick = () => { el('spawnCount').value = b.dataset.n; };
+    el('spawnGo').onclick = () => {
+      const n = Math.max(1, Math.min(100, parseInt(el('spawnCount').value, 10) || 1));
+      overlay('pauseScreen', false); Game.summon(sel.value, n); Game.resume();
+    };
+    el('killAllBtn').onclick = () => { overlay('pauseScreen', false); Game.killAll(); Game.resume(); };
+  }
   el('testEpicBtn').onclick = () => { overlay('pauseScreen', false); Game.spawnEpic(); Game.resume(); };
   el('testLoadoutBtn').onclick = () => {
     overlay('pauseScreen', false);
@@ -113,7 +125,66 @@
     Input.reset();
     applySettings();
   };
-  el('settingsClose').onclick = () => overlay('settingsScreen', false);
+  // ---- UI scale (HUD + menus; canvas HUD text + joysticks read Settings.ui)
+  function applyUiScale() {
+    document.documentElement.style.setProperty('--ui', Settings.ui);
+    document.documentElement.style.setProperty('--uihud', Settings.hud());
+    el('uiScale').value = Math.round(Settings.ui * 100);
+    el('uiScaleVal').textContent = Math.round(Settings.ui * 100) + '%';
+  }
+  el('uiScale').oninput = () => { Settings.ui = Math.max(0.7, Math.min(1.5, el('uiScale').value / 100)); applyUiScale(); };
+  el('uiScale').onchange = () => Settings.save();
+  applyUiScale();
+  addEventListener('resize', applyUiScale);
+  // ---- controls (PC key bindings)
+  function applyKeyLabels() {
+    for (const [id, a] of [['abilityBtn', 'ab1'], ['ability2Btn', 'ab2'], ['ability3Btn', 'ab3'], ['ability4Btn', 'ab4'], ['ultBtn', 'ult']])
+      el(id).querySelector('.ab-key').textContent = keyName(Settings.keys[a]);
+  }
+  let waitingFor = null;
+  function renderControls(msg) {
+    const box = el('keyList');
+    box.innerHTML = '';
+    for (const [a, label] of KEY_ACTIONS) {
+      const row = document.createElement('div'); row.className = 'key-row';
+      const b = document.createElement('button');
+      b.className = 'key-btn' + (waitingFor === a ? ' waiting' : '');
+      b.textContent = waitingFor === a ? 'Press a key…' : keyName(Settings.keys[a]);
+      b.onclick = () => { waitingFor = waitingFor === a ? null : a; Input.rebinding = !!waitingFor; renderControls(); };
+      row.innerHTML = `<span>${label}</span>`;
+      row.appendChild(b);
+      box.appendChild(row);
+    }
+    for (const [label, k] of [['Shoot', 'Left click'], ['Inspect building', 'Right click'], ['Swap gun', 'Mouse wheel'], ['Pause', 'Esc'], ['Move (also)', 'Arrow keys']]) {
+      const row = document.createElement('div'); row.className = 'key-row fixed';
+      row.innerHTML = `<span>${label}</span><span class="key-btn">${k}</span>`;
+      box.appendChild(row);
+    }
+    el('keyMsg').textContent = msg || '';
+  }
+  addEventListener('keydown', e => {
+    if (!waitingFor) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const a = waitingFor;
+    waitingFor = null; Input.rebinding = false;
+    if (e.code === 'Escape') { renderControls(); return; }
+    const K = Settings.keys, old = K[a];
+    const clash = KEY_ACTIONS.find(x => x[0] !== a && K[x[0]] === e.code);
+    K[a] = e.code;
+    let msg = '';
+    if (clash) { K[clash[0]] = old; msg = `${keyName(e.code)} was on ${clash[1]} - swapped, ${clash[1]} is now ${keyName(old)}.`; }
+    Settings.save(); applyKeyLabels(); renderControls(msg);
+  }, true);
+  el('keysReset').onclick = () => { Settings.keys = { ...DEFAULT_KEYS }; waitingFor = null; Input.rebinding = false; Settings.save(); applyKeyLabels(); renderControls('Back to default keys.'); };
+  for (const b of document.querySelectorAll('#settingsTabs button')) b.onclick = () => {
+    for (const x of document.querySelectorAll('#settingsTabs button')) x.classList.toggle('active', x === b);
+    el('setGeneral').classList.toggle('hidden', b.dataset.t !== 'general');
+    el('setControls').classList.toggle('hidden', b.dataset.t !== 'controls');
+    el('controlsTouch').classList.toggle('hidden', !Settings.mobile);
+    waitingFor = null; Input.rebinding = false; renderControls();
+  };
+  applyKeyLabels(); renderControls();
+  el('settingsClose').onclick = () => { waitingFor = null; Input.rebinding = false; renderControls(); overlay('settingsScreen', false); };
   applySettings();
 
   // ---------------------------------------------------------------- loadout builder
@@ -251,8 +322,8 @@
     // two slot tabs, like the upgrade slots
     el('slotTabs').innerHTML = '';
     const cls = classOf(L);
-    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2'], [`Ability 3 (V) · wave ${(classOf(L) || {}).id === 'engineer' ? CLASSES.engineerSlot3 : SLOT3_WAVE}+`, 'ability3'],
-     [cls ? `${cls.emoji} Class (B) · wave ${CLASSES.unlockWave}+` : `Ability 4 (B) · wave ${SLOT4_WAVE}+`, 'ability4']].forEach(([label, k], i) => {
+    [[`Ability 1 (${keyName(Settings.keys.ab1)})`, 'ability'], [`Ability 2 (${keyName(Settings.keys.ab2)})`, 'ability2'], [`Ability 3 (${keyName(Settings.keys.ab3)}) · wave ${(classOf(L) || {}).id === 'engineer' ? CLASSES.engineerSlot3 : SLOT3_WAVE}+`, 'ability3'],
+     [cls ? `${cls.emoji} Class (${keyName(Settings.keys.ab4)}) · wave ${CLASSES.unlockWave}+` : `Ability 4 (${keyName(Settings.keys.ab4)}) · wave ${SLOT4_WAVE}+`, 'ability4']].forEach(([label, k], i) => {
       const b = document.createElement('button'), A = ABILITIES[k === 'ability4' && cls ? cls.ab : L[k]];
       b.className = 'tab' + (i === abSlot ? ' active' : '');
       b.innerHTML = `<span class="tab-label">${label}</span><span class="tab-value">${A ? A.name : 'None'}</span>`;
@@ -364,7 +435,7 @@
           if (L.ability !== c.a) L.perk = null;
           if (L.ability2 !== c.b) L.perk2 = null;
           L.ability = c.a; if (c.b !== c.a) L.ability2 = c.b;
-          toast(`Equipped ${A1.name} (E) + ${A2.name} (C)`);
+          toast(`Equipped ${A1.name} (${keyName(Settings.keys.ab1)}) + ${A2.name} (${keyName(Settings.keys.ab2)})`);
         }
         Account.save(); keepInPlace(`[data-combo="${c.name}"]`, renderLoadout);
       };
@@ -462,6 +533,7 @@
     el('testLoadoutBtn').classList.toggle('hidden', !Game.test);
     el('testEpicBtn').classList.toggle('hidden', !Game.test);
     el('testInfBtn').classList.toggle('hidden', !Game.test);
+    el('spawnPanel').classList.toggle('hidden', !Game.test);
     el('testInfBtn').textContent = `∞ Infinite ability: ${Game.infAbility ? 'ON' : 'OFF'}`;
     el('testInfBtn').classList.toggle('primary', Game.infAbility);
     overlay('pauseScreen', true);

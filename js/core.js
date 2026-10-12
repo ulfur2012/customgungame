@@ -538,11 +538,36 @@ const Store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
 };
 
+// PC key bindings (KeyboardEvent.code). Escape (pause) stays fixed.
+const KEY_ACTIONS = [
+  ['up', 'Move up', 'KeyW'], ['down', 'Move down', 'KeyS'], ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
+  ['fire', 'Shoot (keyboard)', 'Space'], ['reload', 'Reload', 'KeyR'], ['swap', 'Swap gun', 'KeyQ'],
+  ['gun1', 'Gun 1', 'Digit1'], ['gun2', 'Gun 2', 'Digit2'],
+  ['ab1', 'Ability 1', 'KeyE'], ['ab2', 'Ability 2', 'KeyC'], ['ab3', 'Ability 3', 'KeyV'], ['ab4', 'Ability 4', 'KeyB'],
+  ['ult', 'Ultimate', 'KeyF'],
+];
+const DEFAULT_KEYS = Object.fromEntries(KEY_ACTIONS.map(a => [a[0], a[2]]));
+// short label for a key code: KeyE -> E, Digit1 -> 1, ArrowUp -> ↑
+function keyName(code) {
+  if (!code) return '—';
+  if (/^Key.$/.test(code)) return code.slice(3);
+  if (/^Digit.$/.test(code)) return code.slice(5);
+  if (/^Numpad/.test(code)) return 'Num' + code.slice(6);
+  return { Space: 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', ShiftLeft: 'Shift', ShiftRight: 'RShift',
+    ControlLeft: 'Ctrl', ControlRight: 'RCtrl', AltLeft: 'Alt', AltRight: 'RAlt', Tab: 'Tab', CapsLock: 'Caps', Enter: 'Enter',
+    Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Comma: ',',
+    Period: '.', Slash: '/', Backslash: '\\' }[code] || code;
+}
+
 // Device settings (not per account).
 const Settings = {
   mobile: Store.get('cgg.settings', {}).mobile ?? matchMedia('(pointer: coarse)').matches,
   light: Store.get('cgg.settings', {}).light ?? false, // light mode (default dark)
-  save() { Store.set('cgg.settings', { mobile: this.mobile, light: this.light }); },
+  ui: Store.get('cgg.settings', {}).ui ?? 1, // UI scale 0.7-1.5
+  // in-game HUD scale: narrow phones can't fit a bigger HUD, so cap it there
+  hud() { return Math.min(this.ui || 1, Math.max(1, innerWidth / 340)); },
+  keys: { ...DEFAULT_KEYS, ...(Store.get('cgg.settings', {}).keys || {}) },
+  save() { Store.set('cgg.settings', { mobile: this.mobile, light: this.light, ui: this.ui, keys: this.keys }); },
 };
 
 // Simple string hash (cyrb53). Accounts are stored on this device only.

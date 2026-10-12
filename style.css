@@ -547,3 +547,25 @@ body.mobile #ability4Btn .ab-state { color: #062b12; font-weight: 800; font-size
 /* CLASSES banner in the Ability tab */
 .class-banner { grid-column: 1 / -1; font-size: 13px; line-height: 1.4; padding: 8px 10px; border-radius: 10px; border: 1px dashed var(--accent); background: var(--panel-2); }
 .class-banner.on { border: 2px solid #f6b93b; background: rgba(246, 185, 59, 0.15); }
+
+/* settings: controls tab */
+#settingsTabs { margin-bottom: 12px; }
+.key-list { max-height: 45vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.key-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.key-row .key-btn { min-width: 96px; min-height: 36px; padding: 4px 10px; margin: 0; text-align: center; font-weight: bold; }
+.key-row.fixed .key-btn { opacity: .6; border: 1px dashed currentColor; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-weight: normal; }
+.key-btn.waiting { outline: 2px solid #ffd35d; }
+/* pause: test mode spawn panel */
+.spawn-panel { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid rgba(128,128,128,.4); border-radius: 10px; margin: 6px 0; }
+.spawn-panel select, .spawn-panel input { min-height: 44px; font-size: 16px; padding: 4px 8px; border-radius: 8px; }
+.spawn-panel .seg button { min-height: 44px; flex: 1; }
+.spawn-row { display: flex; gap: 6px; }
+.spawn-row input { width: 90px; flex: 0 0 auto; }
+.spawn-row button { flex: 1; margin: 0; }
+
+/* UI scale (Settings) */
+.panel { zoom: var(--ui, 1); }
+#hud > * { zoom: var(--uihud, 1); }
+.panel { max-width: calc((100vw - 32px) / var(--ui, 1)); }
+.overlay { overflow-y: auto; }
+#uiScale { width: 100%; min-height: 36px; }
