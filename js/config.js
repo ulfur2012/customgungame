@@ -208,6 +208,8 @@ const BOSSES = [
 const CREATOR = { id: 'creator', name: 'CREATOR', color: '#ffd700', hp: 3, every: 3.5, desc: 'Can use any ultimate.' };
 
 const PLAYER = { size: 46, r: 18, hp: 100, speed: 250 };
+// TEAM REVIVE (Teams + Co-op): stand on a fallen teammate's body for `hold`s without shooting, within `window`s of the death
+const REVIVE = { window: 10, hold: 3, radius: 45, hp: 0.5, inv: 1 };
 const PLAYER_COLORS = ['#4aa3ff', '#ff5d5d', '#5dff8a', '#ffd35d', '#c45dff', '#5dfff0', '#ff9f5d', '#ffffff'];
 
 // Arena. The same seed always builds the same map, so everyone in multiplayer gets the same one.
@@ -884,6 +886,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 88, title: 'Revive your teammates', notes: ['In Teams and Co-op, when a teammate dies they leave a ghost for 10 seconds.', 'Stand on the ghost for 3 seconds WITHOUT shooting to bring them back (abilities are OK).', 'They come back with half health in the same round. Enemies can see the ghost but cannot revive it.'] },
   { v: 87, title: 'Buy mega buildings', notes: ['Mega buildings (Railgun, Fortress, Watchtower...) are now bought with score in the new 🏰 Mega tab.', 'You must own the buildings they are made from first (Railgun needs Turret + Tesla).', 'Test mode and "All upgrades free" games still let you build them all.'] },
   { v: 86, title: 'Ultimates fixed', notes: ['Ultimates can NOT be bought anymore. They only come from gold crates again.', 'If you bought one, you got your score back.'] },
   { v: 85, title: 'Mega buildings for everyone', notes: [

@@ -100,3 +100,8 @@ Headless Edge (`C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe`) +
 (install puppeteer-core in a scratch folder; not kept in the repo). `Game.debugState` exposes the round state.
 Typical test: sign up a throwaway account, `buildMap(...)`, hide `.screen`s, `Game.startSP(true)`, then drive
 keys/mouse and read `Game.debugState`. Screenshot to check visuals.
+- TEAM REVIVE (v88, Teams + Co-op, config `REVIVE`): a dead teammate leaves a ghost body (`G.bodies`, from the 'dead' msg x/y)
+  for 10s; a living teammate inside the radius for 3s without shooting (`me.shotAt`; abilities OK) sends 'rvq' -> host
+  `hostRevive` checks `Game.reviveOk` (ui: round on, player down, re-adds to `lobby.alive`) and broadcasts 'rvd'. Back with
+  50% HP + 1s inv at the body; killer keeps the kill. Enemies see the body if in sight.
+- Dead in MP = spectate (`G.spec`, a living teammate, else anyone); sight/fog/canSee use `eye()` = the spectated player.

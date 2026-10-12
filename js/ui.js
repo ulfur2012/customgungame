@@ -943,6 +943,12 @@
   });
   // co-op: a player who came back counts as alive again
   Net.on('rev', m => { if (Net.state.isHost && lobby.inRound) lobby.alive.add(m.from); });
+  // team revive: host allows it only while the round is on and the player is really down; then they count as alive again
+  Game.reviveOk = id => {
+    if (!lobby.inRound || lobby.alive.has(id) || !lobby.round.some(p => p.id === id)) return false;
+    lobby.alive.add(id);
+    return true;
+  };
   Game.on('revive', () => { if (Net.state.isHost && lobby.inRound) lobby.alive.add(Net.state.myId); });
   Net.on('hostLeft', () => {
     Game.stop();

@@ -73,7 +73,7 @@ const Game = (() => {
         frozenT: 0, airT: 0, airA: 0, phaseT: 0, reflectT: 0, overShots: 0, recall: null, grapple: null, padCd: 0, thornCd: 0,
         guns: [makeGun('main', allowedBuild('main', L.main)), makeGun('secondary', allowedBuild('secondary', L.secondary))], cur: 0,
       },
-      bullets: [], rails: [], sensed: [], doors: [], fx: [], texts: [], hears: [], feed: [],
+      bullets: [], rails: [], sensed: [], doors: [], fx: [], texts: [], hears: [], feed: [], bodies: [], revived: new Set(),
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
@@ -234,13 +234,17 @@ const Game = (() => {
   function update(dt) {
     const me = G.me;
     if (me.alive) updateMe(dt);
-    const camT = G.coop && !me.alive ? [...G.remotes.values()].find(r => r.alive) || me : me; // co-op: watch a friend while dead
+    // dead in MP: spectate a living teammate (else anyone alive); sight + fog come from them too (`eye`)
+    const alive = [...G.remotes.values()].filter(r => r.alive);
+    G.spec = G.mode === 'mp' && !me.alive ? (G.spec && G.spec.alive && alive.includes(G.spec) ? G.spec : alive.find(r => !isEnemy(r)) || alive[0] || null) : null;
+    const camT = G.spec || me;
     G.cam.x += (camT.x - G.cam.x) * Math.min(1, dt * 10);
     G.cam.y += (camT.y - G.cam.y) * Math.min(1, dt * 10);
 
     if (G.mode === 'sp' || coopHost()) { updateWaves(dt); updateEnemies(me.slowT > 0 ? dt * ABILITIES.slowmo.factor : dt); }
     if (coopClient()) updateMirror(dt);
     if (G.coop) coopNet(dt);
+    if (G.mode === 'mp') updateBodies(dt);
     if (G.mode === 'mp') {
       for (const r of G.remotes.values()) {
         r.x += (r.tx - r.x) * Math.min(1, dt * 15);
@@ -404,6 +408,7 @@ const Game = (() => {
 
   function shoot(gun) {
     const me = G.me, s = gun.stats;
+    me.shotAt = G.time; // team revive: shooting cancels it
     const m = gunToWorld(me, gun.sprite.muzzle);
     if (me.rocketT > 0) { // Rocket Rounds ultimate: every shot is an RPG
       addRocket(m.x, m.y, me.aim, myOwnerId());
@@ -495,7 +500,8 @@ const Game = (() => {
       setTimeout(() => G && hooks.spOver({ wave: G.wave, score: G.score, kills: G.kills, test: G.test }), 900);
     } else {
       G.banner = { text: G.coop ? 'You died — back next wave!' : 'You were eliminated', t: 3 };
-      Net.send({ t: 'dead', by });
+      Net.send({ t: 'dead', by, x: Math.round(me.x), y: Math.round(me.y) });
+      addBody(G.myId, me.x, me.y, me.team);
       addFeed(by, G.myId);
       hooks.myDeath(by);
     }
@@ -5103,6 +5109,88 @@ const Game = (() => {
   Net.on('ef', coopStatus);
   Net.on('rev', m => { if (G && G.coop && G.remotes.has(m.from)) G.remotes.get(m.from).alive = true; });
 
+
+  // ---------------------------------------------------------------- team revive (Teams + Co-op)
+  // A dead teammate leaves a body for REVIVE.window s. A living teammate standing on it for REVIVE.hold s without
+  // shooting asks the host ('rvq'); the host checks (body still there, player still dead, round on) and broadcasts 'rvd'.
+  const reviveMode = () => G.mode === 'mp' && (G.teams || G.coop);
+  function addBody(id, x, y, team) {
+    if (!reviveMode()) return;
+    G.bodies = G.bodies.filter(b => b.id !== id);
+    G.bodies.push({ id, x, y, team, t: REVIVE.window, prog: 0, sent: 0 });
+  }
+  const bodyAlive = id => (id === G.myId ? G.me.alive : G.remotes.has(id) && G.remotes.get(id).alive);
+  function updateBodies(dt) {
+    const me = G.me;
+    for (const b of G.bodies) {
+      b.t -= dt;
+      b.sent = Math.max(0, b.sent - dt);
+      const mine = b.id !== G.myId && me.alive && b.team === me.team && Math.hypot(me.x - b.x, me.y - b.y) <= REVIVE.radius;
+      const shot = me.shotAt !== undefined && G.time - me.shotAt < 0.25;
+      if (!mine || shot) { b.prog = 0; continue; }
+      b.prog = Math.min(REVIVE.hold, b.prog + dt);
+      if (b.prog >= REVIVE.hold && b.sent <= 0) {
+        b.sent = 1; // ask again in 1s if no answer
+        if (Net.state.isHost) hostRevive(b.id, G.myId); else Net.send({ t: 'rvq', id: b.id });
+      }
+    }
+    G.bodies = G.bodies.filter(b => b.t > 0 && !bodyAlive(b.id));
+  }
+  function hostRevive(id, by) {
+    const b = G.bodies.find(x => x.id === id);
+    if (!b || b.t <= 0 || bodyAlive(id) || !Game.reviveOk(id)) return;
+    const m = { t: 'rvd', id, by, x: Math.round(b.x), y: Math.round(b.y) };
+    Net.send(m);
+    applyRevive(m);
+  }
+  function applyRevive(m) {
+    G.bodies = G.bodies.filter(b => b.id !== m.id);
+    G.feed.push({ text: `${nameOf(m.by)} revived ${nameOf(m.id)}`, t: 5 });
+    if (m.id === G.myId) {
+      const me = G.me;
+      Object.assign(me, { alive: true, hp: Math.round(me.maxHp * REVIVE.hp), lastStand: false, invT: REVIVE.inv, frozenT: 0, vx: 0, vy: 0, x: m.x, y: m.y });
+      G.banner = { text: 'You were revived!', t: 2 };
+      burst(me.x, me.y, '#32ff7e', 24, 300);
+    } else if (G.remotes.has(m.id)) {
+      const r = G.remotes.get(m.id);
+      Object.assign(r, { alive: true, x: m.x, y: m.y, tx: m.x, ty: m.y, hp: PLAYER.hp * REVIVE.hp });
+      G.revived.add(m.id); // ignore one stale 'dead' state update
+      burst(m.x, m.y, '#32ff7e', 24, 300);
+    }
+  }
+  Net.on('rvq', m => { if (inMP() && Net.state.isHost) hostRevive(m.id, m.from); });
+  Net.on('rvd', m => { if (inMP() && !Net.state.isHost) applyRevive(m); });
+  function drawBodies() { // world space: ghost + 10s ring (+ green revive ring); teammates always, enemies only if seen
+    for (const b of G.bodies) {
+      const friend = b.team === G.me.team;
+      if (!friend && !canSee(b.x, b.y, PLAYER.r)) continue;
+      const col = friend ? '#4aa3ff' : '#ff5050', pulse = 0.75 + 0.25 * Math.sin(G.time * 6);
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, b.t) * 0.85;
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.beginPath(); ctx.arc(b.x, b.y, REVIVE.radius, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.beginPath(); ctx.arc(b.x, b.y, REVIVE.radius, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = col;
+      ctx.beginPath(); ctx.arc(b.x, b.y, REVIVE.radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * b.t / REVIVE.window); ctx.stroke();
+      if (b.prog > 0) {
+        ctx.lineWidth = 8; ctx.strokeStyle = '#32ff7e';
+        ctx.beginPath(); ctx.arc(b.x, b.y, REVIVE.radius + 9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * b.prog / REVIVE.hold); ctx.stroke();
+      }
+      // ghost
+      ctx.globalAlpha *= pulse;
+      ctx.fillStyle = '#e8f1ff';
+      ctx.beginPath(); ctx.arc(b.x, b.y - 4, 13, Math.PI, 0);
+      ctx.lineTo(b.x + 13, b.y + 13);
+      for (let i = 0; i < 4; i++) ctx.lineTo(b.x + 13 - (i + 0.5) * 6.5, b.y + (i % 2 ? 13 : 8));
+      ctx.lineTo(b.x - 13, b.y + 13); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#123';
+      ctx.beginPath(); ctx.arc(b.x - 5, b.y - 5, 2.5, 0, Math.PI * 2); ctx.arc(b.x + 5, b.y - 5, 2.5, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      nameTag(friend && b.id !== G.myId ? `${nameOf(b.id)} · ${Math.ceil(b.t)}s` : nameOf(b.id), b.x, b.y + REVIVE.radius + 22, col);
+    }
+  }
+
   // ---------------------------------------------------------------- multiplayer messages
   function remote(id) {
     if (!G.remotes.has(id)) {
@@ -5124,7 +5212,7 @@ const Game = (() => {
     if (!inMP()) return;
     const r = remote(m.from);
     Object.assign(r, { tx: m.x, ty: m.y, aim: m.aim, hp: m.hp, sh: m.sh || 0, gun: m.gun });
-    if (!m.alive) r.alive = false; else if (G.coop) r.alive = true;
+    if (!m.alive) r.alive = false; else if (G.coop || G.revived.has(m.from)) { r.alive = true; G.revived.delete(m.from); }
   });
   Net.on('kit', m => {
     if (!inMP()) return;
@@ -5154,6 +5242,7 @@ const Game = (() => {
     burst(r.x, r.y, r.color, 20, 280);
     addFeed(m.by, m.from);
     if (m.by === G.myId) onKill();
+    if (m.x !== undefined) addBody(m.from, m.x, m.y, r.team);
   });
   Net.on('gad', m => {
     if (!inMP()) return;
@@ -5217,8 +5306,9 @@ const Game = (() => {
 
   // ---------------------------------------------------------------- render
   // can you see this thing? Only if there's a clear line to its middle (no peeking at someone hiding behind a wall)
+  const eye = () => G.spec || G.me; // who you see through (a spectated player while dead)
   function canSee(x, y, r) {
-    const me = G.me;
+    const me = eye();
     return lineOfSight(me.x, me.y, x, y) || (r > 30 && lineOfSight(me.x, me.y, x, y - r * 0.5)) || (r > 30 && lineOfSight(me.x, me.y, x, y + r * 0.5));
   }
 
@@ -5238,7 +5328,7 @@ const Game = (() => {
 
     // you only see what's in your line of sight: everything else is hidden behind walls
     const me = G.me;
-    const sight = visibilityPolygon(me.x, me.y);
+    const sight = visibilityPolygon(eye().x, eye().y);
     ctx.save();
     tracePoly(sight);
     ctx.clip();
@@ -5271,6 +5361,7 @@ const Game = (() => {
       if (e !== G.boss) drawBar(e.x, e.y - e.r - 10, e.r * 2, 5, e.hp / e.maxHp);
     }
 
+    if (G.mode === 'mp') drawBodies();
     for (const r of G.remotes.values()) {
       if (!r.alive) continue;
       if (isEnemy(r) && !canSee(r.x, r.y, PLAYER.r)) continue; // enemy players behind walls stay hidden (teammates always show)
@@ -5601,7 +5692,8 @@ const Game = (() => {
       ctx.textBaseline = 'middle';
       ctx.font = '700 16px system-ui, sans-serif';
       ctx.fillStyle = 'rgba(255,255,255,0.8)';
-      ctx.fillText(G.coop ? 'You died — back when this wave is cleared' : 'Waiting for the round to end…', W / 2, H * 0.6);
+      const myBody = G.bodies.find(b => b.id === G.myId);
+      ctx.fillText(myBody ? `A teammate can revive you (${Math.ceil(myBody.t)}s)` : G.coop ? 'You died — back when this wave is cleared' : 'Waiting for the round to end…', W / 2, H * 0.6);
     }
 
     if (Settings.mobile) drawSticks();
@@ -5725,6 +5817,7 @@ const Game = (() => {
     get coopWave() { return G && G.coop ? G.wave : 0; },
     get run() { return G && G.mode === 'sp' && !G.over ? { wave: G.wave, score: G.score, test: G.test } : null; },
     get debugState() { return G; },
+    reviveOk: () => true, // set by ui (host): may this dead player be revived right now?
     freeUp: false, // set by ui: "All upgrades free" game (mega buildings don't need buying)
     on(name, fn) { hooks[name] = fn; },
   };
