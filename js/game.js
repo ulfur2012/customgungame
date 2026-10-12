@@ -60,7 +60,7 @@ const Game = (() => {
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
-      turrets: [], zones: [], gadgets: [], rings: [], strikes: [], lasers: [],
+      turrets: [], zones: [], gadgets: [], rings: [], healShots: [], strikes: [], lasers: [],
       sendT: 0, packs: [], packT: 0, nades: [], rockets: [], time: 0, lastCombat: 0, pingT: PING.every, ping: 0,
     };
   }
@@ -454,6 +454,7 @@ const Game = (() => {
     me.alive = false;
     burst(me.x, me.y, me.color, 20, 280);
     if (G.mode === 'sp') {
+      G.over = true;
       setTimeout(() => G && hooks.spOver({ wave: G.wave, score: G.score, kills: G.kills, test: G.test }), 900);
     } else {
       G.banner = { text: 'You were eliminated', t: 3 };
@@ -1816,6 +1817,17 @@ const Game = (() => {
       }
     }
     G.zones = G.zones.filter(z => z.t > 0);
+    for (const h of G.healShots) { // heal turret bullets
+      const c = h.tgt, d = Math.hypot(c.x - h.x, c.y - h.y), step = COMBO.healShotSpeed * dt;
+      if ((c === me && !me.alive) || c.dead) { h.done = true; continue; }
+      if (d <= step + 14) {
+        h.done = true;
+        if (c === me) heal(h.amt);
+        else { c.hp = Math.min(c.maxHp, c.hp + h.amt); G.texts.push({ x: c.x, y: c.y - 34, text: `+${h.amt}`, color: '#4cff7a', life: 0.9 }); }
+        burst(c.x, c.y, '#32ff7e', 12, 180);
+      } else { h.x += (c.x - h.x) / d * step; h.y += (c.y - h.y) / d * step; }
+    }
+    G.healShots = G.healShots.filter(h => !h.done);
     for (const t of G.turrets) {
       t.t -= dt; t.cd -= dt;
       if (t.shieldT > 0) t.shieldT -= dt;
@@ -1867,12 +1879,10 @@ const Game = (() => {
           }
           if (pick) {
             t.beamT = COMBO.healEvery;
-            const amt = pick === me ? COMBO.healBeamMe : COMBO.healBeam;
-            if (pick === me) heal(amt);
-            else { pick.hp = Math.min(pick.maxHp, pick.hp + amt); G.texts.push({ x: pick.x, y: pick.y - 34, text: `+${amt}`, color: '#4cff7a', life: 0.9 }); }
-            t.beam = { x: pick.x, y: pick.y, life: 0.35 };
             t.aim = Math.atan2(pick.y - t.y, pick.x - t.x);
-            burst(pick.x, pick.y, '#32ff7e', 12, 180);
+            // fires a green heal bullet that homes in on them and heals on hit
+            G.healShots.push({ x: t.x + Math.cos(t.aim) * 24, y: t.y + Math.sin(t.aim) * 24, tgt: pick, amt: pick === me ? COMBO.healBeamMe : COMBO.healBeam });
+            burst(t.x + Math.cos(t.aim) * 24, t.y + Math.sin(t.aim) * 24, '#32ff7e', 6, 120);
           } else t.beamT = 0.3;
         }
       }
@@ -1924,6 +1934,11 @@ const Game = (() => {
         const ang = Math.random() * Math.PI * 2, d = Math.random() * M.radius * 0.9;
         G.fx.push({ x: z.x + Math.cos(ang) * d, y: z.y + Math.sin(ang) * d, vx: 0, vy: -60, life: 0.7, max: 0.7, size: 5, color: '#7dffaa' });
       }
+    }
+    for (const h of G.healShots) { // heal turret bullets: glowing green orb with a cross
+      ctx.fillStyle = 'rgba(50,255,126,0.35)'; ctx.beginPath(); ctx.arc(h.x, h.y, 13, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#32ff7e'; ctx.beginPath(); ctx.arc(h.x, h.y, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.fillRect(h.x - 4, h.y - 1.5, 8, 3); ctx.fillRect(h.x - 1.5, h.y - 4, 3, 8);
     }
     for (const t of G.turrets) {
       if (t.rail) { drawRailgun(t); continue; }
@@ -3331,6 +3346,7 @@ const Game = (() => {
     set infAbility(v) { if (G) G.infAbility = v; },
     get running() { return !!G; },
     get mode() { return G && G.mode; },
+    get run() { return G && G.mode === 'sp' && !G.over ? { wave: G.wave, score: G.score, test: G.test } : null; },
     get debugState() { return G; },
     on(name, fn) { hooks[name] = fn; },
   };

@@ -450,6 +450,9 @@
       Game.stop();
       showLobby();
     } else {
+      // quitting still banks the score you earned this run (test mode doesn't count)
+      const r = Game.run;
+      if (r && !r.test) { Account.user.best = Math.max(Account.user.best || 0, r.wave); Account.user.bank = (Account.user.bank || 0) + r.score; Account.save(); if (r.score) toast(`+${r.score} score to spend`); }
       Game.stop();
       goMenu();
     }
