@@ -26,7 +26,11 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
 ## Game rules decided with the user
 - Stats: damage, knockback (each point = 0.1s between shots), reload, mag size, loudness (x120 = hearing).
 - Every placeable ability must be THROWN (hold = aim arc, release = throw; mark `thrown: true`), never dropped.
-- Buildings (turret, radar, tesla, barrier) last until destroyed, snap to the grid, 3 of a kind merge.
+- Buildings (turret, radar, tesla, barrier, mortar, shieldgen, sniper, flame, laser, hangar, gravity) last until destroyed,
+  snap to the grid, 3 of a kind merge. Building combos = throw ability B onto building A (`landGadget` / `updateProjectiles`,
+  flag set via `upgradeGadget` so MP syncs with `gadc`); list + `how` text in config COMBOS, numbers in COMBO.
+  Building looks: glow = pre-rendered additive sprites (`glow()`, no shadowBlur), `popIn`/`buildBrackets`/`landFx` on landing,
+  `buildingBoom` debris on destruction, `flashAt` muzzle blooms (G.blooms / G.debris, tuning in BUILD_FX).
 - Ability slots: 1 = E, 2 = C, 3 = V from wave 20, 4 = B from wave 30 (SP; all 4 in Test mode).
   Slot state is swapped into `me` (`swapAlt('alt'|'alt3'|'alt4')`) so ability code works for every slot.
   Passives work from any slot (`hasAb`). Weak abilities (`respawn`) get a use back every 30s.

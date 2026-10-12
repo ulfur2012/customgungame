@@ -446,6 +446,10 @@ function describeMods(part) {
 const ICON_SHAPES = {
   plus:      ['M15 5h10v10h10v10H25v10H15V25H5V15h10z'],
   mortar:    ['M6 31h28v5H6zM11 24h18v7H11zM17 24l-3-3L24 4l6 3-10 17z'],
+  flametower:['M8 30h24v6H8zM13 18h14v12H13zM20 2c5 5 7 9 4 14h-8c-3-5 0-8 4-14zM20 8c2 3 2 5 1 7h-2c-1-2-1-4 1-7z', 'evenodd'],
+  laser:     ['M9 30h22v6H9zM14 20h12v10H14zM18 12h4v8h-4zM20 2l2 4 4-2-2 4 4 2-4 2 2 4-4-2-2 4-2-4-4 2 2-4-4-2 4-2-2-4 4 2z'],
+  drone:     ['M15 16h10v8H15zM6 9a4 4 0 1 1-.01 0zM34 9a4 4 0 1 1-.01 0zM6 23a4 4 0 1 1-.01 0zM34 23a4 4 0 1 1-.01 0zM8 13l7 4-1 2-7-4zM32 13l-7 4 1 2 7-4zM8 27l7-4-1-2-7 4zM32 27l-7-4 1-2 7 4zM10 33h20v4H10z'],
+  gravity:   ['M20 14a6 6 0 1 1-.01 0zM20 4a16 16 0 1 1-.01 0zM20 7a13 13 0 1 0 .01 0zM20 10a10 10 0 1 1-.01 0zM20 12a8 8 0 1 0 .01 0z', 'evenodd'],
   dome:      ['M4 33a16 16 0 0 1 32 0zM18 9h4v8h-4zM20 3a3 3 0 1 1-.01 0z'],
   scope:     ['M20 4a16 16 0 1 1-.01 0zM20 8a12 12 0 1 0 .01 0zM19 1h2v15h-2zM19 24h2v15h-2zM1 19h15v2H1zM24 19h15v2H24z', 'evenodd'],
   heart:     ['M20 35L6 21a8.5 8.5 0 0 1 14-11 8.5 8.5 0 0 1 14 11z'],

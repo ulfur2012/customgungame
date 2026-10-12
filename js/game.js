@@ -60,7 +60,7 @@ const Game = (() => {
       enemies: [], remotes: new Map(),
       cam: { x: spawn[0], y: spawn[1] }, shake: 0, hurt: 0, banner: null,
       wave: 0, phase: 'break', breakT: 1.5, queue: [], spawnT: 0, score: 0, kills: 0, boss: null,
-      turrets: [], zones: [], gadgets: [], rings: [], healShots: [], strikes: [], lasers: [],
+      turrets: [], zones: [], gadgets: [], rings: [], healShots: [], strikes: [], lasers: [], blooms: [], debris: [],
       sendT: 0, packs: [], packT: 0, nades: [], rockets: [], time: 0, lastCombat: 0, pingT: PING.every, ping: 0,
     };
   }
@@ -248,6 +248,7 @@ const Game = (() => {
 
     for (const f of G.fx) { f.x += f.vx * dt; f.y += f.vy * dt; f.vx *= 0.9; f.vy *= 0.9; f.life -= dt; }
     G.fx = G.fx.filter(f => f.life > 0);
+    updateJuice(dt);
     for (const t of G.texts) { t.y -= 40 * dt; t.life -= dt; }
     G.texts = G.texts.filter(t => t.life > 0);
     for (const h of G.hears) h.t -= dt / 1.2;
@@ -825,6 +826,14 @@ const Game = (() => {
         const t = G.turrets.find(t => t.hp > 0 && Math.hypot(t.x - n.x1, t.y - n.y1) <= COMBO.near);
         if (t) { t.shieldT = ABILITIES.bubble.duration; comboFx(t.x, t.y, '#7ef9ff', 'SHIELDED TURRET'); }
       }
+      if (n.kind === 'radar') { // PRISM LASER (radar used up)
+        const lz = myGadget('laser', n.x1, n.y1, COMBO.near);
+        if (lz && !lz.prism) { upgradeGadget(lz, 'prism'); comboFx(lz.x, lz.y, '#c56cf0', 'PRISM LASER'); return; }
+      }
+      if (n.kind === 'barrier' && !n.noMerge && !n.big) { // INFERNO RING (barrier used up)
+        const ft = myGadget('flame', n.x1, n.y1, COMBO.near);
+        if (ft && !ft.blaze) { upgradeGadget(ft, 'blaze'); comboFx(ft.x, ft.y, '#ffd32a', 'INFERNO RING'); return; }
+      }
       if (n.kind === 'radar') { // EAGLE EYE (radar used up)
         const sn = myGadget('sniper', n.x1, n.y1, COMBO.near);
         if (sn && !sn.spot) { upgradeGadget(sn, 'spot'); comboFx(sn.x, sn.y, '#ff9ff3', 'EAGLE EYE'); return; }
@@ -925,7 +934,7 @@ const Game = (() => {
     const three = near.slice(-3), cx = three.reduce((s, g) => s + g.x, 0) / 3, cy = three.reduce((s, g) => s + g.y, 0) / 3;
     for (const g of three) {
       removeGadget(g);
-      if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id });
+      if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id, q: 1 });
     }
     burst(cx, cy, ABILITIES[kind].color, 50, 420);
     G.rings.push({ x: cx, y: cy, r: 160, life: 0.6, max: 0.6, color: '255,215,0' });
@@ -978,6 +987,7 @@ const Game = (() => {
       MAP.walls.push(g.rect);
       if (!G.me.phaseT) collideWorld(G.me);
     }
+    if (ABILITIES[g.kind].building) landFx(g.x, g.y, ABILITIES[g.kind].color, g.sc);
     G.gadgets.push(g);
   }
   function removeGadget(g) {
@@ -1018,7 +1028,7 @@ const Game = (() => {
     const s = [Math.round(best.x), Math.round(best.y), A.flight, A.radius * (g.big ? 1.3 : 1), A.damage, g.cryo ? 1 : 0, Math.round(g.x), Math.round(g.y)];
     addStrike(s, g.owner);
     if (G.mode === 'mp') Net.send({ t: 'ult', k: 'mortar', s: [s] });
-    burst(g.x + Math.cos(g.aim) * 14, g.y + Math.sin(g.aim) * 14 - 10, '#ffd29a', 8, 160);
+    burst(g.x + Math.cos(g.aim) * 14, g.y + Math.sin(g.aim) * 14 - 10, '#ffd29a', 8, 160); flashAt(g.x + Math.cos(g.aim) * 22, g.y + Math.sin(g.aim) * 22, '#ffb347', 34);
   }
   function addStrike(s, owner) { G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], cryo: s[5], sx: s[6], sy: s[7], owner }); }
   // SNIPER NEST: one big shot at the closest enemy it can see (Eagle Eye: through walls)
@@ -1035,7 +1045,7 @@ const Game = (() => {
     const sx = g.x + Math.cos(g.aim) * 34 * g.sc, sy = g.y + Math.sin(g.aim) * 34 * g.sc;
     fireBullets(sx, sy, [+g.aim.toFixed(4)], A.speed, A.damage * (g.big ? 1.5 : 1), 2, R + 50, 6 * HEAR_UNIT, g.spot ? { ghost: 1 } : {});
     g.tracer = { x0: sx, y0: sy, x: best.x, y: best.y, life: 0.25 }; g.kick = 8;
-    muzzleFlash(sx, sy, g.aim);
+    muzzleFlash(sx, sy, g.aim); flashAt(sx, sy, '#fff3b0', 36);
   }
   // SHIELD GENERATOR: everyone friendly inside the dome gets an overshield every few seconds (each player does it for themselves)
   function updateShieldGen(g, A) {
@@ -1054,6 +1064,257 @@ const Game = (() => {
       if (isMine(g.owner)) { if (G.mode === 'sp') for (const e of [...G.enemies]) if (Math.hypot(e.x - g.x, e.y - g.y) <= R + e.r) { hurtEnemy(e, COMBO.shockDps / 2, 0.5, Math.atan2(e.y - g.y, e.x - g.x)); g.zaps.push({ x: e.x, y: e.y, life: 0.15 }); } }
       else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= R + me.r) { hurtMe(COMBO.shockDps / 2, 0.5, Math.atan2(me.y - g.y, me.x - g.x), g.owner); g.zaps.push({ x: me.x, y: me.y, life: 0.15 }); }
     }
+  }
+
+  // ---- FLAME TOWER / LASER TOWER / DRONE HANGAR / GRAVITY TOWER
+  const angDiff = (a, b) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+  const turnTo = (a, b, k) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * Math.min(1, k);
+  // FLAME TOWER: a cone of fire at the closest enemy it can see (Inferno Ring: all the way around); sets them on fire
+  function updateFlame(g, A, dt) {
+    const me = G.me, R = A.range * (g.big ? MERGE.range : 1) * (g.blaze ? COMBO.blazeRange : 1);
+    let best = null;
+    if (isMine(g.owner)) {
+      let bd = Infinity;
+      for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d <= R + (e.r || 0) && d < bd && lineOfSight(g.x, g.y, e.x, e.y)) { best = e; bd = d; } }
+    } else if (me.alive && hostileTo(g.owner) && Math.hypot(me.x - g.x, me.y - g.y) <= R + me.r && lineOfSight(g.x, g.y, me.x, me.y)) best = me;
+    g.firing = !!best;
+    if (g.aim === undefined) g.aim = g.a || 0;
+    if (best) g.aim = turnTo(g.aim, Math.atan2(best.y - g.y, best.x - g.x), dt * 10);
+    // fire particles (just looks; capped so lots of towers stay cheap)
+    g.flames = g.flames || [];
+    for (const p of g.flames) { p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.97; p.vy *= 0.97; p.life -= dt; }
+    g.flames = g.flames.filter(p => p.life > 0);
+    if (g.firing && g.flames.length < 70) for (let i = 0; i < (g.blaze ? 5 : 3); i++) {
+      const an = g.blaze ? Math.random() * Math.PI * 2 : g.aim + (Math.random() - 0.5) * 2 * A.cone * 0.85, v = R * (1.5 + Math.random() * 0.6);
+      const sx = g.x + Math.cos(an) * 22 * g.sc, sy = g.y + Math.sin(an) * 22 * g.sc;
+      g.flames.push({ x: sx, y: sy, vx: Math.cos(an) * v, vy: Math.sin(an) * v, life: 0.5, max: 0.5, s: 9 + Math.random() * 9 });
+    }
+    if (!g.firing || g.tick > 0) return;
+    g.tick = 0.25;
+    const dmg = A.dps * 0.25 * (g.big ? 1.5 : 1), hits = (x, y, r) => Math.hypot(x - g.x, y - g.y) <= R + r &&
+      (g.blaze || angDiff(Math.atan2(y - g.y, x - g.x), g.aim) <= A.cone) && lineOfSight(g.x, g.y, x, y);
+    if (isMine(g.owner)) {
+      if (G.mode === 'sp') for (const e of [...G.enemies]) if (hits(e.x, e.y, e.r)) { e.burnT = A.burn; hurtEnemy(e, dmg, 0.3, Math.atan2(e.y - g.y, e.x - g.x)); }
+    } else if (me.alive && hostileTo(g.owner) && hits(me.x, me.y, me.r)) { me.burnT = A.burn; me.burnBy = g.owner; hurtMe(dmg, 0.3, Math.atan2(me.y - g.y, me.x - g.x), g.owner); }
+  }
+
+  // LASER TOWER: locks a beam on one enemy; the longer it holds on, the more it hurts (Prism Laser: 2 extra beams)
+  function updateLaser(g, A, dt) {
+    const me = G.me, R = A.range * (g.big ? MERGE.range : 1);
+    const ok = e => Math.hypot(e.x - g.x, e.y - g.y) <= R + (e.r || 0) && lineOfSight(g.x, g.y, e.x, e.y);
+    g.beams = [];
+    let tgt = null, extra = [];
+    if (isMine(g.owner)) {
+      const list = targets();
+      if (g.tgt) tgt = G.mode === 'sp' ? (list.includes(g.tgt) ? g.tgt : null) : list.find(e => Math.hypot(e.x - g.tgt.x, e.y - g.tgt.y) < 60) || null;
+      if (tgt && !ok(tgt)) tgt = null;
+      if (!tgt) {
+        g.heat = 0;
+        let bd = Infinity;
+        for (const e of list) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd && ok(e)) { tgt = e; bd = d; } }
+      }
+      g.tgt = tgt ? (G.mode === 'sp' ? tgt : { x: tgt.x, y: tgt.y }) : null;
+      if (tgt && g.prism) extra = list.filter(e => e !== tgt && ok(e)).sort((a, b) => Math.hypot(a.x - g.x, a.y - g.y) - Math.hypot(b.x - g.x, b.y - g.y)).slice(0, COMBO.prismBeams);
+    } else if (me.alive && hostileTo(g.owner) && ok(me)) tgt = me;
+    if (!tgt) { g.heat = Math.max(0, (g.heat || 0) - dt * 2); return; }
+    g.heat = Math.min(1, (g.heat || 0) + dt / A.ramp);
+    g.aim = Math.atan2(tgt.y - g.y, tgt.x - g.x);
+    g.beams.push({ x: tgt.x, y: tgt.y, main: true });
+    for (const e of extra) g.beams.push({ x: e.x, y: e.y });
+    if (Math.random() < 0.5) G.fx.push({ x: tgt.x, y: tgt.y, vx: (Math.random() - 0.5) * 300, vy: (Math.random() - 0.5) * 300, life: 0.2, max: 0.2, size: 3, color: '#ffd1dc' });
+    if (g.tick > 0) return;
+    g.tick = 0.2;
+    const dmg = (A.dps + (A.maxDps - A.dps) * g.heat) * 0.2 * (g.big ? 1.5 : 1);
+    if (tgt === me) hurtMe(dmg, 0.05, g.aim, g.owner);
+    else if (G.mode === 'sp') {
+      hurtEnemy(tgt, dmg, 0.05, g.aim);
+      for (const e of extra) hurtEnemy(e, dmg * COMBO.prismMul, 0.05, Math.atan2(e.y - g.y, e.x - g.x));
+    }
+  }
+
+  // DRONE HANGAR: drones orbit the hangar, fly out at enemies near it and shoot them; shot-down drones come back later
+  function updateHangar(g, A, dt) {
+    const me = G.me, mine = isMine(g.owner), n = A.drones + (g.big ? 1 : 0);
+    if (!g.drones) g.drones = Array.from({ length: n }, (_, i) => ({ x: g.x, y: g.y, ph: i * Math.PI * 2 / n, alive: false, back: 0.35 + i * 0.35, hp: A.droneHp, cd: 0.5, a: 0, mf: 0 }));
+    const R = A.range * (g.big ? MERGE.range : 1);
+    let tgt = null;
+    if (mine) { let bd = R; for (const e of targets()) { const d = Math.hypot(e.x - g.x, e.y - g.y); if (d < bd) { tgt = e; bd = d; } } }
+    for (const d of g.drones) {
+      d.mf = Math.max(0, d.mf - dt);
+      if (d.hb) { d.hb.life -= dt; if (d.hb.life <= 0) d.hb = null; }
+      if (!d.alive) {
+        d.back -= dt;
+        if (d.back <= 0) { d.alive = true; d.hp = A.droneHp; d.x = g.x; d.y = g.y; burst(g.x, g.y, g.medic ? '#32ff7e' : A.color, 8, 160); }
+        continue;
+      }
+      d.ph += dt * 2.4;
+      const tx = tgt ? tgt.x + Math.cos(d.ph) * 110 : g.x + Math.cos(d.ph) * 58 * g.sc, ty = tgt ? tgt.y + Math.sin(d.ph) * 110 : g.y + Math.sin(d.ph) * 58 * g.sc;
+      const dx = tx - d.x, dy = ty - d.y, dl = Math.hypot(dx, dy) || 1, step = Math.min(dl, A.speed * dt);
+      d.x += dx / dl * step; d.y += dy / dl * step;
+      d.a = tgt ? Math.atan2(tgt.y - d.y, tgt.x - d.x) : Math.atan2(dy, dx);
+      d.cd -= dt;
+      if (mine && tgt && d.cd <= 0 && Math.hypot(tgt.x - d.x, tgt.y - d.y) <= A.shootRange && lineOfSight(d.x, d.y, tgt.x, tgt.y)) {
+        d.cd = A.every;
+        const sx = d.x + Math.cos(d.a) * 10, sy = d.y + Math.sin(d.a) * 10;
+        fireBullets(sx, sy, [+d.a.toFixed(4)], 1500, A.damage * (g.big ? 1.5 : 1), 0.5, A.shootRange + 80, 1.5 * HEAR_UNIT);
+        d.mf = 0.07; flashAt(sx, sy, g.medic ? '#7dffaa' : '#7efcff', 16);
+      }
+    }
+    if (g.medic && mine) { // MEDIC DRONES: every 2s each drone patches up you or your buddies near the hangar
+      g.healK = (g.healK ?? A.healEvery) - dt;
+      if (g.healK <= 0) {
+        g.healK = A.healEvery;
+        for (const d of g.drones) {
+          if (!d.alive) continue;
+          if (me.alive && me.hp < me.maxHp && Math.hypot(me.x - g.x, me.y - g.y) <= COMBO.medicDroneRange) { heal(A.heal); d.hb = { x: me.x, y: me.y, life: 0.3 }; }
+          healBuddies(g.x, g.y, COMBO.medicDroneRange, A.heal);
+        }
+      }
+    }
+  }
+  // a hostile bullet hits one of my drones?
+  function bulletHitsDrone(b, x1, y1) {
+    for (const g of G.gadgets) {
+      if (g.kind !== 'hangar' || g.dead || !g.drones || !isMine(g.owner)) continue;
+      for (const d of g.drones) {
+        if (!d.alive || !segHitsCircle(x1, y1, b.x, b.y, d.x, d.y, 10)) continue;
+        d.hp -= bulletDamage(b);
+        if (d.hp <= 0) { d.alive = false; d.back = ABILITIES.hangar.respawn; buildingBoom(d.x, d.y, ABILITIES.hangar.color, 0.35); }
+        else burst(b.x, b.y, '#7efcff', 4, 120);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // GRAVITY TOWER: drags enemies toward it and slows them (Implosion: crushes them every few seconds)
+  function updateGravity(g, A, dt) {
+    const me = G.me, R = A.radius * (g.big ? MERGE.range : 1), P = A.pull * (g.big ? 1.3 : 1);
+    areaOf(g, R, e => {
+      e.grav = 0.2;
+      const d = Math.hypot(g.x - e.x, g.y - e.y) || 1, w = Math.max(1, e.r / 16);
+      if (d > 36) { e.kx += (g.x - e.x) / d * P * 8 * dt / w; e.ky += (g.y - e.y) / d * P * 8 * dt / w; }
+    }, () => {
+      const d = Math.hypot(g.x - me.x, g.y - me.y) || 1;
+      if (d > 36) { me.vx += (g.x - me.x) / d * P * 3 * dt; me.vy += (g.y - me.y) / d * P * 3 * dt; }
+    });
+    if (g.implode && isMine(g.owner)) {
+      g.impK = (g.impK ?? COMBO.implodeEvery) - dt;
+      if (g.impK <= 0) {
+        g.impK = COMBO.implodeEvery;
+        if (targets().some(e => Math.hypot(e.x - g.x, e.y - g.y) <= R)) {
+          const s = [Math.round(g.x), Math.round(g.y), 0.05, COMBO.implodeRadius * (g.big ? 1.3 : 1), COMBO.implodeDamage * (g.big ? 1.5 : 1)];
+          G.strikes.push({ x: s[0], y: s[1], t: s[2], max: s[2], r: s[3], dmg: s[4], owner: g.owner });
+          if (G.mode === 'mp') Net.send({ t: 'ult', k: 'imp', s: [s] });
+          G.rings.push({ x: g.x, y: g.y, r: R, life: 0.5, max: 0.5, color: '125,95,255' });
+          G.blooms.push({ x: g.x, y: g.y, r: 120, col: '#b8a6ff', life: 0.4, max: 0.4 });
+          g.squeeze = 0.4;
+        }
+      }
+    }
+  }
+
+  // burning (flame tower) and gravity slow wear off
+  function updateBurn(dt) {
+    const me = G.me, A = ABILITIES.flame;
+    if (G.mode === 'sp') for (const e of [...G.enemies]) {
+      if (e.grav > 0) e.grav -= dt;
+      if (!(e.burnT > 0)) continue;
+      e.burnT -= dt; e.burnK = (e.burnK || 0) - dt;
+      if (Math.random() < 0.3) G.fx.push({ x: e.x + (Math.random() - 0.5) * e.r, y: e.y + (Math.random() - 0.5) * e.r, vx: 0, vy: -60, life: 0.4, max: 0.4, size: 5, color: Math.random() < 0.5 ? '#ff6b1a' : '#ffd32a' });
+      if (e.burnK <= 0) { e.burnK = 0.5; hurtEnemy(e, A.burnDps * 0.5, 0, 0); }
+    }
+    if (me.burnT > 0) {
+      me.burnT -= dt; me.burnK = (me.burnK || 0) - dt;
+      if (Math.random() < 0.3) G.fx.push({ x: me.x + (Math.random() - 0.5) * me.r, y: me.y, vx: 0, vy: -60, life: 0.4, max: 0.4, size: 5, color: '#ff6b1a' });
+      if (me.burnK <= 0 && me.alive) { me.burnK = 0.5; hurtMe(A.burnDps * 0.5, 0, 0, me.burnBy); }
+    }
+  }
+
+  // ---- building juice: additive glow sprites (pre-rendered once per colour), landing pop, destruction debris
+  const glowCache = {};
+  const rgbOf = c => { const n = parseInt(c.slice(1), 16); return `${n >> 16 & 255},${n >> 8 & 255},${n & 255}`; };
+  function glowSprite(col) {
+    let c = glowCache[col];
+    if (c) return c;
+    c = glowCache[col] = document.createElement('canvas'); c.width = c.height = 64;
+    const x = c.getContext('2d'), gr = x.createRadialGradient(32, 32, 0, 32, 32, 32), rgb = rgbOf(col);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.15, `rgba(${rgb},0.95)`); gr.addColorStop(0.45, `rgba(${rgb},0.35)`); gr.addColorStop(1, `rgba(${rgb},0)`);
+    x.fillStyle = gr; x.fillRect(0, 0, 64, 64);
+    return c;
+  }
+  function glow(x, y, r, col, a = 1) {
+    if (r <= 0 || a <= 0) return;
+    const op = ctx.globalCompositeOperation, ga = ctx.globalAlpha;
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(1, a) * ga;
+    ctx.drawImage(glowSprite(col), x - r, y - r, r * 2, r * 2);
+    ctx.globalCompositeOperation = op; ctx.globalAlpha = ga;
+  }
+  const flashAt = (x, y, col, r = 26) => { if (G.blooms.length < 120) G.blooms.push({ x, y, r, col, life: 0.1, max: 0.1 }); };
+  const easeBack = k => 1 + 2.7 * Math.pow(k - 1, 3) + 1.7 * Math.pow(k - 1, 2);
+  // landing / build-up scale (call inside a save/restore)
+  function popIn(age, x, y) {
+    if (age === undefined || age >= BUILD_FX.land) return;
+    const s = Math.max(0.05, easeBack(age / BUILD_FX.land));
+    ctx.translate(x, y); ctx.scale(s, s); ctx.translate(-x, -y);
+  }
+  // corner brackets that snap in onto a building while it's being built
+  function buildBrackets(age, x, y, col, sc = 1) {
+    if (age === undefined || age >= 0.7) return;
+    const k = age / 0.7, r = (30 + (1 - k) * 40) * sc, L = 10 * sc;
+    ctx.save(); ctx.globalAlpha = 1 - k; ctx.strokeStyle = col; ctx.lineWidth = 3;
+    ctx.beginPath();
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.moveTo(x + sx * r, y + sy * (r - L)); ctx.lineTo(x + sx * r, y + sy * r); ctx.lineTo(x + sx * (r - L), y + sy * r); }
+    ctx.stroke(); ctx.restore();
+    glow(x, y, 50 * sc * (1 - k), col, 0.6 * (1 - k));
+  }
+  function landFx(x, y, col, sc = 1) {
+    G.rings.push({ x, y, r: 70 * sc, life: 0.4, max: 0.4, color: '220,220,220' });
+    G.blooms.push({ x, y, r: 70 * sc, col, life: 0.35, max: 0.35 });
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4 + Math.random() * 0.4, v = 90 + Math.random() * 60;
+      G.fx.push({ x: x + Math.cos(a) * 18, y: y + Math.sin(a) * 18, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.5, max: 0.5, size: 10 + Math.random() * 6, color: 'rgba(170,160,140,0.45)' });
+    }
+    burst(x, y, col, 10, 220);
+  }
+  // a building blows up: fireball, smoke, tumbling debris
+  function buildingBoom(x, y, col, sc = 1) {
+    G.blooms.push({ x, y, r: 100 * sc, col: '#ffb347', life: 0.35, max: 0.35 }, { x, y, r: 60 * sc, col, life: 0.55, max: 0.55 });
+    G.rings.push({ x, y, r: 120 * sc, life: 0.45, max: 0.45, color: '255,170,80' });
+    if (G.debris.length < 160) for (let i = 0; i < BUILD_FX.debris * sc; i++) {
+      const a = Math.random() * Math.PI * 2, v = 100 + Math.random() * 260;
+      G.debris.push({ x, y, z: 8, vx: Math.cos(a) * v, vy: Math.sin(a) * v, vz: 220 + Math.random() * 320, rot: Math.random() * 6, vr: (Math.random() - 0.5) * 18,
+        w: (4 + Math.random() * 7) * Math.max(0.6, sc), h: (3 + Math.random() * 5) * Math.max(0.6, sc), col: i % 3 ? '#3b404c' : col, life: 1.3 + Math.random() * 0.6 });
+    }
+    for (let i = 0; i < BUILD_FX.smoke * sc; i++) G.fx.push({ x: x + (Math.random() - 0.5) * 30, y: y + (Math.random() - 0.5) * 30, vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 40, life: 0.9, max: 0.9, size: (16 + Math.random() * 14) * sc, color: 'rgba(55,55,60,0.5)' });
+    burst(x, y, '#ffd36b', Math.round(18 * sc), 380);
+    G.shake = Math.max(G.shake || 0, 8 * sc);
+  }
+  function gadgetBoom(g) {
+    const col = ABILITIES[g.kind].color;
+    if (g.rect) { const [x, y, w, h] = g.rect; for (let i = 0; i < 3; i++) buildingBoom(x + w * (i + 0.5) / 3, y + h * (i + 0.5) / 3, col, 0.6); }
+    else buildingBoom(g.x, g.y, col, g.sc || 1);
+  }
+  function updateJuice(dt) {
+    for (const b of G.blooms) b.life -= dt;
+    G.blooms = G.blooms.filter(b => b.life > 0);
+    for (const d of G.debris) {
+      d.x += d.vx * dt; d.y += d.vy * dt; d.z += d.vz * dt; d.vz -= 1100 * dt; d.rot += d.vr * dt; d.life -= dt;
+      if (d.z < 0) { d.z = 0; d.vz *= -0.35; d.vx *= 0.55; d.vy *= 0.55; d.vr *= 0.5; }
+    }
+    G.debris = G.debris.filter(d => d.life > 0);
+  }
+  function drawJuice() {
+    for (const d of G.debris) {
+      const a = Math.min(1, d.life * 2);
+      ctx.globalAlpha = a * 0.35; ctx.fillStyle = '#000'; ctx.fillRect(d.x - d.w / 2 + 2, d.y - d.h / 2 + 3, d.w, d.h);
+      ctx.globalAlpha = a; ctx.save(); ctx.translate(d.x, d.y - d.z); ctx.rotate(d.rot);
+      ctx.fillStyle = d.col; ctx.fillRect(-d.w / 2, -d.h / 2, d.w, d.h);
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(-d.w / 2, -d.h / 2, d.w, 1.5);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    for (const b of G.blooms) { const k = b.life / b.max; glow(b.x, b.y, b.r * (0.7 + 0.3 * (1 - k)), b.col, k); }
   }
 
   function updateGadgetList(dt) {
@@ -1109,6 +1370,10 @@ const Game = (() => {
       if (g.kind === 'mortar') updateMortar(g, A);
       if (g.kind === 'sniper') updateSniper(g, A, dt);
       if (g.kind === 'shieldgen') updateShieldGen(g, A);
+      if (g.kind === 'flame') updateFlame(g, A, dt);
+      if (g.kind === 'laser') updateLaser(g, A, dt);
+      if (g.kind === 'hangar') updateHangar(g, A, dt);
+      if (g.kind === 'gravity') updateGravity(g, A, dt);
       if (g.kind === 'mine' && g.age > A.arm) {
         let boom = false;
         if (isMine(g.owner)) boom = targets().some(e => Math.hypot(e.x - g.x, e.y - g.y) <= A.trigger + (e.r || PLAYER.r));
@@ -1169,6 +1434,7 @@ const Game = (() => {
     G.rings = G.rings.filter(r => r.life > 0);
     // frozen single player enemies thaw out
     if (G.mode === 'sp') for (const e of G.enemies) { if (e.frozen > 0) e.frozen -= dt; if (e.chill > 0) e.chill -= dt; }
+    updateBurn(dt);
   }
   // Buddy (decoy): a teammate bot with a copy of your main gun that hunts enemies
   // heal sources (heal zones, medic turrets, medic buddies, healing domes) also patch up your buddies
@@ -1401,9 +1667,10 @@ const Game = (() => {
       if (t.hp <= 0 || !segHitsCircle(x1, y1, b.x, b.y, t.x, t.y, t.rail ? 30 : t.rocket ? 26 : 18)) continue;
       if (t.shieldT > 0) { burst(b.x, b.y, '#7ef9ff', 4, 120); return true; } // shielded turret
       t.hp -= bulletDamage(b) * (t.bunker ? COMBO.bunkerTake : 1); t.flash = 0.1;
-      if (t.hp <= 0) { t.t = 0; burst(t.x, t.y, '#cd84f1', 24, 300); }
+      if (t.hp <= 0) { t.t = 0; buildingBoom(t.x, t.y, '#cd84f1', t.rail ? 1.6 : t.rocket ? 1.3 : 1); }
       return true;
     }
+    if (hostileToMe && bulletHitsDrone(b, x1, y1)) return true;
     for (const g of G.gadgets) {
       if (g.kind === 'bubble') {
         const R = ABILITIES.bubble.radius * Math.min(1, g.age / 0.25);
@@ -1426,7 +1693,7 @@ const Game = (() => {
     if (g.sh > 0) { const soak = Math.min(g.sh, dmg); g.sh -= soak; dmg -= soak; } // shield generator overshield
     g.hp -= dmg;
     if (g.hp <= 0) {
-      burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300);
+      if (ABILITIES[g.kind].building) gadgetBoom(g); else burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300);
       removeGadget(g);
       if (G.mode === 'mp') Net.send({ t: 'gadx', id: g.id });
     }
@@ -1449,6 +1716,7 @@ const Game = (() => {
       const A = ABILITIES[g.kind], pop = Math.min(1, g.age / 0.25);
       g.flash = Math.max(0, (g.flash || 0) - 1 / 60);
       ctx.save();
+      if (A.building) popIn(g.age, g.x, g.y);
       if (g.kind === 'blackhole') {
         const r = A.radius * pop;
         const grd = ctx.createRadialGradient(g.x, g.y, 4, g.x, g.y, r);
@@ -1513,9 +1781,18 @@ const Game = (() => {
         drawShieldGen(g, A);
       } else if (g.kind === 'sniper') {
         drawSniper(g);
+      } else if (g.kind === 'flame') {
+        drawFlame(g, A);
+      } else if (g.kind === 'laser') {
+        drawLaser(g, A);
+      } else if (g.kind === 'hangar') {
+        drawHangar(g, A);
+      } else if (g.kind === 'gravity') {
+        drawGravity(g, A);
       }
       ctx.restore();
     }
+    for (const g of G.gadgets) if (ABILITIES[g.kind].building && g.age < 0.7) buildBrackets(g.age, g.x, g.y, ABILITIES[g.kind].color, g.sc || 1);
     for (const r of G.rings) {
       const k = 1 - r.life / r.max;
       ctx.strokeStyle = `rgba(${r.color},${1 - k})`; ctx.lineWidth = 8 * (1 - k) + 1;
@@ -1634,6 +1911,7 @@ const Game = (() => {
     ctx.strokeStyle = '#f1f2f6'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(-8, 0, 14, -0.8, 0.8); ctx.stroke();
     ctx.strokeStyle = '#2f3542'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(14, 0); ctx.stroke();
     ctx.fillStyle = Math.sin(T * 10) > 0 ? '#fff' : acc; ctx.beginPath(); ctx.arc(14, 0, 3, 0, Math.PI * 2); ctx.fill();
+    if (Math.sin(T * 10) > 0) glow(14, 0, 13, acc, 0.9);
     ctx.restore();
     if (g.command) { // flag on the mast
       ctx.strokeStyle = '#dfe4ea'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-12, -12); ctx.lineTo(-12, -30); ctx.stroke();
@@ -1665,7 +1943,7 @@ const Game = (() => {
     }
     // glowing orb
     const p = 1 + Math.sin(T * 18) * 0.15;
-    ctx.fillStyle = col; ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(0, -24, 11 * p, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    glow(0, -24, 24 * p, col, 0.8);
     ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(0, -24, 10, 3.5, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = '#eaffff'; ctx.beginPath(); ctx.arc(0, -24, 5, 0, Math.PI * 2); ctx.fill();
     if (Math.random() < (g.storm ? 0.7 : 0.35)) bSpark(0, -24, 14 + Math.random() * 8, col); // idle sparks
@@ -1678,6 +1956,7 @@ const Game = (() => {
       ctx.beginPath(); ctx.moveTo(fx, fy);
       for (let i = 1; i < 6; i++) { const k = i / 6; ctx.lineTo(fx + (z.x - fx) * k + (Math.random() - 0.5) * 22, fy + (z.y - fy) * k + (Math.random() - 0.5) * 22); }
       ctx.lineTo(z.x, z.y); ctx.stroke();
+      glow(z.x, z.y, 20, col, z.life / 0.15);
     }
   }
 
@@ -1700,6 +1979,7 @@ const Game = (() => {
     ctx.fillStyle = '#4b5259'; ctx.fillRect(-6 - rc * 4, -6, 26, 4);
     ctx.fillStyle = acc; ctx.fillRect(16 - rc * 4, -7, 5, 14);
     ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(21 - rc * 4, 0, 4, 0, Math.PI * 2); ctx.fill();
+    if (rc > 0) glow(23 - rc * 4, 0, 10 + rc * 22, '#ffb347', rc);
     ctx.restore();
     drawBar(g.x, g.y - 34 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
   }
@@ -1724,6 +2004,7 @@ const Game = (() => {
     ctx.beginPath(); ctx.arc(0, -2, 9, T * 2, T * 2 + 4); ctx.stroke();
     ctx.fillStyle = `rgba(${col},0.5)`; ctx.beginPath(); ctx.arc(0, -2, 7 + Math.sin(T * 6), 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#efeaff'; ctx.beginPath(); ctx.arc(0, -2, 3.5, 0, Math.PI * 2); ctx.fill();
+    glow(0, -2, 20 + Math.sin(T * 6) * 2, g.shock ? '#d6d2ff' : '#a29bfe', 0.7);
     if (g.shock && Math.random() < 0.6) bSpark(0, -2, 14, '#d6d2ff');
     ctx.restore();
     drawBar(g.x, g.y - 32 * g.sc, 44, 6, g.hp / g.maxHp, false, '#a29bfe');
@@ -1755,6 +2036,7 @@ const Game = (() => {
     ctx.fillStyle = '#5b4632'; ctx.fillRect(-16, -4, 12, 8);   // stock
     ctx.fillStyle = '#111'; ctx.fillRect(2, -8, 14, 4);         // scope
     ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(16, -6, 2.2, 0, Math.PI * 2); ctx.fill();
+    glow(16, -6, 7 + Math.sin(G.time * 3), acc, 0.8);
     ctx.fillStyle = '#2d3436'; ctx.fillRect(36, -4, 5, 8);      // muzzle brake
     ctx.restore();
     if (g.spot) { // radar dish on the nest
@@ -1762,6 +2044,163 @@ const Game = (() => {
       ctx.strokeStyle = '#ff9ff3'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(-3, 0, 6, -1, 1); ctx.stroke(); ctx.restore();
     }
     drawBar(g.x, g.y - 34 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
+  }
+
+  function drawFlame(g, A) {
+    const T = G.time, a = g.aim ?? g.a ?? 0, acc = g.blaze ? '#ffd32a' : '#ff5e1a';
+    for (const p of g.flames || []) { // additive fire: yellow -> orange -> red as it fades
+      const k = p.life / p.max;
+      glow(p.x, p.y, p.s * (1.7 - k * 0.7), k > 0.65 ? '#ffd36b' : k > 0.3 ? '#ff7a1a' : '#d63031', Math.min(1, k * 1.5));
+    }
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    bShadow(21, 16);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; bPoly(8, 25, Math.PI / 8); ctx.stroke(); }
+    ctx.fillStyle = '#20140f'; bPoly(8, 21, Math.PI / 8); ctx.fill();
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#4d3226'; bPoly(8, 19, Math.PI / 8); ctx.fill();
+    ctx.fillStyle = '#6e4734'; bPoly(8, 14, Math.PI / 8); ctx.fill();
+    ctx.strokeStyle = '#2a1a12'; ctx.lineWidth = 1.5; // brick seams
+    for (let i = 0; i < 8; i++) { const b = i * Math.PI / 4 + Math.PI / 8; ctx.beginPath(); ctx.moveTo(Math.cos(b) * 14, Math.sin(b) * 14); ctx.lineTo(Math.cos(b) * 19, Math.sin(b) * 19); ctx.stroke(); }
+    ctx.strokeStyle = acc; ctx.lineWidth = 2.5; bPoly(8, 19, Math.PI / 8); ctx.stroke();
+    glow(0, 0, 24 + Math.sin(T * 9) * 3, '#ff5e1a', g.firing ? 0.55 : 0.25); // heat
+    // twin fuel tanks
+    for (const s of [-1, 1]) {
+      ctx.fillStyle = '#8e1b10'; ctx.beginPath(); ctx.arc(-6, s * 8, 5.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(-7, s * 8 - 1.5, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    if (g.blaze) { // Inferno Ring: 4 extra nozzles spinning round
+      for (let i = 0; i < 4; i++) {
+        const b = T * 2 + i * Math.PI / 2;
+        ctx.save(); ctx.rotate(b); ctx.fillStyle = '#2d2d34'; ctx.fillRect(12, -3, 11, 6); ctx.fillStyle = '#ffd32a'; ctx.fillRect(21, -3.5, 3, 7); ctx.restore();
+      }
+    }
+    ctx.rotate(a);
+    ctx.fillStyle = '#1b1b21'; ctx.fillRect(-9, -8, 18, 16);
+    ctx.fillStyle = '#4a4a57'; ctx.fillRect(-9, -8, 18, 3);
+    ctx.fillStyle = '#2d2d34'; ctx.fillRect(6, -5, 18, 10);
+    ctx.fillStyle = '#5c5c6a'; ctx.fillRect(6, -5, 18, 2);
+    ctx.fillStyle = '#ff9f43'; ctx.fillRect(22, -6, 4, 12);
+    const fl = 0.75 + Math.random() * 0.4; // pilot light
+    glow(29, 0, (g.firing ? 16 : 9) * fl, '#ffb347', 0.95);
+    glow(27, 0, 4, '#74b9ff', 0.8);
+    ctx.restore();
+    drawBar(g.x, g.y - 34 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
+  }
+
+  function drawLaser(g, A) {
+    const T = G.time, a = g.aim ?? g.a ?? 0, h = g.heat || 0, acc = g.prism ? '#c56cf0' : '#ff2e63';
+    const ex = g.x + Math.cos(a) * 16 * g.sc, ey = g.y + Math.sin(a) * 16 * g.sc;
+    if (g.beams && g.beams.length) { // glowing beams: wide soft glow + hot white core, thicker as it heats up
+      ctx.save(); ctx.lineCap = 'round';
+      for (const b of g.beams) {
+        const w = b.main ? 3 + 7 * h : 3, wob = 1 + Math.sin(T * 40) * 0.15;
+        ctx.strokeStyle = `rgba(${rgbOf(acc)},0.28)`; ctx.lineWidth = w * 3.2 * wob;
+        ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.strokeStyle = acc; ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(b.x, b.y); ctx.stroke();
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1, w * 0.35);
+        ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(b.x, b.y); ctx.stroke();
+        glow(b.x, b.y, (b.main ? 16 + 22 * h : 14) * wob, acc, 0.9);
+      }
+      ctx.restore();
+    }
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    bShadow(20, 15);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; bPoly(6, 25, 0); ctx.stroke(); }
+    ctx.fillStyle = '#16121c'; bPoly(6, 21, 0); ctx.fill();
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#2e2838'; bPoly(6, 19, 0); ctx.fill();
+    ctx.fillStyle = '#433a52'; bPoly(6, 13, 0); ctx.fill();
+    ctx.fillStyle = '#5e5470'; ctx.fillRect(-13, -12, 26, 2);
+    bBolts(6, 16.5, Math.PI / 6, '#8a7fa0');
+    // charge ring: segments light up with heat
+    for (let i = 0; i < 6; i++) {
+      const b = i * Math.PI / 3 + T * (1 + h * 6);
+      ctx.strokeStyle = i / 6 < h + 0.05 ? acc : '#3a3046'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, 16, b, b + 0.7); ctx.stroke();
+    }
+    glow(0, 0, 18 + h * 16, acc, 0.25 + h * 0.5);
+    ctx.rotate(a);
+    ctx.fillStyle = '#1d1a24'; ctx.fillRect(-7, -7, 14, 14);
+    ctx.fillStyle = '#3a3448'; ctx.fillRect(2, -4, 16, 8);
+    ctx.fillStyle = '#6c6480'; ctx.fillRect(2, -4, 16, 2);
+    // crystal lens
+    ctx.fillStyle = acc; ctx.beginPath(); ctx.moveTo(16, -5); ctx.lineTo(22, 0); ctx.lineTo(16, 5); ctx.lineTo(13, 0); ctx.closePath(); ctx.fill();
+    glow(18, 0, 8 + 10 * h + Math.sin(T * 12) * 1.5, acc, 0.9);
+    ctx.restore();
+    drawBar(g.x, g.y - 34 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
+  }
+
+  function drawHangar(g, A) {
+    const T = G.time, acc = g.medic ? '#32ff7e' : '#00d2d3';
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    bShadow(23, 18);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.strokeRect(-26, -26, 52, 52); }
+    ctx.fillStyle = '#14191d'; ctx.fillRect(-21, -19, 42, 42);
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#2f3a40'; ctx.fillRect(-21, -21, 42, 38);
+    // hazard stripes along the edge
+    ctx.save(); ctx.beginPath(); ctx.rect(-21, -21, 42, 38); ctx.rect(-16, -16, 32, 28); ctx.clip('evenodd');
+    ctx.fillStyle = '#f9ca24'; ctx.fillRect(-21, -21, 42, 38);
+    ctx.fillStyle = '#1e1e1e';
+    for (let i = -6; i < 8; i++) { ctx.beginPath(); ctx.moveTo(-21 + i * 8, -21); ctx.lineTo(-17 + i * 8, -21); ctx.lineTo(-17 + i * 8 - 38, 17); ctx.lineTo(-21 + i * 8 - 38, 17); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = '#3d4a52'; ctx.fillRect(-16, -16, 32, 28);
+    // landing pad circle + H
+    ctx.strokeStyle = '#dfe6e9'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -2, 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = '#dfe6e9'; ctx.fillRect(-5, -7, 2, 10); ctx.fillRect(3, -7, 2, 10); ctx.fillRect(-5, -3, 10, 2);
+    // corner lights chasing round
+    const corners = [[-14, -14], [14, -14], [14, 10], [-14, 10]];
+    corners.forEach(([x, y], i) => { const on = Math.floor(T * 4) % 4 === i; ctx.fillStyle = on ? '#fff' : acc; ctx.fillRect(x - 2, y - 2, 4, 4); if (on) glow(x, y, 9, acc, 0.9); });
+    ctx.restore();
+    for (const d of g.drones || []) {
+      if (!d.alive) continue;
+      if (d.hb) { ctx.strokeStyle = `rgba(50,255,126,${d.hb.life / 0.3})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.hb.x, d.hb.y); ctx.stroke(); }
+      const bob = Math.sin(T * 6 + d.ph) * 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(d.x + 6, d.y + 12, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.save(); ctx.translate(d.x, d.y + bob); ctx.rotate(d.a);
+      ctx.strokeStyle = '#2d3436'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-7, -7); ctx.lineTo(7, 7); ctx.moveTo(-7, 7); ctx.lineTo(7, -7); ctx.stroke();
+      for (const [x, y] of [[-7, -7], [7, -7], [7, 7], [-7, 7]]) { // spinning rotors (blurred discs)
+        ctx.fillStyle = 'rgba(200,214,229,0.35)'; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#dfe6e9'; ctx.lineWidth = 1.2; const r = T * 40; ctx.beginPath(); ctx.moveTo(x + Math.cos(r) * 5, y + Math.sin(r) * 5); ctx.lineTo(x - Math.cos(r) * 5, y - Math.sin(r) * 5); ctx.stroke();
+      }
+      ctx.fillStyle = '#353b48'; ctx.fillRect(-5, -4, 10, 8);
+      ctx.fillStyle = '#636e72'; ctx.fillRect(-5, -4, 10, 2);
+      ctx.fillStyle = '#1e272e'; ctx.fillRect(4, -1.5, 6, 3);
+      glow(0, 0, 7, acc, 0.9);
+      if (d.mf > 0) glow(12, 0, 10, '#fff3b0', 1);
+      ctx.restore();
+    }
+    drawBar(g.x, g.y - 36 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
+  }
+
+  function drawGravity(g, A) {
+    const T = G.time, R = A.radius * (g.big ? MERGE.range : 1), acc = g.implode ? '#ff6bcb' : '#7d5fff', rgb = rgbOf(acc);
+    // swirling distortion: rings sliding inward + spiral arcs
+    ctx.fillStyle = `rgba(${rgb},0.05)`; ctx.beginPath(); ctx.arc(g.x, g.y, R, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      const k = (T * 0.45 + i / 4) % 1, r = R * (1 - k);
+      ctx.strokeStyle = `rgba(${rgb},${0.45 * k * (1 - k) * 4 * 0.6})`;
+      ctx.beginPath(); ctx.arc(g.x, g.y, r, T * 1.5 + i, T * 1.5 + i + 4.2); ctx.stroke();
+    }
+    ctx.strokeStyle = `rgba(${rgb},0.22)`; ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) { const b = -T * 2 + i * Math.PI * 2 / 3; ctx.beginPath(); ctx.arc(g.x, g.y, R * 0.55, b, b + 1.1); ctx.stroke(); }
+    const sq = g.squeeze > 0 ? (g.squeeze -= 1 / 60) : 0;
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc * (1 - sq * 0.4), g.sc * (1 - sq * 0.4));
+    bShadow(20, 15);
+    if (g.big) { ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.fillStyle = '#100d1c'; ctx.beginPath(); ctx.arc(0, 0, 21, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = g.flash > 0 ? '#fff' : '#2b2450'; ctx.beginPath(); ctx.arc(0, 0, 19, 0, Math.PI * 2); ctx.fill();
+    bBolts(8, 16.5, 0, '#7f75b8');
+    // gyroscope rings
+    ctx.strokeStyle = '#a29bfe'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.ellipse(0, 0, 14, 14 * Math.abs(Math.cos(T * 2)), T * 0.7, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = acc; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(0, 0, 14 * Math.abs(Math.sin(T * 1.6)), 14, -T * 0.5, 0, Math.PI * 2); ctx.stroke();
+    // singularity core
+    glow(0, 0, 22 + Math.sin(T * 5) * 3, acc, 0.75);
+    ctx.fillStyle = '#05030a'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#efeaff'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(0, 0, 6.5, T * 6, T * 6 + 2.5); ctx.stroke();
+    ctx.restore();
+    drawBar(g.x, g.y - 32 * g.sc, 44, 6, g.hp / g.maxHp, false, acc);
   }
 
   // armor plates bolted around a turret (BUNKER)
@@ -1789,6 +2228,7 @@ const Game = (() => {
     ctx.fillStyle = '#545869'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = acc; ctx.lineWidth = 3; bPoly(8, 17, Math.PI / 8); ctx.stroke();
     bBolts(4, 14.5, Math.PI / 4, '#9aa0b5');
+    glow(0, 0, 22, acc, 0.2 + 0.08 * Math.sin(G.time * 4));
     ctx.rotate(t.aim);
     ctx.fillStyle = '#2b2d38'; ctx.fillRect(-11, -9, 20, 18);
     ctx.fillStyle = '#6b6f85'; ctx.fillRect(-11, -9, 20, 3);
@@ -2170,6 +2610,8 @@ const Game = (() => {
     G.healShots = G.healShots.filter(h => !h.done);
     for (const t of G.turrets) {
       t.t -= dt; t.cd -= dt;
+      if (t.age === undefined) { t.age = 0; landFx(t.x, t.y, '#cd84f1', t.rail ? 1.6 : t.rocket ? 1.3 : 1); }
+      t.age += dt;
       if (t.shieldT > 0) t.shieldT -= dt;
       if (t.rail) { // RAILGUN: fast, long range bolts of electricity
         const R = MERGE.railgun;
@@ -2184,7 +2626,7 @@ const Game = (() => {
           const sx = t.x + Math.cos(t.aim) * 40, sy = t.y + Math.sin(t.aim) * 40;
           fireBullets(sx, sy, [+t.aim.toFixed(4)], R.speed, R.damage, 0.3, R.range, 4 * HEAR_UNIT);
           t.zap = { x0: sx, y0: sy, x: best.x, y: best.y, life: 0.09 };
-          t.kick = 7; // recoil
+          t.kick = 7; flashAt(sx, sy, '#48dbfb', 32); flashAt(best.x, best.y, '#c7f4ff', 22); // recoil
           for (let i = 0; i < 4; i++) { // sparks where it hits
             const an = Math.random() * Math.PI * 2, v = 120 + Math.random() * 220;
             G.fx.push({ x: best.x, y: best.y, vx: Math.cos(an) * v, vy: Math.sin(an) * v, life: 0.25, max: 0.25, size: 4, color: Math.random() < 0.5 ? '#c7f4ff' : '#48dbfb' });
@@ -2200,7 +2642,7 @@ const Game = (() => {
         if (best && t.cd <= 0) {
           t.cd = R.every;
           const sx = t.x + Math.cos(t.aim) * 34, sy = t.y + Math.sin(t.aim) * 34;
-          addRocket(sx, sy, t.aim, myOwnerId());
+          addRocket(sx, sy, t.aim, myOwnerId()); flashAt(sx, sy, '#ff9f43', 40);
           if (G.mode === 'mp') Net.send({ t: 'rpg', x: Math.round(sx), y: Math.round(sy), a: +t.aim.toFixed(4) });
           muzzleFlash(sx, sy, t.aim);
         }
@@ -2245,6 +2687,7 @@ const Game = (() => {
       if (best && t.cd <= 0) {
         const s = t.stats;
         t.cd = Math.max(s.fireDelay, s.reloadTime / s.magSize, 0.15); // reloads built in, never runs dry
+        flashAt(t.x + Math.cos(t.aim) * 26, t.y + Math.sin(t.aim) * 26, t.flame ? '#ff7a1a' : '#ffd36b', 22);
         shootFrom(t.x + Math.cos(t.aim) * 20, t.y + Math.sin(t.aim) * 20, t.aim, t.flame ? { ...s, damage: s.damage * COMBO.flameMul } : s, t.spot ? { kind: { ghost: 1 }, range: COMBO.spotRange } : {});
       }
     }
@@ -2280,8 +2723,9 @@ const Game = (() => {
       ctx.fillStyle = '#32ff7e'; ctx.beginPath(); ctx.arc(h.x, h.y, 7, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.fillRect(h.x - 4, h.y - 1.5, 8, 3); ctx.fillRect(h.x - 1.5, h.y - 4, 3, 8);
     }
-    for (const t of G.turrets) {
-      if (t.rail) { if (t.bunker) drawBunker(t, 40); drawRailgun(t); continue; }
+    for (const t of G.turrets) { ctx.save(); popIn(t.age, t.x, t.y); drawOneTurret(t); ctx.restore(); buildBrackets(t.age, t.x, t.y, '#cd84f1', t.rail ? 1.6 : t.rocket ? 1.3 : 1); }
+    function drawOneTurret(t) {
+      if (t.rail) { if (t.bunker) drawBunker(t, 40); drawRailgun(t); return; }
       if (t.rocket) {
         ctx.save(); ctx.translate(t.x, t.y); bShadow(30, 24); ctx.restore();
         if (t.bunker) drawBunker(t, 34);
@@ -2293,7 +2737,7 @@ const Game = (() => {
         ctx.restore();
         if (t.flash > 0) { t.flash -= 1 / 60; ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.beginPath(); ctx.arc(t.x, t.y, 26, 0, Math.PI * 2); ctx.fill(); }
         drawBar(t.x, t.y - 38, 56, 6, t.hp / t.maxHp, false, '#e17055');
-        continue;
+        return;
       }
       if (t.beam) {
         ctx.save(); ctx.lineCap = 'round';
@@ -2406,6 +2850,8 @@ const Game = (() => {
       n.done = true;
       const medT = n.kind === 'medic' && isMine(n.owner) && G.turrets.find(t => t.medic && !t.healer && t.hp > 0 && Math.hypot(t.x - n.x1, t.y - n.y1) <= COMBO.near);
       if (medT) { medT.healer = true; medT.beamT = 1; comboFx(medT.x, medT.y, '#32ff7e', 'HEAL TURRET'); continue; }
+      const hg = n.kind === 'medic' && isMine(n.owner) && myGadget('hangar', n.x1, n.y1, COMBO.near); // MEDIC DRONES (heal zone used up)
+      if (hg && !hg.medic) { upgradeGadget(hg, 'medic'); comboFx(hg.x, hg.y, '#32ff7e', 'MEDIC DRONES'); continue; }
       const dome = n.kind === 'medic' && isMine(n.owner) && myGadget('bubble', n.x1, n.y1, ABILITIES.bubble.radius);
       const bud = n.kind === 'medic' && isMine(n.owner) && myGadget('decoy', n.x1, n.y1, COMBO.near);
       if (dome && !dome.heal) { upgradeGadget(dome, 'heal'); dome.t += COMBO.domeTime; comboFx(dome.x, dome.y, '#32ff7e', 'HEALING DOME'); }
@@ -2454,6 +2900,9 @@ const Game = (() => {
           if (G.mode === 'mp') Net.send({ t: 'ult', k: 'sing', s: [s] });
           comboFx(bh.x, bh.y, '#8e44ad', 'SINGULARITY');
           G.shake = 30;
+        } else if (n.kind === 'grenade' && isMine(n.owner) && myGadget('gravity', n.x1, n.y1, COMBO.near) && !myGadget('gravity', n.x1, n.y1, COMBO.near).implode) { // IMPLOSION
+          const gt = myGadget('gravity', n.x1, n.y1, COMBO.near);
+          upgradeGadget(gt, 'implode'); comboFx(gt.x, gt.y, '#ff6bcb', 'IMPLOSION');
         } else if (n.kind === 'grenade' && isMine(n.owner) && myGadget('tesla', n.x1, n.y1, COMBO.near) && !myGadget('tesla', n.x1, n.y1, COMBO.near).storm) { // STORM COIL
           const tc = myGadget('tesla', n.x1, n.y1, COMBO.near);
           upgradeGadget(tc, 'storm'); comboFx(tc.x, tc.y, '#a29bfe', 'STORM COIL');
@@ -2538,7 +2987,7 @@ const Game = (() => {
       ctx.quadraticCurveTo(mx + nx * bend, my + ny * bend, t.x, t.y);
       ctx.stroke();
       ctx.setLineDash([]);
-      const AA = ABILITIES[me.ability], rad = me.ability === 'radar' || me.ability === 'mortar' || me.ability === 'sniper' ? 40 : me.ability === 'barrier' ? AA.len / 2 : AA.radius || 22;
+      const AA = ABILITIES[me.ability], rad = ['radar', 'mortar', 'sniper', 'laser', 'hangar', 'flame'].includes(me.ability) ? 40 : me.ability === 'barrier' ? AA.len / 2 : AA.radius || 22;
       ctx.beginPath(); ctx.arc(t.x, t.y, rad, 0, Math.PI * 2); ctx.stroke();
     } else {
       // rocket: straight line until the first wall
@@ -2985,7 +3434,7 @@ const Game = (() => {
         const step = pathStep(e);
         if (step) { const l = Math.hypot(step.x - e.x, step.y - e.y) || 1; mx = (step.x - e.x) / l; my = (step.y - e.y) / l; }
       }
-      const spd = e.speed * (e.chill > 0 ? COMBO.iceSlow : 1); // ice wall
+      const spd = e.speed * (e.chill > 0 ? COMBO.iceSlow : 1) * (e.grav > 0 ? ABILITIES.gravity.slow : 1); // ice wall
       e.x += (mx * spd + e.kx) * dt;
       e.y += (my * spd + e.ky) * dt;
       e.kx *= Math.exp(-8 * dt); e.ky *= Math.exp(-8 * dt);
@@ -3164,7 +3613,7 @@ const Game = (() => {
     const g = G.gadgets.find(g => g.id === m.id);
     if (!g) return;
     if (g.kind === 'mine') mineBoom(g);
-    else { burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300); removeGadget(g); }
+    else { if (ABILITIES[g.kind].building && !m.q) gadgetBoom(g); else burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300); removeGadget(g); }
   });
   Net.on('gadc', m => {
     if (!inMP()) return;
@@ -3295,6 +3744,7 @@ const Game = (() => {
       ctx.fillRect(f.x - f.size / 2, f.y - f.size / 2, f.size, f.size);
     }
     ctx.globalAlpha = 1;
+    drawJuice();
 
     ctx.textAlign = 'center';
     ctx.font = '700 16px system-ui, sans-serif';

@@ -481,6 +481,19 @@ const ABILITIES = {
   sniper:    { name: 'Sniper Nest', type: 'active', thrown: true, gadget: true, color: '#20bf6b', cooldown: 25, uses: 2,
                duration: Infinity, hp: 50, building: true, every: 2.5, range: 1800, damage: 90, speed: 4200,
                desc: 'Throw a sniper nest (50 HP, stays until destroyed). Every 2.5s it fires one 90 damage shot at the closest enemy it can see, very far away.' },
+  flame:     { name: 'Flame Tower', type: 'active', thrown: true, gadget: true, color: '#ff5e1a', cooldown: 25, uses: 2,
+               duration: Infinity, hp: 90, building: true, range: 200, cone: 0.55, dps: 30, burn: 3, burnDps: 8,
+               desc: 'Throw a flame tower (90 HP, stays until destroyed). It sprays a cone of fire at the closest enemy (30/s) and sets them on fire (8/s for 3s).' },
+  laser:     { name: 'Laser Tower', type: 'active', thrown: true, gadget: true, color: '#ff2e63', cooldown: 25, uses: 2,
+               duration: Infinity, hp: 60, building: true, range: 620, dps: 8, maxDps: 70, ramp: 3,
+               desc: 'Throw a laser tower (60 HP, stays until destroyed). It locks a beam onto one enemy: 8 damage/s, ramping up to 70/s the longer it holds on.' },
+  hangar:    { name: 'Drone Hangar', type: 'active', thrown: true, gadget: true, color: '#00d2d3', cooldown: 25, uses: 2,
+               duration: Infinity, hp: 70, building: true, drones: 2, respawn: 6, droneHp: 20, range: 420, shootRange: 260,
+               every: 0.45, damage: 9, speed: 420, healEvery: 2, heal: 6,
+               desc: 'Throw a drone hangar (70 HP, stays until destroyed). It launches 2 drones that fly out and shoot enemies near it. Shot-down drones come back after 6s.' },
+  gravity:   { name: 'Gravity Tower', type: 'active', thrown: true, gadget: true, color: '#7d5fff', cooldown: 25, uses: 2,
+               duration: Infinity, hp: 80, building: true, radius: 260, pull: 110, slow: 0.55,
+               desc: 'Throw a gravity tower (80 HP, stays until destroyed). Enemies near it are slowly dragged toward it and move at 55% speed.' },
   tesla:     { name: 'Tesla Coil', type: 'active', thrown: true, gadget: true, color: '#48dbfb', cooldown: 25, uses: 2,
                radius: 230, duration: Infinity, every: 0.6, damage: 10, hp: 100, building: true,
                desc: 'Throw a tesla tower (100 HP, stays until destroyed) that zaps every enemy close to it with lightning (10 damage).' },
@@ -543,14 +556,14 @@ const ABILITY_ICONS = {
   rapid: 'chevrons', armor: 'vest', hands: 'reload', blink: 'star', nova: 'burst', slowmo: 'hourglass', medic: 'plus',
   turret: 'turret', resupply: 'box', vampire: 'fangs', laststand: 'skull', sprinter: 'chevrons', bandolier: 'bullets',
   blackhole: 'vortex', firepit: 'flame', freeze: 'snow', decoy: 'person', barrier: 'wall', mine: 'mine', jumppad: 'up',
-  radar: 'dish', tesla: 'bolt', mortar: 'mortar', shieldgen: 'dome', sniper: 'scope', smoke: 'cloud', grapple: 'hook', phase: 'ghost', reflect: 'mirror', overcharge: 'battery',
+  radar: 'dish', tesla: 'bolt', mortar: 'mortar', shieldgen: 'dome', sniper: 'scope', flame: 'flametower', laser: 'laser', hangar: 'drone', gravity: 'gravity', smoke: 'cloud', grapple: 'hook', phase: 'ghost', reflect: 'mirror', overcharge: 'battery',
   quake: 'hammer', recall: 'rewind', thorns: 'spikes', scavenger: 'bone', glass: 'gem', adrenaline: 'heartbolt',
   cluster: 'dots', bubble: 'ring', stim: 'syringe', shadowstep: 'dagger', magnet: 'magnet', ninja: 'moon', lucky: 'clover',
 };
 
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
 const ABILITY_GROUPS = [
-  { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier', 'mortar', 'shieldgen', 'sniper'] },
+  { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier', 'mortar', 'shieldgen', 'sniper', 'flame', 'laser', 'hangar', 'gravity'] },
   { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'jumppad', 'bubble', 'medic', 'smoke', 'resupply'] },
   { label: '💣 Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
   { label: '🔫 Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
@@ -582,6 +595,10 @@ const COMBOS = [
   { a: 'mortar', b: 'freeze', name: 'Cryo Mortar',    how: 'Throw a Freeze Bomb onto a Mortar: its shells also freeze everyone they hit for 1.5s (the freeze bomb still goes off).' },
   { a: 'shieldgen', b: 'tesla', name: 'Shock Dome',   how: 'Throw a Tesla Coil onto a Shield Generator: the coil is used up and the dome shocks enemies inside it (20/s).' },
   { a: 'sniper', b: 'radar',  name: 'Eagle Eye',      how: 'Throw a Radar onto a Sniper Nest: the radar is used up and the nest shoots through walls at anything in range.' },
+  { a: 'flame', b: 'barrier', name: 'Inferno Ring',  how: 'Throw a Barrier onto a Flame Tower: the barrier is used up and the tower sprays fire all the way around it, not just a cone.' },
+  { a: 'laser', b: 'radar',   name: 'Prism Laser',    how: 'Throw a Radar onto a Laser Tower: the radar is used up and the beam splits to also burn up to 2 more enemies.' },
+  { a: 'hangar', b: 'medic',  name: 'Medic Drones',   how: 'Throw a Heal Zone onto a Drone Hangar: the heal zone is used up, the drones turn green and every 2s each one heals you or a hurt buddy near the hangar (+6 HP) while still shooting.' },
+  { a: 'gravity', b: 'grenade', name: 'Implosion',    how: 'Throw a Grenade onto a Gravity Tower: the grenade is used up and every 5s the tower crushes everything it is pulling in (40 damage blast).' },
   { a: 'tesla', b: 'grenade', name: 'Storm Coil',     how: 'Throw a Grenade onto a Tesla Coil: the grenade is used up and every zap chains on to up to 2 more nearby enemies.' },
   // ---- passive combos: just equip both, they power each other up ----
   { a: 'sprinter', b: 'dash',   name: 'Speedster',      passive: true, how: 'Equip both: +2 dashes and dashes go 50% further.', syn: { dash: { add: { uses: 2 }, mul: { power: 1.5 } } } },
@@ -597,7 +614,10 @@ const COMBOS = [
   { a: 'laststand', b: 'recall', name: 'Second Chance', passive: true, how: 'Equip both: Last Stand keeps you unhittable for 6s and Rewind jumps back after 2s.', syn: { laststand: { add: { inv: 3 } }, recall: { add: { delay: -1 } } } },
 ];
 const COMBO = { supplySpeed: 1.25, supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 1.5, healRange: 700, healShotSpeed: 900,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8,
-  iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230,  cryoMortar: 1.5, shockDps: 20 };
+  iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230,  cryoMortar: 1.5, shockDps: 20,
+  blazeRange: 0.8, prismBeams: 2, prismMul: 0.6, medicDroneRange: 300, implodeEvery: 5, implodeDamage: 40, implodeRadius: 180 };
+// Building look: landing pop time, debris pieces when one is destroyed
+const BUILD_FX = { land: 0.45, debris: 12, smoke: 6 };
 
 // Merging: 3 of the same building of yours close together become one BIG one.
 //   near = how close they must be. Big buildings are `size`x bigger with `range`x range and `hp`x health.
