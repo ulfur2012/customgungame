@@ -41,6 +41,16 @@ const Game = (() => {
   const slot3Open = () => G.mode === 'sp' && (G.test || G.wave >= SLOT3_WAVE);
   const slot4Open = () => G.mode === 'sp' && (G.test || G.wave >= SLOT4_WAVE);
   const allSlots = () => [G.me, G.me.alt, G.me.alt3, G.me.alt4];
+  // CLASSES: only one section's abilities in slots 1-3 -> slot 4 is the class ability (from CLASSES.unlockWave in SP)
+  const myClass = () => classOf(Account.user.loadout);
+  const classOpen = () => G.mode !== 'sp' || G.test || G.wave >= CLASSES.unlockWave;
+  function slot4Pick() {
+    const c = myClass();
+    if (c) return classOpen() ? c.ab : null;
+    return slot4Open() ? Account.user.loadout.ability4 : null;
+  }
+  // ENGINEER building levels: each level = less time between shots
+  const lvlRate = b => b.lvl > 1 ? 1 / (1 - ABILITIES.cls_upgrade.delayCut * (b.lvl - 1)) : 1;
 
   function newState(mode, spawn, color) {
     const L = Account.user.loadout;
@@ -136,7 +146,7 @@ const Game = (() => {
     me.ability = L.ability; me.abCd = 0; me.abWasHeld = me.abAiming = false;
     me.alt = newSlot(L.ability2);
     me.alt3 = newSlot(slot3Open() ? L.ability3 : null);
-    me.alt4 = newSlot(slot4Open() ? L.ability4 : null);
+    me.alt4 = newSlot(slot4Pick());
     applyBandolier(me);
     abCache = abCache2 = abCache3 = abCache4 = '';
     updateWeaponBar(true);
@@ -151,7 +161,7 @@ const Game = (() => {
     me.abCd = 0; me.abUses = (ABILITIES[L.ability] || {}).uses ?? Infinity;
     me.alt = newSlot(L.ability2); abCache2 = '';
     me.alt3 = newSlot(slot3Open() ? L.ability3 : null); abCache3 = '';
-    me.alt4 = newSlot(slot4Open() ? L.ability4 : null); abCache4 = '';
+    me.alt4 = newSlot(slot4Pick()); abCache4 = '';
     me.shield = 0; me.shieldT = 0; me.speedT = 0; me.rapidT = 0; me.slowT = 0; me.lastStand = false;
     applyBandolier(me);
     abCache = '';
@@ -182,9 +192,11 @@ const Game = (() => {
 
   function begin() {
     if (slot3Open()) G.me.alt3 = newSlot(Account.user.loadout.ability3);
-    if (slot4Open()) G.me.alt4 = newSlot(Account.user.loadout.ability4);
+    if (slot4Pick()) G.me.alt4 = newSlot(slot4Pick());
     applyBandolier(G.me);
     if (G.me.synergies.length) G.banner = { text: `COMBO: ${G.me.synergies.join(' + ').toUpperCase()}`, t: 2.5 };
+    const cl = myClass();
+    if (cl) G.banner = { text: `${cl.name.toUpperCase()} CLASS`, t: 2.5 };
     Input.reset();
     abCache = abCache2 = abCache3 = abCache4 = '';
     updateWeaponBar(true);
@@ -313,7 +325,7 @@ const Game = (() => {
       gun.reload = reloadTimeOf(s);
     }
     gun.cd = Math.max(0, gun.cd - dt);
-    if (me.miniT > 0 || me.rocketT > 0) { gun.reload = 0; gun.ammo = Math.max(gun.ammo, 1); }
+    if (me.miniT > 0 || me.rocketT > 0 || me.clockT > 0) { gun.reload = 0; gun.ammo = Math.max(gun.ammo, 1); }
     if (fire && gun.reload === 0 && gun.ammo > 0 && gun.cd === 0) {
       shoot(gun);
       gun.cd = s.fireDelay * (me.rapidT > 0 ? ABILITIES.rapid.fireMul : 1) * (adrenalineOn() ? ABILITIES.adrenaline.fire : 1);
@@ -388,6 +400,7 @@ const Game = (() => {
     if (me.wallT > 0) kind.ghost = 1;
     let dmg = s.damage * (hasAb('glass') ? ABILITIES.glass.mul : 1) * (me.juggT > 0 ? ULTIMATES.juggernaut.mul : 1);
     if (me.overShots > 0) { me.overShots--; dmg *= ABILITIES.overcharge.mul; }
+    if (me.clockT > 0) dmg *= ABILITIES.cls_overclock.mul;
     for (const a of angles) addBullet(m.x, m.y, a, s.speed, dmg, s.knockback, 'me', G.myId, s.range, s.falloff, s.flare, kind);
     const a = me.aim;
     G.lastCombat = G.time;
@@ -590,7 +603,7 @@ const Game = (() => {
     me.speedT = Math.max(0, me.speedT - dt);
     me.rapidT = Math.max(0, me.rapidT - dt);
     me.slowT = Math.max(0, me.slowT - dt);
-    for (const k of ['frozenT', 'phaseT', 'reflectT', 'padCd', 'thornCd']) me[k] = Math.max(0, me[k] - dt);
+    for (const k of ['frozenT', 'phaseT', 'reflectT', 'padCd', 'thornCd', 'clockT', 'trapT']) me[k] = Math.max(0, (me[k] || 0) - dt);
     if (me.recall) {
       me.recall.t -= dt;
       if (me.recall.t <= 0) {
@@ -643,7 +656,7 @@ const Game = (() => {
     const pressed = Input.take(['abPress', 'ab2Press', 'ab3Press', 'ab4Press'][slot]);
     const held = Input.abilityHeld(slot);
     const ready = me.abCd === 0 && me.abUses > 0 && (me.ability !== 'shield' || me.shieldT === 0 || G.infAbility);
-    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability);
+    const instant = ['shield', 'energy', 'burger', 'dash', 'rapid', 'blink', 'nova', 'slowmo', 'grapple', 'phase', 'reflect', 'overcharge', 'quake', 'recall', 'stim', 'shadowstep'].includes(me.ability) || !!A.cls;
     if (instant) {
       if ((pressed || (held && !me.abWasHeld)) && ready) useInstant(A);
     } else {
@@ -721,6 +734,89 @@ const Game = (() => {
       G.banner = { text: 'Stimmed!', t: 1 };
     }
     if (me.ability === 'shadowstep' && !stepBehind(A.range)) { me.abUses++; me.abCd = 0; G.banner = { text: 'No enemy in sight', t: 1 }; }
+    if (A.cls) useClass(A);
+  }
+
+  // ---- CLASS abilities (slot 4 when every ability is from one section; numbers in config ABILITIES.cls_*)
+  // while the class ability runs it's swapped into `me`, so the other slots sit in alt/alt3/alt4
+  function slotsExcept() { const me = G.me; return [me.alt, me.alt3, me.alt4]; }
+  function useClass(A) {
+    const me = G.me, id = me.ability;
+    const refund = msg => { me.abUses++; me.abCd = 0; G.banner = { text: msg, t: 1.2 }; };
+    if (id === 'cls_upgrade') {
+      // your building closest to you (ones in front of you count as closer)
+      let best = null, bd = Infinity;
+      const blds = [...G.turrets.filter(t => t.hp > 0), ...G.gadgets.filter(g => !g.dead && isMine(g.owner) && ABILITIES[g.kind] && ABILITIES[g.kind].building)];
+      for (const b of blds) {
+        const d = Math.hypot(b.x - me.x, b.y - me.y);
+        if (d > A.reach + (b.sc || 1) * 20 || (b.lvl || 1) >= A.maxLvl) continue;
+        const off = Math.abs(((Math.atan2(b.y - me.y, b.x - me.x) - me.aim + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        const score = d * (1 + off / 2);
+        if (score < bd) { best = b; bd = score; }
+      }
+      if (!best) return refund(blds.length ? 'No building to upgrade nearby (or all max level)' : 'Build something first!');
+      best.lvl = (best.lvl || 1) + 1;
+      if (best.maxHp && best.maxHp !== Infinity) best.hp = best.maxHp;
+      best.flash = 0.2;
+      if (best.id && G.mode === 'mp') Net.send({ t: 'gadl', id: best.id, l: best.lvl });
+      levelFx(best);
+    }
+    if (id === 'cls_restock') {
+      for (const s of slotsExcept()) if (s.ability && !ABILITIES[s.ability].cls) { s.abCd = 0; if (s.abUses < 1) s.abUses = 1; }
+      me.trapT = A.window;
+      burst(me.x, me.y, A.color, 18, 240);
+      G.banner = { text: 'Double Trap! Next placeable x2', t: 1.5 };
+    }
+    if (id === 'cls_barrage') {
+      const L = Account.user.loadout, thr = ABILITY_GROUPS[2].ids;
+      const kind = thr.includes(me.lastThrow) ? me.lastThrow : [L.ability, L.ability2, L.ability3].find(k => thr.includes(k)) || 'grenade';
+      const t = grenadeTarget(), d = Math.hypot(t.x - me.x, t.y - me.y);
+      for (let i = 0; i < A.count; i++) {
+        const a = me.aim + (i / (A.count - 1) - 0.5) * A.spread * 2, dd = d * (0.85 + 0.15 * (i % 2));
+        const x1 = clamp(me.x + Math.cos(a) * dd, 20, MAP.w - 20), y1 = clamp(me.y + Math.sin(a) * dd, 20, MAP.h - 20);
+        G.nades.push({ x0: me.x, y0: me.y, x1, y1, t: -i * 0.06, owner: myOwnerId(), kind, a: me.aim });
+        if (kind === 'grenade' && G.mode === 'mp') Net.send({ t: 'nade', x0: Math.round(me.x), y0: Math.round(me.y), x1: Math.round(x1), y1: Math.round(y1) });
+      }
+      G.lastCombat = G.time;
+      G.banner = { text: `Barrage: ${A.count}x ${ABILITIES[kind].name}!`, t: 1.2 };
+    }
+    if (id === 'cls_overclock') { me.clockT = A.duration; G.banner = { text: 'Overclock! +60% damage, no reload', t: 1.5 }; burst(me.x, me.y, A.color, 16, 220); }
+    if (id === 'cls_afterimage') {
+      const mv = ABILITY_GROUPS[4].ids;
+      for (const s of slotsExcept()) if (mv.includes(s.ability)) { s.abCd = 0; if (s.abUses < 1) s.abUses = 1; }
+      me.speedT = Math.max(me.speedT, A.duration); me.phaseT = Math.max(me.phaseT, A.duration);
+      for (let i = 0; i < 6; i++) G.fx.push({ x: me.x, y: me.y, vx: 0, vy: 0, life: 0.5, max: 0.5, size: me.r * 2 + i * 6, color: 'rgba(24,220,255,0.25)' });
+      G.banner = { text: 'Afterimage!', t: 1 };
+    }
+    if (id === 'cls_pulse') {
+      if (me.hp < me.maxHp) heal(Math.ceil(me.maxHp - me.hp));
+      me.frozenT = 0; me.shield = Math.max(me.shield, A.shield); me.shieldT = Math.max(me.shieldT, A.shieldT);
+      for (const g of G.gadgets) if (!g.dead && g.kind === 'decoy' && isMine(g.owner) && g.maxHp && Math.hypot(g.x - me.x, g.y - me.y) <= A.radius) {
+        g.hp = g.maxHp; burst(g.x, g.y, '#32ff7e', 12, 180);
+      }
+      G.rings.push({ x: me.x, y: me.y, r: A.radius, life: 0.7, max: 0.7, color: '50,255,126' });
+      burst(me.x, me.y, '#32ff7e', 30, 340);
+      G.banner = { text: 'Revive Pulse!', t: 1 };
+    }
+  }
+  function levelFx(b) {
+    burst(b.x, b.y, '#ffd32a', 36, 380); burst(b.x, b.y, '#ffffff', 14, 240);
+    G.rings.push({ x: b.x, y: b.y, r: 120, life: 0.6, max: 0.6, color: '255,211,42' });
+    G.texts.push({ x: b.x, y: b.y - 60, text: `LEVEL ${b.lvl}!`, color: '#ffd32a', life: 1.4 });
+  }
+  // gold stars over upgraded buildings
+  function drawLevels() {
+    for (const b of [...G.turrets, ...G.gadgets]) {
+      if (b.dead || !(b.lvl > 1)) continue;
+      const n = b.lvl, y = b.y - 52 * (b.sc || 1);
+      ctx.fillStyle = '#ffd32a'; ctx.strokeStyle = '#3a2a00'; ctx.lineWidth = 1.5;
+      for (let i = 0; i < n; i++) {
+        const x = b.x + (i - (n - 1) / 2) * 11;
+        ctx.beginPath();
+        for (let k = 0; k < 10; k++) { const r = k % 2 ? 2.4 : 5.5, a = -Math.PI / 2 + k * Math.PI / 5; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
+    }
   }
 
   // the thrown Resupply crate landed: a pickup with a few charges (+ a Supply Decoy with the combo)
@@ -1418,7 +1514,8 @@ const Game = (() => {
     for (const g of G.gadgets) {
       if (g.dead) continue;
       const A = ABILITIES[g.kind];
-      g.t -= dt; g.age += dt; g.tick -= dt;
+      const ldt = dt * lvlRate(g);
+      g.t -= dt; g.age += dt; g.tick -= ldt;
       for (const z of g.zaps) z.life -= dt;
       g.zaps = g.zaps.filter(z => z.life > 0);
       if (g.kind === 'blackhole') {
@@ -1478,12 +1575,12 @@ const Game = (() => {
         }
       }
       if (g.kind === 'mortar') updateMortar(g, A);
-      if (g.kind === 'sniper') updateSniper(g, A, dt);
+      if (g.kind === 'sniper') updateSniper(g, A, ldt);
       if (g.kind === 'shieldgen') updateShieldGen(g, A);
-      if (g.kind === 'flame') updateFlame(g, A, dt);
-      if (g.kind === 'laser') updateLaser(g, A, dt);
-      if (g.kind === 'hangar') updateHangar(g, A, dt);
-      if (g.kind === 'gravity') updateGravity(g, A, dt);
+      if (g.kind === 'flame') updateFlame(g, A, ldt);
+      if (g.kind === 'laser') updateLaser(g, A, ldt);
+      if (g.kind === 'hangar') updateHangar(g, A, ldt);
+      if (g.kind === 'gravity') updateGravity(g, A, ldt);
       if (g.kind === 'mine' && g.age > A.arm) {
         let boom = false;
         if (isMine(g.owner)) boom = targets().some(e => Math.hypot(e.x - g.x, e.y - g.y) <= A.trigger + (e.r || PLAYER.r));
@@ -3057,7 +3154,7 @@ const Game = (() => {
     }
     G.healShots = G.healShots.filter(h => !h.done);
     for (const t of G.turrets) {
-      t.t -= dt; t.cd -= dt;
+      t.t -= dt; t.cd -= dt * lvlRate(t);
       if (t.age === undefined) { t.age = 0; landFx(t.x, t.y, '#cd84f1', t.fort ? 1.9 : t.rail ? 1.6 : t.rocket ? 1.3 : 1); }
       t.age += dt;
       if (t.shieldT > 0) t.shieldT -= dt;
@@ -3263,6 +3360,12 @@ const Game = (() => {
       if (out >= ABILITIES.decoy.max) { G.banner = { text: `Max ${ABILITIES.decoy.max} decoys`, t: 1.2 }; return; }
     }
     G.nades.push({ x0: me.x, y0: me.y, x1: t.x, y1: t.y, t: 0, owner: myOwnerId(), kind, a: me.aim });
+    if (ABILITY_GROUPS[2].ids.includes(kind)) me.lastThrow = kind;
+    if (me.trapT > 0 && ABILITY_GROUPS[1].ids.includes(kind)) { // TRAPPER Double Trap: a 2nd copy lands beside it
+      me.trapT = 0;
+      const sa = me.aim + Math.PI / 2, x1 = clamp(t.x + Math.cos(sa) * 70, 20, MAP.w - 20), y1 = clamp(t.y + Math.sin(sa) * 70, 20, MAP.h - 20);
+      G.nades.push({ x0: me.x, y0: me.y, x1, y1, t: -0.1, owner: myOwnerId(), kind, a: me.aim });
+    }
     me.abCd = ABILITIES[kind].cooldown;
     me.abUses--;
     if (kind !== 'grenade') return; // heal zone / turret: only yours, nothing to tell others
@@ -3644,8 +3747,10 @@ const Game = (() => {
       if (G.mode === 'sp' && G.wave === SLOT3_WAVE && !G.me.alt3.ability && Account.user.loadout.ability3) {
         G.me.alt3 = newSlot(Account.user.loadout.ability3); applyPerk(G.me); abCache3 = '';
       }
-      if (G.mode === 'sp' && G.wave === SLOT4_WAVE && !G.me.alt4.ability && Account.user.loadout.ability4) {
-        G.me.alt4 = newSlot(Account.user.loadout.ability4); applyPerk(G.me); abCache4 = '';
+      if (G.mode === 'sp' && slot4Pick() && G.me.alt4.ability !== slot4Pick()) {
+        G.me.alt4 = newSlot(slot4Pick()); applyPerk(G.me); abCache4 = '';
+        const c = myClass();
+        if (c && G.me.alt4.ability === c.ab) G.banner = { text: `${ABILITIES[c.ab].name} unlocked!`, t: 2.5 };
       }
       G.phase = 'fight';
       G.spawnT = 0;
@@ -4075,6 +4180,11 @@ const Game = (() => {
     if (g.kind === 'mine') mineBoom(g);
     else { if (ABILITIES[g.kind].building && !m.q) gadgetBoom(g); else burst(g.x, g.y, ABILITIES[g.kind].color, 24, 300); removeGadget(g); }
   });
+  Net.on('gadl', m => { // ENGINEER upgraded a building
+    if (!inMP()) return;
+    const g = G.gadgets.find(g => g.id === m.id);
+    if (g) { g.lvl = m.l; if (g.maxHp) g.hp = g.maxHp; levelFx(g); }
+  });
   Net.on('gadc', m => {
     if (!inMP()) return;
     const g = G.gadgets.find(g => g.id === m.id);
@@ -4222,6 +4332,7 @@ const Game = (() => {
     ctx.fillStyle = theme().shadow;
     ctx.fill('evenodd');
     drawGadgetsTop();
+    drawLevels();
     ctx.restore();
 
     drawHearing();
@@ -4556,7 +4667,7 @@ const Game = (() => {
   }
   let abCache = '', abCache2 = '', abCache3 = '', abCache4 = '';
   // which timer a running ability shows on its button
-  const RUNNING = { shield: 'shieldT', rapid: 'rapidT', slowmo: 'slowT', phase: 'phaseT', reflect: 'reflectT', stim: 'stimT' };
+  const RUNNING = { shield: 'shieldT', rapid: 'rapidT', slowmo: 'slowT', phase: 'phaseT', reflect: 'reflectT', stim: 'stimT', cls_overclock: 'clockT', cls_afterimage: 'phaseT' };
   function updateAbilityBtn() {
     const ub = el('ultBtn'), U = G.me.ult && ULTIMATES[G.me.ult];
     ub.classList.toggle('hidden', !U);
@@ -4565,7 +4676,16 @@ const Game = (() => {
     abCache = paintAbilityBtn(el('abilityBtn'), abCache);
     swapAlt(); abCache2 = paintAbilityBtn(el('ability2Btn'), abCache2); swapAlt();
     swapAlt('alt3'); abCache3 = paintAbilityBtn(el('ability3Btn'), abCache3); swapAlt('alt3');
-    swapAlt('alt4'); abCache4 = paintAbilityBtn(el('ability4Btn'), abCache4); swapAlt('alt4');
+    const cl = myClass();
+    if (cl && !G.me.alt4.ability) { // class ability still locked (SP before CLASSES.unlockWave)
+      const key = 'lock' + cl.id;
+      if (abCache4 !== key) {
+        const btn = el('ability4Btn'); abCache4 = key;
+        btn.classList.remove('hidden', 'passive'); btn.classList.add('cooling');
+        btn.querySelector('.ab-name').innerHTML = `${abilityIconSVG(cl.ab, 16, '#fff')} ${ABILITIES[cl.ab].name}`;
+        btn.querySelector('.ab-state').textContent = `🔒 Wave ${CLASSES.unlockWave}`;
+      }
+    } else { swapAlt('alt4'); abCache4 = paintAbilityBtn(el('ability4Btn'), abCache4); swapAlt('alt4'); }
   }
   function paintAbilityBtn(btn, cache) {
     const me = G.me, A = ABILITIES[me.ability];

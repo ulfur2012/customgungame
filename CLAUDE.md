@@ -41,6 +41,10 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
 - Ability slots: 1 = E, 2 = C, 3 = V from wave 20, 4 = B from wave 30 (SP; all 4 in Test mode).
   Slot state is swapped into `me` (`swapAlt('alt'|'alt3'|'alt4')`) so ability code works for every slot.
   Passives work from any slot (`hasAb`). Weak abilities (`respawn`) get a use back every 30s.
+- CLASSES (config `CLASSES` + `cls_*` abilities, `classOf(L)`): slots 1-3 (>=2 filled) all from ONE ABILITY_GROUPS section ->
+  slot 4 (B) = class ability (player's own slot-4 pick ignored), unlocks at wave `CLASSES.unlockWave` (5) in SP, right away in
+  Test + MP. Engineer=Upgrade (building `lvl` 1-5, faster ticks via `lvlRate`, full heal, MP `gadl`), Trapper=Double Trap,
+  Grenadier=Barrage, Assault=Overclock (`clockT`), Scout=Afterimage, Medic=Revive Pulse (self + own buddies, SP-ish).
 - After a boss in SP the game pauses on an abilities-only picker. Bosses every 10 waves, CREATOR at 100.
 - Decoys (buddies): 25 HP, last forever, max 5 active, enemies treat them like the player (closest visible).
   They run out of ammo (mag + 1 spare) and seek ammo/health. Supply Decoy (a decoy thrown onto a Resupply

@@ -250,8 +250,10 @@
     const current = L[key];
     // two slot tabs, like the upgrade slots
     el('slotTabs').innerHTML = '';
-    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2'], [`Ability 3 (V) · wave ${SLOT3_WAVE}+`, 'ability3'], [`Ability 4 (B) · wave ${SLOT4_WAVE}+`, 'ability4']].forEach(([label, k], i) => {
-      const b = document.createElement('button'), A = ABILITIES[L[k]];
+    const cls = classOf(L);
+    [['Ability 1 (E)', 'ability'], ['Ability 2 (C)', 'ability2'], [`Ability 3 (V) · wave ${SLOT3_WAVE}+`, 'ability3'],
+     [cls ? `${cls.emoji} Class (B) · wave ${CLASSES.unlockWave}+` : `Ability 4 (B) · wave ${SLOT4_WAVE}+`, 'ability4']].forEach(([label, k], i) => {
+      const b = document.createElement('button'), A = ABILITIES[k === 'ability4' && cls ? cls.ab : L[k]];
       b.className = 'tab' + (i === abSlot ? ' active' : '');
       b.innerHTML = `<span class="tab-label">${label}</span><span class="tab-value">${A ? A.name : 'None'}</span>`;
       if (A) b.style.setProperty('--chip', A.color);
@@ -261,6 +263,20 @@
     const wrap = el('parts');
     wrap.innerHTML = '';
     // boosts for the ability in this slot (only shown for that ability)
+    // CLASS: every ability (slots 1-3) from one section -> slot 4 is the class ability
+    const cbox = document.createElement('div');
+    cbox.className = 'class-banner' + (cls ? ' on' : '');
+    cbox.innerHTML = cls
+      ? `<b>${cls.emoji} ${cls.name.toUpperCase()} class active</b> — slot 4 (B) = <b>${ABILITIES[cls.ab].name}</b> from wave ${CLASSES.unlockWave}: ${ABILITIES[cls.ab].desc}${L.ability4 ? ` <small>(your slot 4 pick is off while the class is on)</small>` : ''}`
+      : `<b>🎓 Classes</b> — fill slots 1-3 (at least 2) with abilities from ONE section to get a class ability on B:<br>`
+        + CLASSES.list.map(c => `${c.emoji} <b>${c.name}</b> (${ABILITY_GROUPS[c.group].label.replace(/^\S+\s/, '')}): ${ABILITIES[c.ab].name}`).join(' · ');
+    wrap.appendChild(cbox);
+    if (cls && abSlot === 3) {
+      const card = document.createElement('div');
+      card.className = 'card combo ready';
+      card.innerHTML = `<div class="card-name">${abilityIconSVG(cls.ab, 18, '#fff')} ${ABILITIES[cls.ab].name} <small class="hint">${ABILITIES[cls.ab].cooldown}s cooldown</small></div><div class="card-desc">${ABILITIES[cls.ab].desc}</div>`;
+      wrap.appendChild(card);
+    }
     const perks = ABILITY_PERKS[current] || [];
     if (!perks.some(p => p.id === L[perkKey])) L[perkKey] = null;
     if (perks.length) {
@@ -317,7 +333,7 @@
     }
     // abilities in sections: Buildings, Placeables, Throwables ... Passives
     const listed = new Set(ABILITY_GROUPS.flatMap(g => g.ids));
-    const others = Object.keys(ABILITIES).filter(id => !listed.has(id));
+    const others = Object.keys(ABILITIES).filter(id => !listed.has(id) && !ABILITIES[id].cls);
     const groups = [...ABILITY_GROUPS,
       { label: '✨ Passives', note: 'always on', ids: others.filter(id => ABILITIES[id].type === 'passive') },
       { label: 'Other', ids: others.filter(id => ABILITIES[id].type !== 'passive') }];

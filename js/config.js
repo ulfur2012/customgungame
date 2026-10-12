@@ -571,6 +571,42 @@ const ABILITY_GROUPS = [
   { label: '🛡️ Support', ids: ['shield', 'burger', 'energy', 'stim', 'reflect', 'slowmo'] },
 ];
 
+// CLASSES: equip ONLY abilities from one section (slots 1-3, at least 2 filled) -> slot 4 (B) becomes that class's ability.
+// It unlocks at `unlockWave` in single player (right away in Test mode and in multiplayer).
+const CLASSES = {
+  unlockWave: 5,
+  list: [
+    { id: 'engineer',  group: 0, name: 'Engineer',  emoji: '🏗️', ab: 'cls_upgrade' },
+    { id: 'trapper',   group: 1, name: 'Trapper',   emoji: '📦', ab: 'cls_restock' },
+    { id: 'grenadier', group: 2, name: 'Grenadier', emoji: '💣', ab: 'cls_barrage' },
+    { id: 'assault',   group: 3, name: 'Assault',   emoji: '🔫', ab: 'cls_overclock' },
+    { id: 'scout',     group: 4, name: 'Scout',     emoji: '🏃', ab: 'cls_afterimage' },
+    { id: 'medic',     group: 5, name: 'Medic',     emoji: '🛡️', ab: 'cls_pulse' },
+  ],
+};
+// class abilities (cls: true = never in the normal picker). All are press-to-use (good on phones).
+Object.assign(ABILITIES, {
+  cls_upgrade:    { cls: true, name: 'Upgrade', type: 'active', color: '#f6b93b', cooldown: 30, reach: 320, maxLvl: 5, delayCut: 0.12,
+                    desc: 'Upgrades your closest building (in front of you first) one level, max 5. Each level: 12% less time between shots + healed to full.' },
+  cls_restock:    { cls: true, name: 'Double Trap', type: 'active', color: '#e1b12c', cooldown: 30, window: 10,
+                    desc: 'Resets your other abilities. The next placeable you throw in 10s is thrown twice.' },
+  cls_barrage:    { cls: true, name: 'Barrage', type: 'active', color: '#e55039', cooldown: 30, count: 5, spread: 0.5,
+                    desc: 'Throws 5 of your last-used throwable in a spread where you aim.' },
+  cls_overclock:  { cls: true, name: 'Overclock', type: 'active', color: '#ff3838', cooldown: 30, duration: 6, mul: 1.6,
+                    desc: '6 seconds of +60% damage and no reloading.' },
+  cls_afterimage: { cls: true, name: 'Afterimage', type: 'active', color: '#18dcff', cooldown: 25, duration: 3,
+                    desc: 'Resets your movement abilities, and for 3s you run fast and walk through walls.' },
+  cls_pulse:      { cls: true, name: 'Revive Pulse', type: 'active', color: '#32ff7e', cooldown: 35, radius: 350, shield: 60, shieldT: 5,
+                    desc: 'Heals you and your buddies nearby to full, removes freeze/slow and gives you a 60 shield for 5s.' },
+});
+Object.assign(ABILITY_ICONS, { cls_upgrade: 'up', cls_restock: 'box', cls_barrage: 'dots', cls_overclock: 'battery', cls_afterimage: 'ghost', cls_pulse: 'plus' });
+// which class the loadout (slots 1-3) makes, or null
+function classOf(L) {
+  const ids = [L.ability, L.ability2, L.ability3].filter(id => ABILITIES[id]);
+  if (ids.length < 2) return null;
+  return CLASSES.list.find(c => ids.every(id => ABILITY_GROUPS[c.group].ids.includes(id))) || null;
+}
+
 // Ability combos: throw one ability's thing onto another's (needs both, e.g. one in each ability slot).
 const COMBOS = [
   { a: 'turret', b: 'tesla',   name: 'Railgun',        how: '3 Turrets → Rocket Turret, 3 Teslas → Big Tesla. Line up Big Tesla, Rocket Turret, Big Tesla.' },
