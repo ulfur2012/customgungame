@@ -623,6 +623,8 @@ const COMBOS = [
   { a: 'tesla', b: 'tesla',    name: 'Storm Tower',    formation: true, how: 'Make 3 Big Teslas (3 Teslas in one square each) in an L: one corner square with a Big Tesla right next to it on one side AND one above or below it. They fuse into a Storm Tower in the corner: huge range, zaps chain to 4 more enemies and lightning falls from its storm cloud.' },
   { a: 'turret', b: 'shieldgen', name: 'Fortress',     formation: true, how: '3 Turrets in one square → Rocket Turret. Line up Rocket Turret, Shield Generator, Rocket Turret (side-by-side squares, generator in the middle). They fuse into a Fortress: 4-barrel gun + rockets, a 250 HP regenerating shield, and an overshield for you inside its dome.' },
   { a: 'hangar', b: 'radar',   name: 'Carrier',        formation: true, how: 'Throw 3 Drone Hangars into one square → Big Hangar. Make a Command Tower (throw a Decoy onto a Radar) in the square right next to it (any side). The radar is used up and the hangar becomes a Carrier: 5 big drones, double damage, longer reach.' },
+  { a: 'hangar', b: 'hangar',  name: 'Drone Hive',     formation: true, how: 'Throw 3 Drone Hangars into one square → Big Hangar. Put a normal Drone Hangar in the square on each side of it (left + right, or above + below). They fuse into a Drone Hive: 10 small, fast drones that shoot quicker.' },
+  { a: 'hangar', b: 'laser',   name: 'Drone Uplink',   formation: true, how: 'Throw 3 Drone Hangars into one square → Big Hangar. Put a Laser Tower in the square right next to it (any side). The laser is used up and the hangar becomes a Drone Uplink: 5 drones that fire laser beams that never miss.' },
   { a: 'mortar', b: 'mortar',  name: 'Artillery Battery', formation: true, how: 'Throw 3 Mortars into one square → Big Mortar. Put a normal Mortar in the square on each side of it (left + right, or above + below). Every 4s the battery fires 5 shells at 5 enemies almost anywhere on the map (60 damage each).' },
   { a: 'shieldgen', b: 'shieldgen', name: 'Aegis Dome', formation: true, how: '3 Shield Generators in one square → Big Shield Generator. Put a normal Shield Generator on each side of it (row or column). The dome gets twice as big, gives an 80 HP overshield every 3s, repairs your buildings inside and stops enemy bullets.' },
   { a: 'flame', b: 'flame',    name: 'Inferno Tower',  formation: true, how: '3 Flame Towers in one square → Big Flame Tower. Put a normal Flame Tower on each side of it (row or column). It sprays fire all the way around (much stronger and further) and throws fireballs at enemies far away.' },
@@ -653,6 +655,11 @@ const COMBOS = [
   { a: 'flame', b: 'barrier', name: 'Inferno Ring',  how: 'Throw a Barrier onto a Flame Tower: the barrier is used up and the tower sprays fire all the way around it, not just a cone.' },
   { a: 'laser', b: 'radar',   name: 'Prism Laser',    how: 'Throw a Radar onto a Laser Tower: the radar is used up and the beam splits to also burn up to 2 more enemies.' },
   { a: 'hangar', b: 'medic',  name: 'Medic Drones',   how: 'Throw a Heal Zone onto a Drone Hangar: the heal zone is used up, the drones turn green and every 2s each one heals you or a hurt buddy near the hangar (+6 HP) while still shooting.' },
+  // v92 drone types: one per hangar (Medic Drones can still be added on top). Numbers in COMBO.drone*
+  { a: 'hangar', b: 'freeze',  name: 'Frost Drones',  how: 'Throw a Freeze Bomb onto a Drone Hangar: the bomb is used up and the drones turn icy blue. Their shots slow enemies down and every 4th hit freezes them solid for a moment.' },
+  { a: 'hangar', b: 'firepit', name: 'Flame Drones',  how: 'Throw a Fire Pit onto a Drone Hangar: the fire pit is used up and the drones turn orange. Their shots set enemies on fire.' },
+  { a: 'hangar', b: 'tesla',   name: 'Shock Drones',  how: 'Throw a Tesla Coil onto a Drone Hangar: the coil is used up and the drones turn yellow. Every shot jumps with lightning to 2 more enemies close by.' },
+  { a: 'hangar', b: 'mine',    name: 'Kamikaze Drones', how: 'Throw a Land Mine onto a Drone Hangar: the mine is used up and the drones turn red. They dive into the most dangerous enemies and blow up, then a new one launches after 3s. (A hangar can only have ONE drone type.)' },
   { a: 'gravity', b: 'grenade', name: 'Implosion',    how: 'Throw a Grenade onto a Gravity Tower: the grenade is used up and every 5s the tower crushes everything it is pulling in (40 damage blast).' },
   { a: 'tesla', b: 'grenade', name: 'Storm Coil',     how: 'Throw a Grenade onto a Tesla Coil: the grenade is used up and every zap chains on to up to 2 more nearby enemies.' },
   // ---- passive combos: just equip both, they power each other up ----
@@ -683,7 +690,8 @@ const COMBOS = [
 ];
 const COMBO = { supplySpeed: 1.25, supplyMags: 3, supplyMax: 2,  healBeam: 50, healBeamMe: 20, healEvery: 1.5, healRange: 700, healShotSpeed: 900,  seekerRange: 1.6, fireWallDps: 20, flameMul: 1.5,  fenceNear: 220, fenceDps: 15, domeHeal: 8, domeTime: 6, buddyHeal: 5, buddyRadius: 180, singRadius: 340, singDamage: 150, cryoMineFreeze: 2.5, near: 110, spotRange: 2200, medicRadius: 160, medicHeal: 5, medicEvery: 3, medicCalm: 3, vortexDps: 20, vortexTime: 3, cryoFreeze: 0.8,
   iceNear: 70, iceTime: 0.6, iceSlow: 0.3,  bunkerTake: 0.5,  cmdRadius: 320, cmdFire: 0.7, cmdDmg: 1.25,  stormChains: 2, stormRange: 230,  cryoMortar: 1.5, shockDps: 20,
-  blazeRange: 0.8, prismBeams: 2, prismMul: 0.6, medicDroneRange: 300, implodeEvery: 5, implodeDamage: 40, implodeRadius: 180,
+  blazeRange: 0.8, prismBeams: 2, prismMul: 0.6, medicDroneRange: 300, droneChill: 1.5, droneFreezeHits: 4, droneFreeze: 0.8, droneBurn: 3, droneChains: 2, droneChainRange: 170, droneChainMul: 0.6,
+  kamiRadius: 95, kamiDmg: 55, kamiBack: 3, kamiSpeed: 1.7, implodeEvery: 5, implodeDamage: 40, implodeRadius: 180,
   fogSlow: 0.4, mistHeal: 5, springDmg: 40, springKb: 30, springCd: 1.5, napalmSize: 1.6, napalmTime: 4, cryoBhTime: 2, cryoBhFreeze: 3,
   bashTime: 0.35, bashDmg: 35, bashKb: 16, giftDelay: 0.6, giftRadius: 130, giftDmg: 60, poundRadius: 200, poundDmg: 30, poundKb: 10, mirrorShield: 80 };
 // Building look: landing pop time, debris pieces when one is destroyed
@@ -706,6 +714,8 @@ const FORMATIONS = {
   stormtower: { hp: 420, radius: 2.4, dmgMul: 2, chains: 4, chainRange: 300, everyMul: 0.7, boltEvery: 2.5, bolts: 3, boltDmg: 45, size: 2 },
   fortress:   { hp: 600, range: 1150, every: 0.11, damage: 9, speed: 2600, rocketEvery: 4, shield: 250, shieldRegen: 30, shieldDelay: 3, dome: 280, overshield: 40, overEvery: 5 },
   carrier:    { hp: 380, drones: 5, dmgMul: 2, droneHp: 2, range: 1.4, size: 1.8 },
+  hive:       { hp: 420, drones: 10, dmgMul: 0.9, droneHp: 0.8, range: 1.3, speed: 1.6, every: 0.7, dsc: 0.8, size: 1.8 },              // Hangar | Big Hangar | Hangar
+  uplink:     { hp: 420, drones: 5, dmgMul: 1, droneHp: 1.5, range: 1.4, beam: 22, beamRange: 340, every: 0.6, dsc: 1.2, size: 1.8 }, // Big Hangar + Laser Tower
   // v85: every building has a mega upgrade. "trio" = small | BIG | small of the same building (row or column)
   artillery:  { hp: 520, every: 4, shells: 5, range: 2600, minRange: 120, damage: 60, radius: 130, flight: 1.3, size: 1.8 },          // Mortar trio
   aegis:      { hp: 560, radius: 2, every: 3, shield: 80, shieldTime: 6, repair: 12, size: 1.8 },                                        // Shield Generator trio
@@ -714,7 +724,7 @@ const FORMATIONS = {
   watchtower: { hp: 420, every: 1.2, range: 3000, damage: 160, speed: 6000, size: 1.8 },                                                 // Big Sniper Nest + Radar
   citadel:    { hp: 1500, regen: 20, every: 0.45, damage: 18, range: 750, speed: 2200 },                                                 // Big Barrier + Shield Generator
 };
-const FORMATION_NAMES = { orbital: 'Orbital Strike', stormtower: 'Storm Tower', fortress: 'Fortress', carrier: 'Carrier', artillery: 'Artillery Battery',
+const FORMATION_NAMES = { orbital: 'Orbital Strike', stormtower: 'Storm Tower', fortress: 'Fortress', carrier: 'Carrier', hive: 'Drone Hive', uplink: 'Drone Uplink', artillery: 'Artillery Battery',
   aegis: 'Aegis Dome', inferno: 'Inferno Tower', singularity: 'Black Hole Generator', watchtower: 'Watchtower', citadel: 'Citadel Wall' };
 
 // Ability boosts: passives that only exist for one ability (you only see them once that ability is equipped).
@@ -839,6 +849,8 @@ const MEGA = {
   stormtower:  { needs: ['tesla'], price: 3500, color: '#a29bfe', does: 'Huge range, zaps chain to 4 more enemies and lightning falls from its storm cloud.' },
   orbital:     { needs: ['laser', 'radar'], price: 4500, color: '#ff2e63', does: 'Every 6s a sky beam hits the toughest enemy anywhere on the map (140 damage).' },
   carrier:     { needs: ['hangar', 'radar', 'decoy'], price: 4500, color: '#00d2d3', does: '5 big drones, double damage, longer reach.' },
+  hive:        { needs: ['hangar'], price: 3500, color: '#ffd32a', does: '10 small, fast drones that shoot quicker.' },
+  uplink:      { needs: ['hangar', 'laser'], price: 4500, color: '#ff2e63', does: '5 drones that shoot laser beams that never miss (22 damage).' },
   artillery:   { needs: ['mortar'], price: 3500, color: '#e67e22', does: 'Every 4s fires 5 shells at 5 enemies almost anywhere on the map.' },
   aegis:       { needs: ['shieldgen'], price: 3500, color: '#6c5ce7', does: 'Giant dome: overshield for you, repairs buildings and stops enemy bullets.' },
   inferno:     { needs: ['flame'], price: 3500, color: '#ff5e1a', does: 'Fire all the way around (stronger, further) + fireballs at far enemies.' },
@@ -881,11 +893,12 @@ const DECOY_AI = { crowd: 2, crowdRadius: 250, maxSpread: 1400 };
 // The most dangerous enemies are handled first: buddies + drones are sent until their strength adds up to its danger.
 const DANGER = { grunt: 5, gunslinger: 5, runner: 3, shooter: 6, tank: 15, bomber: 6, splitter: 8, sniper: 8, healer: 8, boss: 100, mini: 25,
                  attackMul: 3, attackFor: 5 }; // hit your decoy/drones = x3 danger for that one building, for 5s after the last hit
-const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5 };
+const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5, hiveDrone: 2, uplinkDrone: 4 };
 
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 92, title: 'New drone powers', notes: ['Throw a Freeze Bomb, Fire Pit, Tesla Coil or Land Mine onto a Drone Hangar to get Frost, Flame, Shock or Kamikaze Drones!', 'New mega buildings: Drone Hive (Hangar | Big Hangar | Hangar) with 10 fast drones, and Drone Uplink (Big Hangar next to a Laser Tower) whose drones shoot lasers.', 'Buy them in the 🏰 Mega tab.'] },
   { v: 91, title: 'Hex shield is back', notes: ['The Aegis Dome has its hexagon shield pattern again.'] },
   { v: 90, title: 'Cleaner mega buildings', notes: ['Artillery Battery, Aegis Dome, Inferno Tower, Black Hole Generator, Watchtower and Citadel Wall have new simple looks.', 'They all stand on a hexagon base like the Railgun, with one bright colour each. The Fortress got a hexagon base too.'] },
   { v: 89, title: 'Ability joysticks on phones', notes: ['On phones every ability button is now a little green joystick.', 'Drag it to aim where your throw lands (pull further = throw further), let go to use it.', 'Drag out and back to the middle to cancel. A quick tap still auto-aims.'] },

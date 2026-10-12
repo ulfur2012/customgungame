@@ -43,6 +43,11 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
   + Radar beside (Eagle Eye only if thrown INTO the big nest's square). Citadel Wall = Big Barrier + Shield Gen touching it (2 end
   guns, regen; drawn after the darkness since the wall blocks its own sight). Names in config FORMATION_NAMES (inspect card).
   Command Tower is drawn as a tall lattice comms mast (`drawCommandTower`).
+- v92 DRONE TYPES (one per hangar, `DRONE_KINDS`/`droneKind`, flags dFrost/dFlame/dShock/dKami via `upgradeGadget`): Freeze Bomb ->
+  Frost, Fire Pit -> Flame, Tesla -> Shock (chain, `G.dzaps`), Mine -> Kamikaze (dive + `explode`, back in 3s). Effects ride on
+  bullets as `kind.dfx` -> `droneHitFx` in `hitEnemy` (SP/co-op only; PvP drones shoot normally). Medic Drones still stack on top.
+  Hangar megas (`hangF`): Drone Hive = Hangar | Big Hangar | Hangar trio (10 fast drones), Drone Uplink = Big Hangar + Laser beside
+  (laser beams, SP/co-op; PvP bullets). Drawn on a hex base (`drawHangarMega`).
 - Ability slots: 1 = E, 2 = C, 3 = V from wave 20, 4 = B from wave 30 (SP; all 4 in Test mode).
   Slot state is swapped into `me` (`swapAlt('alt'|'alt3'|'alt4')`) so ability code works for every slot.
   Passives work from any slot (`hasAb`). Weak abilities (`respawn`) get a use back every 30s.

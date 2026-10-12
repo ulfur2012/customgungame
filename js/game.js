@@ -446,7 +446,7 @@ const Game = (() => {
   function addBullet(x, y, a, speed, dmg, kb, team, owner, range = BULLET_RANGE, falloff = 0, flare = false, kind = {}) {
     if (team === 'e' && G.coop && Net.state.isHost) G.ev.push(['b', Math.round(x), Math.round(y), +a.toFixed(3), Math.round(speed), dmg, kb, Math.round(range)]);
     G.bullets.push({ x, y, ox: x, oy: y, range, falloff, flare,
-      bounce: kind.bounce || 0, pierce: !!kind.pierce, homing: !!kind.homing, ghost: !!kind.ghost, boom: kind.boom || null, hit: new Set(), vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
+      bounce: kind.bounce || 0, pierce: !!kind.pierce, homing: !!kind.homing, ghost: !!kind.ghost, boom: kind.boom || null, dfx: kind.dfx || null, hit: new Set(), vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: range / speed, dmg, kb, team, owner });
   }
   // damage after falloff (shotguns hit hardest up close)
   const bulletDamage = b => b.dmg * (1 - b.falloff * Math.min(1, Math.hypot(b.x - b.ox, b.y - b.oy) / b.range));
@@ -1042,6 +1042,13 @@ const Game = (() => {
       }
     }
     if (isMine(n.owner)) {
+      const dk = DRONE_KINDS[n.kind]; // FROST / FLAME / SHOCK / KAMIKAZE DRONES (thrown thing used up, one type per hangar)
+      const dh = dk && !(n.kind === 'tesla' && n.big) && myGadget('hangar', n.x1, n.y1, COMBO.near);
+      if (dh) {
+        const has = droneKind(dh);
+        if (!has) { upgradeGadget(dh, dk[0]); comboFx(dh.x, dh.y, dk[1], dk[2]); return; }
+        G.banner = { text: `This hangar already has ${DRONE_TYPES[has][2]}`, t: 1.8 };
+      }
       if (n.kind === 'firepit') { // INFERNO VORTEX
         const bh = myGadget('blackhole', n.x1, n.y1, ABILITIES.blackhole.radius);
         if (bh && !bh.vortex) { upgradeGadget(bh, 'vortex'); comboFx(bh.x, bh.y, '#ff6b1a', 'INFERNO VORTEX'); return; }
@@ -1138,6 +1145,31 @@ const Game = (() => {
             ...G.gadgets.filter(g => !g.dead && ABILITIES[g.kind] && ABILITIES[g.kind].building && here(g)).map(g => ({ o: g, kind: g.kind, small: !g.big && !FORMATIONS_ANY(g) }))];
   }
   const FORMATIONS_ANY = g => Object.keys(FORMATIONS).some(k => g[k]);
+  // hangar mega formation (carrier / hive / uplink) or null
+  const hangF = g => g.carrier ? FORMATIONS.carrier : g.hive ? FORMATIONS.hive : g.uplink ? FORMATIONS.uplink : null;
+  // v92 drone types: thrown ability -> [flag, colour, name]; a hangar holds only one
+  const DRONE_KINDS = { freeze: ['dFrost', '#74b9ff', 'FROST DRONES'], firepit: ['dFlame', '#ff6b1a', 'FLAME DRONES'], tesla: ['dShock', '#ffd32a', 'SHOCK DRONES'], mine: ['dKami', '#ff3838', 'KAMIKAZE DRONES'] };
+  const DRONE_TYPES = Object.fromEntries(Object.values(DRONE_KINDS).map(v => [v[0], v]));
+  const droneKind = g => Object.keys(DRONE_TYPES).find(k => g[k]) || null;
+  // a drone's shot hit an enemy (single player / co-op): frost slows + freezes, flame burns, shock chains
+  function droneHitFx(e, k, dmg) {
+    if (k === 'dFrost') {
+      e.chill = Math.max(e.chill || 0, COMBO.droneChill);
+      e.dfz = (e.dfz || 0) + 1;
+      if (e.dfz >= COMBO.droneFreezeHits) { e.dfz = 0; e.frozen = Math.max(e.frozen || 0, COMBO.droneFreeze); burst(e.x, e.y, '#c7ecff', 10, 180); }
+    } else if (k === 'dFlame') e.burnT = Math.max(e.burnT || 0, COMBO.droneBurn);
+    else if (k === 'dShock') {
+      let from = e; const hit = new Set([e]);
+      for (let i = 0; i < COMBO.droneChains; i++) {
+        let nx = null, bd = COMBO.droneChainRange;
+        for (const o of G.enemies) { if (hit.has(o) || o.hp <= 0) continue; const d = Math.hypot(o.x - from.x, o.y - from.y); if (d < bd) { bd = d; nx = o; } }
+        if (!nx) break;
+        hit.add(nx); (G.dzaps ||= []).push({ x1: from.x, y1: from.y, x2: nx.x, y2: nx.y, t: G.time, seed: Math.random() * 99 });
+        if (G.dzaps.length > 40) G.dzaps.shift();
+        hurtEnemy(nx, dmg * COMBO.droneChainMul, 0.1, Math.atan2(nx.y - from.y, nx.x - from.x)); from = nx;
+      }
+    }
+  }
   // ONE building per square: only up to 3 small ones of the SAME kind may share it (they merge into a big one)
   function cellBlocked(kind, x, y) {
     // building level (Engineer upgrades) never matters: 1-2 small ones of the same kind always accept another
@@ -1178,7 +1210,7 @@ const Game = (() => {
     g.hp = g.maxHp = F.hp; g.flash = 0.2; g.formAge = 0;
     g.lvl = 1; // any level of the parts can fuse; the super building starts fresh
     if (F.size) g.sc = F.size;
-    if (what === 'carrier') g.drones = null; // rebuilt with more, bigger drones
+    if (g.kind === 'hangar') g.drones = null; // carrier / hive / uplink: rebuilt with their own drones
     if (what === 'citadel') g.sc = 1;
   }
   const formationFx = (x, y, col, text, sc = 1.6) => {
@@ -1204,6 +1236,7 @@ const Game = (() => {
     const mineOf = k => G.gadgets.filter(g => g.kind === k && !g.dead && isMine(g.owner));
     const at = (list, x, y) => list.find(o => { const [a, b] = cellOf(o); return a === x && b === y; });
     const AX = [[1, 0], [0, 1]], SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const plain = g => !FORMATIONS_ANY(g);
     // ORBITAL STRIKE: radar | big laser | radar
     const radars = mineOf('radar');
     for (const lz of mineOf('laser')) {
@@ -1219,13 +1252,21 @@ const Game = (() => {
     // CARRIER: big hangar next to a command tower
     // forgiving: the command tower just has to be close (any side, diagonals too), not in the exact next square
     for (const hg of mineOf('hangar')) {
-      if (hg.carrier) continue;
+      if (!plain(hg)) continue;
       const ct = radars.find(r => r.command && Math.hypot(r.x - hg.x, r.y - hg.y) <= MAP.grid * 2.2);
       if (!ct) continue;
       if (!hg.big) { G.banner = { text: 'Carrier needs a BIG Drone Hangar (3 in one spot)', t: 2.5 }; continue; }
       if (!megaOk('carrier')) continue;
       consumeGadget(ct); upgradeGadget(hg, 'carrier');
       formationFx(hg.x, hg.y, '#00d2d3', 'CARRIER'); return;
+    }
+    // DRONE UPLINK: big hangar + a laser tower in the square right next to it (any side)
+    for (const hg of mineOf('hangar')) {
+      if (!hg.big || !plain(hg)) continue;
+      const [x, y] = cellOf(hg), lz = SIDES.map(([dx, dy]) => at(mineOf('laser').filter(plain), x + dx, y + dy)).find(Boolean);
+      if (!lz || !megaOk('uplink')) continue;
+      consumeGadget(lz); upgradeGadget(hg, 'uplink');
+      formationFx(hg.x, hg.y, '#ff2e63', 'DRONE UPLINK'); return;
     }
     // STORM TOWER: 3 big teslas in an L (lives in the corner square)
     const bigT = mineOf('tesla').filter(g => g.big && !g.stormtower);
@@ -1253,8 +1294,7 @@ const Game = (() => {
       }
     }
     // TRIOS: small | BIG | small of the same building (row or column) -> mega building in the middle
-    const plain = g => !FORMATIONS_ANY(g);
-    for (const [kind, what, col] of [['mortar', 'artillery', '#e67e22'], ['shieldgen', 'aegis', '#6c5ce7'], ['flame', 'inferno', '#ff5e1a'], ['gravity', 'singularity', '#7d5fff']]) {
+    for (const [kind, what, col] of [['hangar', 'hive', '#ffd32a'], ['mortar', 'artillery', '#e67e22'], ['shieldgen', 'aegis', '#6c5ce7'], ['flame', 'inferno', '#ff5e1a'], ['gravity', 'singularity', '#7d5fff']]) {
       const all = mineOf(kind), smalls = all.filter(g => !g.big && plain(g));
       for (const c of all) {
         if (!c.big || !plain(c)) continue;
@@ -1589,7 +1629,8 @@ const Game = (() => {
 
   // DRONE HANGAR: drones orbit the hangar, fly out at enemies near it and shoot them; shot-down drones come back later
   function updateHangar(g, A, dt) {
-    const CF = g.carrier && FORMATIONS.carrier, me = G.me, mine = isMine(g.owner), n = (CF ? CF.drones : A.drones + (g.big ? 1 : 0)) + ((g.lvl || 1) - 1) * (g.big || CF ? 2 : 1), dhp = A.droneHp * (CF ? CF.droneHp : 1);
+    const CF = hangF(g), me = G.me, mine = isMine(g.owner), n = (CF ? CF.drones : A.drones + (g.big ? 1 : 0)) + ((g.lvl || 1) - 1) * (g.big || CF ? 2 : 1), dhp = A.droneHp * (CF ? CF.droneHp : 1);
+    const dk = droneKind(g), kami = dk === 'dKami' && pve(), spd = A.speed * (CF && CF.speed || 1) * (kami ? COMBO.kamiSpeed : 1), dcol = dk ? DRONE_TYPES[dk][1] : g.medic ? '#32ff7e' : A.color;
     if (!g.drones) g.drones = Array.from({ length: n }, (_, i) => ({ x: g.x, y: g.y, ph: i * Math.PI * 2 / n, alive: false, back: 0.35 + i * 0.35, hp: dhp, cd: 0.5, a: 0, mf: 0 }));
     while (g.drones.length < n) g.drones.push({ x: g.x, y: g.y, ph: 0, alive: false, back: 0.4, hp: dhp, cd: 0.5, a: 0, mf: 0 }); // upgrades add drones (Engineer: +1 per level, +2 if big)
     const R = A.range * rng(g) * (CF ? CF.range : 1);
@@ -1605,22 +1646,35 @@ const Game = (() => {
       if (d.hb) { d.hb.life -= dt; if (d.hb.life <= 0) d.hb = null; }
       if (!d.alive) {
         d.back -= dt;
-        if (d.back <= 0) { d.alive = true; d.hp = dhp; d.x = g.x; d.y = g.y; burst(g.x, g.y, g.medic ? '#32ff7e' : A.color, 8, 160); }
+        if (d.back <= 0) { d.alive = true; d.hp = dhp; d.x = g.x; d.y = g.y; burst(g.x, g.y, dcol, 8, 160); }
         continue;
       }
       const dt_ = tgtOf(d), group = flying.filter(o => tgtOf(o) === dt_); // drones on the same target share one even ring
       d.ph = g.spin + group.indexOf(d) * Math.PI * 2 / group.length;
-      const tgt = dt_;
-      const tx = tgt ? tgt.x + Math.cos(d.ph) * 110 : g.x + Math.cos(d.ph) * 58 * g.sc, ty = tgt ? tgt.y + Math.sin(d.ph) * 110 : g.y + Math.sin(d.ph) * 58 * g.sc;
-      const dx = tx - d.x, dy = ty - d.y, dl = Math.hypot(dx, dy) || 1, step = Math.min(dl, Math.max(A.speed, Math.min(dl * 6, A.speed * 2.5)) * dt);
+      const tgt = dt_, ring = kami && tgt ? 0 : 110; // kamikaze drones dive straight in
+      const tx = tgt ? tgt.x + Math.cos(d.ph) * ring : g.x + Math.cos(d.ph) * 58 * g.sc, ty = tgt ? tgt.y + Math.sin(d.ph) * ring : g.y + Math.sin(d.ph) * 58 * g.sc;
+      const dx = tx - d.x, dy = ty - d.y, dl = Math.hypot(dx, dy) || 1, step = Math.min(dl, Math.max(spd, Math.min(dl * 6, spd * 2.5)) * dt);
       d.x += dx / dl * step; d.y += dy / dl * step;
       d.a = tgt ? Math.atan2(tgt.y - d.y, tgt.x - d.x) : Math.atan2(dy, dx);
       d.cd -= dt;
-      if (mine && tgt && d.cd <= 0 && Math.hypot(tgt.x - d.x, tgt.y - d.y) <= A.shootRange && lineOfSight(d.x, d.y, tgt.x, tgt.y)) {
-        d.cd = A.every;
+      if (d.beam) { d.beam.life -= dt; if (d.beam.life <= 0) d.beam = null; }
+      if (kami && mine && tgt && Math.hypot(tgt.x - d.x, tgt.y - d.y) <= tgt.r + 14) { // KAMIKAZE: boom, a new one launches soon
+        explode(d.x, d.y, COMBO.kamiRadius, COMBO.kamiDmg * (CF ? CF.dmgMul : g.big ? 1.5 : 1), g.owner);
+        d.alive = false; d.back = COMBO.kamiBack; continue;
+      }
+      if (kami) continue;
+      const dmg = A.damage * (CF ? CF.dmgMul : g.big ? 1.5 : 1);
+      if (g.uplink && mine && pve() && tgt && d.cd <= 0 && Math.hypot(tgt.x - d.x, tgt.y - d.y) <= FORMATIONS.uplink.beamRange && lineOfSight(d.x, d.y, tgt.x, tgt.y)) {
+        d.cd = A.every * FORMATIONS.uplink.every; // UPLINK: instant laser beam that never misses
+        d.beam = { x: tgt.x, y: tgt.y, life: 0.16 };
+        hurtEnemy(tgt, FORMATIONS.uplink.beam, 0.2, d.a);
+        if (dk && G.enemies.includes(tgt)) droneHitFx(tgt, dk, FORMATIONS.uplink.beam);
+        G.lastCombat = G.time;
+      } else if (mine && tgt && d.cd <= 0 && Math.hypot(tgt.x - d.x, tgt.y - d.y) <= A.shootRange && lineOfSight(d.x, d.y, tgt.x, tgt.y)) {
+        d.cd = A.every * (CF && CF.every || 1);
         const sx = d.x + Math.cos(d.a) * 10, sy = d.y + Math.sin(d.a) * 10;
-        fireBullets(sx, sy, [+d.a.toFixed(4)], 1500, A.damage * (CF ? CF.dmgMul : g.big ? 1.5 : 1), 0.5, A.shootRange + 80, 1.5 * HEAR_UNIT);
-        d.mf = 0.07; flashAt(sx, sy, g.medic ? '#7dffaa' : '#7efcff', 16);
+        fireBullets(sx, sy, [+d.a.toFixed(4)], 1500, dmg, 0.5, A.shootRange + 80, 1.5 * HEAR_UNIT, dk ? { dfx: dk } : {});
+        d.mf = 0.07; flashAt(sx, sy, dk ? dcol : g.medic ? '#7dffaa' : '#7efcff', 16);
       }
     }
     if (g.medic && mine) { // MEDIC DRONES: every 2s each drone patches up you or your buddies near the hangar
@@ -1640,7 +1694,7 @@ const Game = (() => {
     for (const g of G.gadgets) {
       if (g.kind !== 'hangar' || g.dead || !g.drones || !isMine(g.owner)) continue;
       for (const d of g.drones) {
-        if (!d.alive || !segHitsCircle(x1, y1, b.x, b.y, d.x, d.y, g.carrier ? 14 : 10)) continue;
+        if (!d.alive || !segHitsCircle(x1, y1, b.x, b.y, d.x, d.y, 10 * ((hangF(g) || {}).dsc || (g.carrier ? 1.4 : 1)))) continue;
         d.hp -= bulletDamage(b); markAttack(g, b.src);
         if (d.hp <= 0) { d.alive = false; d.back = ABILITIES.hangar.respawn; buildingBoom(d.x, d.y, ABILITIES.hangar.color, 0.35); }
         else burst(b.x, b.y, '#7efcff', 4, 120);
@@ -2174,8 +2228,8 @@ const Game = (() => {
       if (g.dead || !isMine(g.owner)) continue;
       if (g.kind === 'decoy' && !g.supply && !g.medicBuddy && g.stats) { g.assigned = null; units.push({ u: g, x: g.x, y: g.y, str: STRENGTH.decoy, reach: DECOY_AI.maxSpread }); }
       if (g.kind === 'hangar' && g.drones) {
-        const A = ABILITIES.hangar, R = A.range * rng(g) * (g.carrier ? FORMATIONS.carrier.range : 1);
-        const str = g.carrier ? STRENGTH.carrierDrone : g.big ? STRENGTH.bigDrone : STRENGTH.drone;
+        const A = ABILITIES.hangar, HF = hangF(g), R = A.range * rng(g) * (HF ? HF.range : 1);
+        const str = g.carrier ? STRENGTH.carrierDrone : g.hive ? STRENGTH.hiveDrone : g.uplink ? STRENGTH.uplinkDrone : g.big ? STRENGTH.bigDrone : STRENGTH.drone;
         for (const d of g.drones) { d.assigned = null; if (d.alive) units.push({ u: d, x: d.x, y: d.y, str, home: g, reach: R }); }
       }
     }
@@ -3114,8 +3168,28 @@ const Game = (() => {
       glow(s.x, s.y, 150 * f, '#ff2e63', f); glow(s.x, s.y, 60 * f, '#ffffff', f);
     }
   }
+  // DRONE HIVE / DRONE UPLINK: simple railgun-style hex base, one accent colour
+  function drawHangarMega(g) {
+    const T = G.time, hv = !!g.hive, acc = hv ? '#ffd32a' : '#ff2e63';
+    ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
+    megaHex(28, acc, g.flash);
+    if (hv) { // honeycomb: 7 little hex cells, one lights up at a time
+      const cells = [[0, 0], ...Array.from({ length: 6 }, (_, i) => [Math.cos(i * Math.PI / 3) * 11, Math.sin(i * Math.PI / 3) * 11])];
+      cells.forEach(([x, y], i) => { ctx.save(); ctx.translate(x, y); ctx.fillStyle = Math.floor(T * 5) % 7 === i ? acc : '#2f3640'; ctx.strokeStyle = '#0c1014'; ctx.lineWidth = 1.5; bPoly(6, 5.5, Math.PI / 6); ctx.fill(); ctx.stroke(); ctx.restore(); });
+    } else { // uplink: spinning dish with a glowing lens
+      ctx.save(); ctx.rotate(T * 1.5);
+      ctx.fillStyle = '#2f3640'; ctx.strokeStyle = '#0c1014'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(0, 0, 15, -1.2, 1.2); ctx.lineTo(0, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillRect(0, -2, 20, 4); ctx.restore();
+      megaDot(0, 0, 7, '#2f3640'); megaDot(0, 0, 3.5 + Math.sin(T * 8), acc); glow(0, 0, 14, acc, 0.6);
+    }
+    ctx.restore();
+    megaPlate(g.x, g.y - 52 * g.sc, hv ? 'DRONE HIVE' : 'DRONE UPLINK', acc);
+  }
   function drawHangar(g, A) {
-    const T = G.time, acc = g.medic ? '#32ff7e' : '#00d2d3';
+    const T = G.time, dk = droneKind(g), acc = g.hive ? '#ffd32a' : g.uplink ? '#ff2e63' : dk ? DRONE_TYPES[dk][1] : g.medic ? '#32ff7e' : '#00d2d3';
+    if (G.dzaps && g === G.gadgets.find(o => o.kind === 'hangar' && !o.dead)) for (const z of G.dzaps) if (T - z.t < 0.18) teslaArc(z.x1, z.y1, z.x2, z.y2, z.seed + Math.floor(T * 30), 18, '#ffd32a', '#fffbe0', 2);
+    if (g.hive || g.uplink) drawHangarMega(g); else {
     ctx.save(); ctx.translate(g.x, g.y); ctx.scale(g.sc, g.sc);
     bShadow(23, 18);
     if (g.carrier) drawCarrierDeck(T, acc);
@@ -3141,9 +3215,11 @@ const Game = (() => {
     corners.forEach(([x, y], i) => { const on = Math.floor(T * 4) % 4 === i; ctx.fillStyle = on ? '#fff' : acc; ctx.fillRect(x - 2, y - 2, 4, 4); if (on) glow(x, y, 9, acc, 0.9); });
     ctx.restore();
     if (g.carrier) { ctx.fillStyle = '#a5f3f3'; ctx.font = '900 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('CARRIER', g.x, g.y - 42 * g.sc); }
-    const dsc = g.carrier ? 1.4 : 1;
+    }
+    const dsc = (hangF(g) || {}).dsc || (g.carrier ? 1.4 : 1);
     for (const d of g.drones || []) {
       if (!d.alive) continue;
+      if (d.beam) { const f = d.beam.life / 0.16; ctx.strokeStyle = `rgba(255,46,99,${0.5 * f})`; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.beam.x, d.beam.y); ctx.stroke(); ctx.strokeStyle = `rgba(255,230,240,${f})`; ctx.lineWidth = 2; ctx.stroke(); }
       if (d.hb) { ctx.strokeStyle = `rgba(50,255,126,${d.hb.life / 0.3})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.hb.x, d.hb.y); ctx.stroke(); }
       const bob = Math.sin(T * 6 + d.ph) * 2;
       ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(d.x + 6, d.y + 12, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
@@ -3154,8 +3230,13 @@ const Game = (() => {
         ctx.strokeStyle = '#dfe6e9'; ctx.lineWidth = 1.2; const r = T * 40; ctx.beginPath(); ctx.moveTo(x + Math.cos(r) * 5, y + Math.sin(r) * 5); ctx.lineTo(x - Math.cos(r) * 5, y - Math.sin(r) * 5); ctx.stroke();
       }
       ctx.fillStyle = g.carrier ? '#5e4a12' : '#353b48'; ctx.fillRect(-5, -4, 10, 8);
-      ctx.fillStyle = g.carrier ? '#ffd700' : '#636e72'; ctx.fillRect(-5, -4, 10, 2);
+      ctx.fillStyle = g.carrier ? '#ffd700' : dk || g.hive || g.uplink ? acc : '#636e72'; ctx.fillRect(-5, -4, 10, 2);
       ctx.fillStyle = '#1e272e'; ctx.fillRect(4, -1.5, 6, 3);
+      // drone type marks: frost = ice diamond, flame = flame tip, shock = bolt, kamikaze = red warhead
+      if (dk === 'dFrost') { ctx.fillStyle = '#c7ecff'; ctx.beginPath(); ctx.moveTo(0, -4); ctx.lineTo(3, 0); ctx.lineTo(0, 4); ctx.lineTo(-3, 0); ctx.fill(); }
+      else if (dk === 'dFlame') { ctx.fillStyle = Math.sin(T * 20 + d.ph) > 0 ? '#ffd32a' : '#ff6b1a'; ctx.beginPath(); ctx.moveTo(-5, -3); ctx.lineTo(-11, 0); ctx.lineTo(-5, 3); ctx.fill(); }
+      else if (dk === 'dShock') { ctx.strokeStyle = '#fff3a0'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-3, -3); ctx.lineTo(1, -1); ctx.lineTo(-1, 1); ctx.lineTo(3, 3); ctx.stroke(); }
+      else if (dk === 'dKami') { ctx.fillStyle = '#ff3838'; ctx.beginPath(); ctx.moveTo(4, -4); ctx.lineTo(12, 0); ctx.lineTo(4, 4); ctx.fill(); }
       glow(0, 0, 7, acc, 0.9);
       if (d.mf > 0) glow(12, 0, 10, '#fff3b0', 1);
       ctx.restore();
@@ -3279,7 +3360,7 @@ const Game = (() => {
     if (b.citadel) return FORMATIONS.citadel.range * lvlRange(b);
     if (b.kind === 'tesla') return teslaRange(b, A);
     if (b.kind === 'flame') return A.range * rng(b) * (b.blaze ? COMBO.blazeRange : 1);
-    if (b.kind === 'hangar') return A.range * rng(b) * (b.carrier ? FORMATIONS.carrier.range : 1);
+    if (b.kind === 'hangar') return A.range * rng(b) * (hangF(b) ? hangF(b).range : 1);
     return (A.range || A.radius || 0) * rng(b);
   }
   function bName(b) {
@@ -4825,6 +4906,7 @@ const Game = (() => {
 
   function hitEnemy(e, b, a) {
     const dmg = bulletDamage(b);
+    if (b.dfx && pve()) droneHitFx(e, b.dfx, dmg);
     if (b.team === 'me') vampire();
     if (b.team !== 'r') chargeUlt(dmg);
     e.hp -= dmg;
