@@ -60,7 +60,7 @@
   function goMenu() {
     Rules.banned = new Set(); // host rules only apply inside a multiplayer room
     el('menuName').textContent = Account.user.name;
-    el('menuBest').textContent = (Account.user.best ? `· best wave ${Account.user.best} ` : '') + `· ⭐ ${Account.user.bank} score to spend`;
+    el('menuBest').textContent = (Account.user.best ? `· best wave ${Account.user.best} ` : '') + `· ${Account.user.bank} score to spend`;
     show('menu');
     // WHAT'S NEW: pops up once per new version
     let seen = 0;
@@ -94,7 +94,7 @@
   // test mode: change loadout from the pause menu, then jump straight back in
   el('testInfBtn').onclick = () => {
     Game.infAbility = !Game.infAbility;
-    el('testInfBtn').textContent = `∞ Infinite ability: ${Game.infAbility ? 'ON' : 'OFF'}`;
+    el('testInfBtn').textContent = `Infinite ability: ${Game.infAbility ? 'ON' : 'OFF'}`;
     el('testInfBtn').classList.toggle('primary', Game.infAbility);
   };
   // test mode: summon enemies / bosses in bulk
@@ -215,7 +215,7 @@
   el('loadoutBack').onclick = () => onBack && onBack();
 
   // ---- shop: locked cards show a price, tapping one buys it with banked score
-  const priceTag = cost => cost && shopOn ? ` <small class="price">⭐ ${cost}</small>` : '';
+  const priceTag = cost => cost && shopOn ? ` <small class="price">${cost} score</small>` : '';
   // everything can be picked for free while customizing; locking in the loadout asks you to buy what you don't own
   function unowned() {
     const L = Account.user.loadout, list = [];
@@ -265,7 +265,7 @@
 
   function renderLoadout() {
     const owe = unowned().reduce((n, x) => n + x.cost, 0);
-    el('bankLine').textContent = `⭐ ${Account.user.bank || 0} score` + (owe && shopOn ? ` · loadout costs ${owe}` : '');
+    el('bankLine').textContent = `${Account.user.bank || 0} score` + (owe && shopOn ? ` · loadout costs ${owe}` : '');
     el('presetTabs').innerHTML = '<span>Loadout</span>';
     for (let i = 0; i < LOADOUT_PRESETS; i++) {
       const b = document.createElement('button');
@@ -275,10 +275,13 @@
       el('presetTabs').appendChild(b);
     }
     el('gunTabs').innerHTML = '';
-    for (const kind of ['main', 'secondary', 'ability', 'mega']) { // ultimates can't be bought: they only come from gold crates
+    const megaOpen = Object.keys(MEGA).some(id => megaReqsMet(id) || Account.user.owned.includes('mega:' + id));
+    if (megaOpen && !Account.user.megaSeen) { Account.user.megaSeen = true; Account.save(); toast('Mega tab unlocked!'); }
+    if (!megaOpen && gunKind === 'mega') gunKind = 'ability';
+    for (const kind of ['main', 'secondary', 'ability'].concat(megaOpen ? ['mega'] : [])) { // ultimates can't be bought: they only come from gold crates
       const b = document.createElement('button');
       b.className = 'gun-tab' + (kind === gunKind ? ' active' : '') + (kind === 'ability' ? ' ability-tab' : '') + (kind === 'mega' ? ' ability-tab ult-tab' : '');
-      b.textContent = kind === 'ability' ? 'Ability' : kind === 'mega' ? '🏰 Mega' : GUNS[kind].name;
+      b.textContent = kind === 'ability' ? 'Ability' : kind === 'mega' ? 'Mega' : GUNS[kind].name;
       b.onclick = () => { gunKind = kind; renderLoadout(); };
       el('gunTabs').appendChild(b);
     }
@@ -349,7 +352,7 @@
     wrap.innerHTML = '';
     const info = document.createElement('div');
     info.className = 'class-banner on';
-    info.innerHTML = `<b>🏰 Mega buildings</b> — put your buildings together in the right shape and they fuse into a super building.`
+    info.innerHTML = `<b>Mega buildings</b> — put your buildings together in the right shape and they fuse into a super building.`
       + ` You have to <b>buy</b> each one first, and you must <b>own the buildings it is made from</b>.`
       + '<br><small>Test mode and "All upgrades free" games let you build them all anyway.</small>';
     wrap.appendChild(info);
@@ -358,15 +361,15 @@
       const combo = COMBOS.find(c => c.name === name), how = combo ? combo.how : '';
       const card = document.createElement('div');
       card.className = 'card' + (cost ? ' locked' : ' equipped');
-      const needs = `<span class="needs">Needs: ${M.needs.map(a => `<span class="${priceOf('ab:' + a) ? 'no' : 'ok'}">${ABILITIES[a].name} ${priceOf('ab:' + a) ? '✗' : '✓'}</span>`).join(', ')}</span>`;
-      card.innerHTML = `<div class="ult-dot" style="background:${M.color}">🏰</div>
-        <div><div class="card-name">${name}${cost ? ` <small class="price">⭐ ${cost}</small>` : ' <small class="hint">owned ✓</small>'}</div>
+      const needs = `<span class="needs">Needs: ${M.needs.map(a => `<span class="${priceOf('ab:' + a) ? 'no' : 'ok'}">${ABILITIES[a].name} ${priceOf('ab:' + a) ? '(need)' : '(owned)'}</span>`).join(', ')}</span>`;
+      card.innerHTML = `<div class="mega-ic">${megaIconSVG(id, 36, M.color)}</div>
+        <div><div class="card-name">${name}${cost ? ` <small class="price">${cost} score</small>` : ' <small class="hint ok-txt">Owned</small>'}</div>
         <div class="card-desc"><b>${M.does}</b><br><small>How: ${how}</small>${needs}</div></div>`;
       if (cost) {
         const buy = document.createElement('button');
         buy.className = 'buy-btn';
         buy.disabled = !met || (u.bank || 0) < cost;
-        buy.textContent = !met ? 'Own the buildings first' : (u.bank || 0) < cost ? `Need ⭐ ${cost}` : `Buy ⭐ ${cost}`;
+        buy.textContent = !met ? 'Own the buildings first' : (u.bank || 0) < cost ? `Need ${cost} score` : `Buy for ${cost} score`;
         buy.onclick = ev => { ev.stopPropagation(); buyMega(id); };
         card.querySelector('.card-desc').appendChild(document.createElement('br'));
         card.querySelector('.card-desc').appendChild(buy);
@@ -380,7 +383,7 @@
       ctx.fillStyle = '#ffd700';
       ctx.beginPath(); ctx.arc(w / 2, h / 2 - 10, r, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `900 ${Math.round(r)}px system-ui, sans-serif`; ctx.fillText('🏰', w / 2, h / 2 - 10);
+      ctx.font = `900 ${Math.round(r)}px system-ui, sans-serif`; ctx.fillText('M', w / 2, h / 2 - 10);
       ctx.font = '800 16px system-ui, sans-serif'; ctx.fillText(`${have} owned`, w / 2, h - 22);
     }
     el('stats').innerHTML = `<p class="stat-note" style="font-size:14px">Mega buildings are yours forever once bought.</p>`;
@@ -389,7 +392,7 @@
     const u = Account.user, cost = priceOf('mega:' + id);
     if (!cost) return false;
     if (!megaReqsMet(id)) { toast(`Own ${MEGA[id].needs.map(a => ABILITIES[a].name).join(' + ')} first`); return false; }
-    if ((u.bank || 0) < cost) { toast(`You need ⭐ ${cost}`); return false; }
+    if ((u.bank || 0) < cost) { toast(`You need ${cost} score`); return false; }
     u.bank -= cost; u.owned.push('mega:' + id); Account.save();
     toast(`Bought ${megaName(id)}! ${u.bank} score left`);
     if (gunKind === 'mega') keepInPlace(`[data-mega="${id}"]`, renderLoadout);
@@ -406,7 +409,7 @@
     el('slotTabs').innerHTML = '';
     const cls = classOf(L);
     [[`Ability 1 (${keyName(Settings.keys.ab1)})`, 'ability'], [`Ability 2 (${keyName(Settings.keys.ab2)})`, 'ability2'], [`Ability 3 (${keyName(Settings.keys.ab3)}) · wave ${(classOf(L) || {}).id === 'engineer' ? CLASSES.engineerSlot3 : SLOT3_WAVE}+`, 'ability3'],
-     [cls ? `${cls.emoji} Class (${keyName(Settings.keys.ab4)}) · wave ${CLASSES.unlockWave}+` : `Ability 4 (${keyName(Settings.keys.ab4)}) · wave ${SLOT4_WAVE}+`, 'ability4']].forEach(([label, k], i) => {
+     [cls ? `Class (${keyName(Settings.keys.ab4)}) · wave ${CLASSES.unlockWave}+` : `Ability 4 (${keyName(Settings.keys.ab4)}) · wave ${SLOT4_WAVE}+`, 'ability4']].forEach(([label, k], i) => {
       const b = document.createElement('button'), A = ABILITIES[k === 'ability4' && cls ? cls.ab : L[k]];
       b.className = 'tab' + (i === abSlot ? ' active' : '');
       b.innerHTML = `<span class="tab-label">${label}</span><span class="tab-value">${A ? A.name : 'None'}</span>`;
@@ -421,9 +424,9 @@
     const cbox = document.createElement('div');
     cbox.className = 'class-banner' + (cls ? ' on' : '');
     cbox.innerHTML = cls
-      ? `<b>${cls.emoji} ${cls.name.toUpperCase()} class active</b> — slot 4 (B) = <b>${ABILITIES[cls.ab].name}</b> from wave ${CLASSES.unlockWave}: ${ABILITIES[cls.ab].desc}${L.ability4 ? ` <small>(your slot 4 pick is off while the class is on)</small>` : ''}`
-      : `<b>🎓 Classes</b> — fill slots 1-3 (at least 2) with abilities from ONE section to get a class ability on B:<br>`
-        + CLASSES.list.map(c => `${c.emoji} <b>${c.name}</b> (${ABILITY_GROUPS[c.group].label.replace(/^\S+\s/, '')}): ${ABILITIES[c.ab].name}`).join(' · ');
+      ? `<b>${cls.name.toUpperCase()} class active</b> — slot 4 (B) = <b>${ABILITIES[cls.ab].name}</b> from wave ${CLASSES.unlockWave}: ${ABILITIES[cls.ab].desc}${L.ability4 ? ` <small>(your slot 4 pick is off while the class is on)</small>` : ''}`
+      : `<b>Classes</b> — fill slots 1-3 (at least 2) with abilities from ONE section to get a class ability on B:<br>`
+        + CLASSES.list.map(c => `<b>${c.name}</b> (${ABILITY_GROUPS[c.group].label}): ${ABILITIES[c.ab].name}`).join(' · ');
     wrap.appendChild(cbox);
     if (cls && abSlot === 3) {
       const card = document.createElement('div');
@@ -436,7 +439,7 @@
     if (perks.length) {
       const head = document.createElement('div');
       head.className = 'perk-head';
-      head.textContent = `⚡ Boosts for ${ABILITIES[current].name}`;
+      head.textContent = `Boosts for ${ABILITIES[current].name}`;
       wrap.appendChild(head);
       for (const p of [null, ...perks]) {
         const card = document.createElement('button');
@@ -453,13 +456,13 @@
     if (combos.length) {
       const head = document.createElement('div');
       head.className = 'perk-head';
-      head.textContent = `🔗 Combos with ${ABILITIES[current].name}`;
+      head.textContent = `Combos with ${ABILITIES[current].name}`;
       wrap.appendChild(head);
       for (const c of combos) {
         const other = ABILITIES[c.a === current ? c.b : c.a], have = [L.ability, L.ability2, L.ability3, L.ability4].includes(c.a) && [L.ability, L.ability2, L.ability3, L.ability4].includes(c.b);
         const card = document.createElement('div');
         card.className = 'card combo' + (have ? ' ready' : '');
-        card.innerHTML = `<div class="card-name">${c.name} <small class="hint">+ ${other.name}${have ? ' ✓' : ''}</small></div><div class="card-desc">${c.how}</div>`;
+        card.innerHTML = `<div class="card-name">${c.name} <small class="hint">+ ${other.name}${have ? ' <span class="ok-txt">Have it</span>' : ''}</small></div><div class="card-desc">${c.how}</div>`;
         wrap.appendChild(card);
       }
     }
@@ -489,7 +492,7 @@
     const listed = new Set(ABILITY_GROUPS.flatMap(g => g.ids));
     const others = Object.keys(ABILITIES).filter(id => !listed.has(id) && !ABILITIES[id].cls);
     const groups = [...ABILITY_GROUPS,
-      { label: '✨ Passives', note: 'always on', ids: others.filter(id => ABILITIES[id].type === 'passive') },
+      { label: 'Passives', note: 'always on', ids: others.filter(id => ABILITIES[id].type === 'passive') },
       { label: 'Other', ids: others.filter(id => ABILITIES[id].type !== 'passive') }];
     for (const grp of groups) {
       const ids = grp.ids.filter(id => ABILITIES[id]);
@@ -503,7 +506,7 @@
     // combo loadouts at the bottom: tap one to equip both of its abilities
     const csec = document.createElement('div');
     csec.className = 'ab-section';
-    csec.innerHTML = '🔗 Combos <small>tap to equip both abilities</small>';
+    csec.innerHTML = 'Combos <small>tap to equip both abilities</small>';
     wrap.appendChild(csec);
     for (const c of COMBOS) {
       const A1 = ABILITIES[c.a], A2 = ABILITIES[c.b];
@@ -511,7 +514,7 @@
       const card = document.createElement('button');
       card.className = 'card combo-pick' + (on ? ' equipped' : '');
       card.innerHTML = `<div class="combo-icons"><span>${abilityIconSVG(c.a, 32)}</span>+<span>${abilityIconSVG(c.b, 32)}</span></div>
-        <div class="card-name">${c.name}${c.passive ? ' <small class="hint">auto</small>' : ''}${on ? ' ✓' : ''}</div>
+        <div class="card-name">${c.name}${c.passive ? ' <small class="hint">auto</small>' : ''}${on ? ' <small class="ok-txt">On</small>' : ''}</div>
         <div class="card-desc"><b>${A1.name} + ${A2.name}</b><br>${c.how}</div>`;
       card.onclick = () => {
         if (!on) {
@@ -617,7 +620,7 @@
     el('testEpicBtn').classList.toggle('hidden', !Game.test);
     el('testInfBtn').classList.toggle('hidden', !Game.test);
     el('spawnPanel').classList.toggle('hidden', !Game.test);
-    el('testInfBtn').textContent = `∞ Infinite ability: ${Game.infAbility ? 'ON' : 'OFF'}`;
+    el('testInfBtn').textContent = `Infinite ability: ${Game.infAbility ? 'ON' : 'OFF'}`;
     el('testInfBtn').classList.toggle('primary', Game.infAbility);
     overlay('pauseScreen', true);
   };

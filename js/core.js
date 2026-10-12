@@ -517,6 +517,21 @@ function abilityIconSVG(id, size = 32, color) {
   const [d, rule] = iconOf(id);
   return `<svg viewBox="0 0 40 40" width="${size}" height="${size}" aria-hidden="true"><path d="${d}" fill="${color || iconColor(id)}" fill-rule="${rule || 'nonzero'}"/></svg>`;
 }
+// tiny mega-building icon: hexagon outline + one simple symbol, one colour
+const MEGA_SYMBOL = {
+  railgun: '<path d="M11 20H29"/>', fortress: '<rect x="15" y="15" width="10" height="10"/>',
+  stormtower: '<path d="M22 12L16 21H24L18 29"/>', orbital: '<path d="M20 11V29M14 23L20 29L26 23"/>',
+  carrier: '<g fill="C" stroke="none"><circle cx="14" cy="20" r="2.2"/><circle cx="20" cy="20" r="2.2"/><circle cx="26" cy="20" r="2.2"/></g>',
+  hive: '<circle cx="16" cy="17" r="2.5"/><circle cx="24" cy="17" r="2.5"/><circle cx="20" cy="24" r="2.5"/>',
+  uplink: '<circle cx="20" cy="20" r="2.5" fill="C"/><path d="M20 20L28 12"/>', artillery: '<path d="M13 27L27 13M22 13H27V18"/>',
+  aegis: '<circle cx="20" cy="20" r="7"/>', inferno: '<path d="M20 11C26 18 26 28 20 28C14 28 14 18 20 11Z"/>',
+  singularity: '<circle cx="20" cy="20" r="6" fill="C"/>', watchtower: '<circle cx="20" cy="20" r="6"/><path d="M20 11V29M11 20H29"/>',
+  citadel: '<path d="M12 26V16H16V19H20V16H24V19H28V26Z"/>',
+};
+function megaIconSVG(id, size = 32, color = '#ffd700') {
+  return `<svg viewBox="0 0 40 40" width="${size}" height="${size}" aria-hidden="true" fill="none" stroke="${color}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">`
+    + `<path d="M20 3L35 11.5V28.5L20 37L5 28.5V11.5Z"/>${(MEGA_SYMBOL[id] || '').replace(/"C"/g, '"' + color + '"')}</svg>`;
+}
 // draw on a canvas, centred on (x, y)
 function drawAbilityIcon(ctx, id, x, y, size, color) {
   const [d, rule] = iconOf(id);

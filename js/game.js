@@ -3807,7 +3807,7 @@ const Game = (() => {
       ctx.beginPath(); ctx.arc(s.x, s.y, s.r * k, 0, Math.PI * 2); ctx.fill();
       if (s.r > 300) { // nuke countdown
         ctx.fillStyle = '#ffdd00'; ctx.font = '900 40px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText('☢ ' + Math.ceil(s.t), s.x, s.y);
+        ctx.fillText('NUKE ' + Math.ceil(s.t), s.x, s.y);
       }
     }
     const L = ULTIMATES.laser;
@@ -4558,7 +4558,7 @@ const Game = (() => {
     ctx.strokeStyle = '#d6a2ff'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(p.x - s, p.y - s); ctx.lineTo(p.x + s, p.y + s); ctx.moveTo(p.x + s, p.y - s); ctx.lineTo(p.x - s, p.y + s); ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.font = '900 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('★', p.x, p.y + 1);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
   }
 
   // thrown Resupply crate: yellow box, one light per charge left
@@ -4586,7 +4586,7 @@ const Game = (() => {
     ctx.strokeStyle = '#ff8a7a'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(p.x - s, p.y - s); ctx.lineTo(p.x + s, p.y + s); ctx.moveTo(p.x + s, p.y - s); ctx.lineTo(p.x - s, p.y + s); ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.font = '900 16px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('★', p.x, p.y + 1);
+    ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
   }
 
   function drawAmmoBox(p) {
@@ -5912,7 +5912,7 @@ const Game = (() => {
         const btn = el('ability4Btn'); abCache4 = key;
         btn.classList.remove('hidden', 'passive'); btn.classList.add('cooling');
         btn.querySelector('.ab-name').innerHTML = `${abilityIconSVG(cl.ab, 16, '#fff')} ${ABILITIES[cl.ab].name}`;
-        btn.querySelector('.ab-state').textContent = `🔒 Wave ${CLASSES.unlockWave}`;
+        btn.querySelector('.ab-state').textContent = `Locked · Wave ${CLASSES.unlockWave}`;
       }
     } else { swapAlt('alt4'); abCache4 = paintAbilityBtn(el('ability4Btn'), abCache4); swapAlt('alt4'); }
   }

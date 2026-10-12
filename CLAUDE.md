@@ -91,7 +91,7 @@ The user will provide art later (icons/sprites are simple placeholder shapes for
 
 - ULTIMATES are NOT buyable (crate-only; v86 refunded any bought 'ult:' keys in core.js load migration).
 - MEGA BUILDINGS (formations + railgun) are bought: 'mega:id' in owned, config `MEGA` (needs = building abilities you must own,
-  price, does), `megaReqsMet`/`megaName` in core.js, loadout tab "🏰 Mega" (`renderMega`/`buyMega` in ui.js; also shown in the
+  price, does), `megaReqsMet`/`megaName` in core.js, loadout tab "Mega" (hidden until a mega is buildable/owned) (`renderMega`/`buyMega` in ui.js; also shown in the
   after-boss picker). In game `megaOk(id)` (game.js) blocks the fuse unless owned, `G.test`, or `Game.freeUp` (ui sets it from the
   SP free toggle / MP `settings.free`); else one banner per mega per game ("Buy X in the Mega tab").
 - Non-building combos (v83): Frost Fog, Healing Mist, Spring Trap, Napalm, Cryo Vortex (throw-onto, flags via `upgradeGadget`);

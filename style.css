@@ -594,3 +594,6 @@ body.mobile #ability4Btn .ab-state { color: #062b12; font-weight: 800; font-size
 
 /* mobile ability joystick: the button fades while you drag its green stick (drawn on the canvas) */
 body.mobile #abilityBtn.dragging, body.mobile #ability2Btn.dragging, body.mobile #ability3Btn.dragging, body.mobile #ability4Btn.dragging { opacity: 0.25; }
+
+.mega-ic { width: 36px; height: 36px; flex: none; display: flex; align-items: center; justify-content: center; }
+.ok-txt { color: #4cd964; font-weight: 700; }

@@ -570,12 +570,12 @@ const ABILITY_ICONS = {
 
 // How the Ability tab sorts abilities into sections. Anything not listed goes under Passives / Other.
 const ABILITY_GROUPS = [
-  { label: '🏗️ Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier', 'mortar', 'shieldgen', 'sniper', 'flame', 'laser', 'hangar', 'gravity'] },
-  { label: '📦 Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'sensor', 'jumppad', 'bubble', 'medic', 'smoke', 'resupply'] },
-  { label: '💣 Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
-  { label: '🔫 Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
-  { label: '🏃 Movement', ids: ['dash', 'blink', 'grapple', 'phase', 'shadowstep', 'recall', 'door'] },
-  { label: '🛡️ Support', ids: ['shield', 'burger', 'energy', 'stim', 'reflect', 'slowmo'] },
+  { label: 'Buildings', note: 'stay until destroyed · merge 3 into a big one', ids: ['turret', 'radar', 'tesla', 'barrier', 'mortar', 'shieldgen', 'sniper', 'flame', 'laser', 'hangar', 'gravity'] },
+  { label: 'Placeables', note: 'thrown, then they sit where they land', ids: ['decoy', 'mine', 'sensor', 'jumppad', 'bubble', 'medic', 'smoke', 'resupply'] },
+  { label: 'Throwables', note: 'thrown blasts and zones', ids: ['grenade', 'cluster', 'freeze', 'blackhole', 'firepit'] },
+  { label: 'Attacks', ids: ['rpg', 'nova', 'quake', 'rapid', 'overcharge'] },
+  { label: 'Movement', ids: ['dash', 'blink', 'grapple', 'phase', 'shadowstep', 'recall', 'door'] },
+  { label: 'Support', ids: ['shield', 'burger', 'energy', 'stim', 'reflect', 'slowmo'] },
 ];
 
 // CLASSES: equip ONLY abilities from one section (slots 1-3, at least 2 filled) -> slot 4 (B) becomes that class's ability.
@@ -584,12 +584,12 @@ const CLASSES = {
   unlockWave: 5,
   engineerSlot3: 10,     // ENGINEER: the 3rd ability slot (V) opens at wave 10 instead of SLOT3_WAVE
   list: [
-    { id: 'engineer',  group: 0, name: 'Engineer',  emoji: '🏗️', ab: 'cls_upgrade' },
-    { id: 'trapper',   group: 1, name: 'Trapper',   emoji: '📦', ab: 'cls_restock' },
-    { id: 'grenadier', group: 2, name: 'Grenadier', emoji: '💣', ab: 'cls_barrage' },
-    { id: 'assault',   group: 3, name: 'Assault',   emoji: '🔫', ab: 'cls_overclock' },
-    { id: 'scout',     group: 4, name: 'Scout',     emoji: '🏃', ab: 'cls_afterimage' },
-    { id: 'medic',     group: 5, name: 'Medic',     emoji: '🛡️', ab: 'cls_pulse' },
+    { id: 'engineer',  group: 0, name: 'Engineer',  ab: 'cls_upgrade' },
+    { id: 'trapper',   group: 1, name: 'Trapper',   ab: 'cls_restock' },
+    { id: 'grenadier', group: 2, name: 'Grenadier', ab: 'cls_barrage' },
+    { id: 'assault',   group: 3, name: 'Assault',   ab: 'cls_overclock' },
+    { id: 'scout',     group: 4, name: 'Scout',     ab: 'cls_afterimage' },
+    { id: 'medic',     group: 5, name: 'Medic',     ab: 'cls_pulse' },
   ],
 };
 // class abilities (cls: true = never in the normal picker). All are press-to-use (good on phones).
@@ -907,6 +907,7 @@ const STRENGTH = { decoy: 5, drone: 3, bigDrone: 4, carrierDrone: 5, hiveDrone: 
 // WHAT'S NEW: shown once on the main menu when the version is newer than the one the player last saw. Newest first.
 // Every update adds an entry here (short, simple words).
 const UPDATES = [
+  { v: 101, title: 'Cleaner look', notes: ['No more emojis, just plain words and shapes.', 'The Mega tab only shows up once you can make a mega building.', 'Mega buildings have simple little icons now.'] },
   { v: 100, title: 'Seeker Drones', notes: ['Throw a Radar onto a Drone Hangar to get pink Seeker Drones. They hunt enemies in a big 12x12 square around the hangar!'] },
   { v: 99, title: 'Bug fixes', notes: ['Lots of bug fixes.', 'With a class, the shop no longer makes you pay for the 4th ability you cannot use.'] },
   { v: 98, title: 'Smarter enemies', notes: ['Enemies stay away from walls and find a way around instead of getting stuck.'] },
@@ -915,12 +916,12 @@ const UPDATES = [
   { v: 95, title: 'Hover names', notes: ['On PC, rest your mouse on a building or placeable for 5 seconds to see its full name (like "Bomber Drone Hangar").'] },
   { v: 94, title: 'Drones follow you', notes: ['Engineer: use Upgrade on a MAX level Drone Hangar to switch its drones between FOLLOW (they fly with you) and STAY.', 'Only one hangar can follow you at a time.'] },
   { v: 93, title: 'Even more drones', notes: ['5 new drone types! Throw onto a Drone Hangar:', 'Bubble Shield = Guardian Drones (fly around you and block bullets)', 'Grenade = Bomber Drones (drop bombs on groups)', 'Motion Sensor = Sniper Drones (stay far back, big hits)', 'Smoke Bomb = Ghost Drones (bullets go through them, enemies they hit take more damage)', 'Black Hole = Gravity Drones (pull enemies together)', 'Your gun is always under your player now.'] },
-  { v: 92, title: 'New drone powers', notes: ['Throw a Freeze Bomb, Fire Pit, Tesla Coil or Land Mine onto a Drone Hangar to get Frost, Flame, Shock or Kamikaze Drones!', 'New mega buildings: Drone Hive (Hangar | Big Hangar | Hangar) with 10 fast drones, and Drone Uplink (Big Hangar next to a Laser Tower) whose drones shoot lasers.', 'Buy them in the 🏰 Mega tab.'] },
+  { v: 92, title: 'New drone powers', notes: ['Throw a Freeze Bomb, Fire Pit, Tesla Coil or Land Mine onto a Drone Hangar to get Frost, Flame, Shock or Kamikaze Drones!', 'New mega buildings: Drone Hive (Hangar | Big Hangar | Hangar) with 10 fast drones, and Drone Uplink (Big Hangar next to a Laser Tower) whose drones shoot lasers.', 'Buy them in the  Mega tab.'] },
   { v: 91, title: 'Hex shield is back', notes: ['The Aegis Dome has its hexagon shield pattern again.'] },
   { v: 90, title: 'Cleaner mega buildings', notes: ['Artillery Battery, Aegis Dome, Inferno Tower, Black Hole Generator, Watchtower and Citadel Wall have new simple looks.', 'They all stand on a hexagon base like the Railgun, with one bright colour each. The Fortress got a hexagon base too.'] },
   { v: 89, title: 'Ability joysticks on phones', notes: ['On phones every ability button is now a little green joystick.', 'Drag it to aim where your throw lands (pull further = throw further), let go to use it.', 'Drag out and back to the middle to cancel. A quick tap still auto-aims.'] },
   { v: 88, title: 'Revive your teammates', notes: ['In Teams and Co-op, when a teammate dies they leave a ghost for 10 seconds.', 'Stand on the ghost for 3 seconds WITHOUT shooting to bring them back (abilities are OK).', 'They come back with half health in the same round. Enemies can see the ghost but cannot revive it.'] },
-  { v: 87, title: 'Buy mega buildings', notes: ['Mega buildings (Railgun, Fortress, Watchtower...) are now bought with score in the new 🏰 Mega tab.', 'You must own the buildings they are made from first (Railgun needs Turret + Tesla).', 'Test mode and "All upgrades free" games still let you build them all.'] },
+  { v: 87, title: 'Buy mega buildings', notes: ['Mega buildings (Railgun, Fortress, Watchtower...) are now bought with score in the new Mega tab.', 'You must own the buildings they are made from first (Railgun needs Turret + Tesla).', 'Test mode and "All upgrades free" games still let you build them all.'] },
   { v: 86, title: 'Ultimates fixed', notes: ['Ultimates can NOT be bought anymore. They only come from gold crates again.', 'If you bought one, you got your score back.'] },
   { v: 85, title: 'Mega buildings for everyone', notes: [
     'Every building now has a MEGA version! Make a Big one (3 in one square) and put the right buddy building next to it.',

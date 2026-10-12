@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>Custom Gun Game</title>
-  <link rel="stylesheet" href="style.css?v=100">
+  <link rel="stylesheet" href="style.css?v=101">
 </head>
 <body>
   <canvas id="game"></canvas>
@@ -19,7 +19,7 @@
       <button id="gun0" class="gun-btn"><span class="gun-name">Main</span><span class="ammo"></span></button>
       <button id="gun1" class="gun-btn"><span class="gun-name">Sidearm</span><span class="ammo"></span></button>
     </div>
-    <button id="pauseBtn" class="round-btn" aria-label="Pause">❚❚</button>
+    <button id="pauseBtn" class="round-btn" aria-label="Pause">II</button>
     <button id="reloadBtn" class="round-btn" aria-label="Reload">R</button>
     <button id="ultBtn" class="hidden" aria-label="Ultimate"><span class="ab-key">F</span><span class="ult-name"></span></button>
     <button id="ability4Btn" class="hidden" aria-label="Fourth ability"><span class="ab-key">B</span><span class="ab-name"></span><span class="ab-state"></span></button>
@@ -162,14 +162,14 @@
       <p id="pauseNote" class="hint"></p>
       <button id="resumeBtn" class="primary">Resume</button>
       <button id="testLoadoutBtn" class="primary alt">Change guns / ability</button>
-      <button id="testEpicBtn" class="epic-btn">★ Spawn ULTIMATE crate</button>
-      <button id="testInfBtn">∞ Infinite ability: OFF</button>
+      <button id="testEpicBtn" class="epic-btn">Spawn ULTIMATE crate</button>
+      <button id="testInfBtn">Infinite ability: OFF</button>
       <div id="spawnPanel" class="spawn-panel hidden">
         <b>Spawn enemies</b>
         <select id="spawnType"></select>
         <div id="spawnCounts" class="seg"><button data-n="1">1</button><button data-n="5">5</button><button data-n="10">10</button><button data-n="25">25</button><button data-n="50">50</button></div>
         <div class="spawn-row"><input id="spawnCount" type="number" min="1" max="100" value="5"><button id="spawnGo" class="primary">Spawn</button></div>
-        <button id="killAllBtn">💀 Kill all enemies</button>
+        <button id="killAllBtn">Kill all enemies</button>
       </div>
       <button id="pauseSettings">Settings</button>
       <button id="quitBtn">Quit round</button>
@@ -222,8 +222,8 @@
       <div class="setting">
         <span class="setting-label">Theme</span>
         <div id="themePick" class="seg">
-          <button data-v="dark">🌙 Dark</button>
-          <button data-v="light">☀️ Light</button>
+          <button data-v="dark">Dark</button>
+          <button data-v="light">Light</button>
         </div>
       </div>
       <div class="setting">
@@ -245,11 +245,11 @@
   <div id="toast" class="toast"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <script src="js/config.js?v=100"></script>
-  <script src="js/core.js?v=100"></script>
-  <script src="js/input.js?v=100"></script>
-  <script src="js/net.js?v=100"></script>
-  <script src="js/game.js?v=100"></script>
-  <script src="js/ui.js?v=100"></script>
+  <script src="js/config.js?v=101"></script>
+  <script src="js/core.js?v=101"></script>
+  <script src="js/input.js?v=101"></script>
+  <script src="js/net.js?v=101"></script>
+  <script src="js/game.js?v=101"></script>
+  <script src="js/ui.js?v=101"></script>
 </body>
 </html>
